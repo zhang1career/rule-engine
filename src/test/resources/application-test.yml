@@ -1,0 +1,16 @@
+# Test environment configuration
+rule:
+  engine:
+    environment: TEST
+
+spring:
+  rabbitmq:
+    # Test environment does not connect to real RabbitMQ
+    host: localhost
+    port: 5672
+
+logging:
+  level:
+    root: WARN
+    lab.zhang.rule: DEBUG
+
