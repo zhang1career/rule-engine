@@ -1,37 +1,37 @@
-# 快速启动指南
+# Quick Start Guide
 
-## 前置条件
+## Prerequisites
 
 - JDK 1.8+
 - Maven 3.6+
 
-## 快速启动（无需外部依赖）
+## Quick Start (No External Dependencies Required)
 
-项目已经配置为可以在没有RabbitMQ和数据库的情况下运行（这些是可选的）。
+The project is configured to run without RabbitMQ and database (these are optional).
 
-### 1. 编译项目
+### 1. Build Project
 
 ```bash
 cd /Users/mini/Projects/startups/rule-engine
 mvn clean compile
 ```
 
-### 2. 运行项目
+### 2. Run Project
 
 ```bash
 mvn spring-boot:run
 ```
 
-或者打包后运行：
+Or package and run:
 
 ```bash
 mvn clean package
-java -jar target/rule-engine-1.0.0-SNAPSHOT.jar
+java -jar target/rule-engine-0.7.0-SNAPSHOT.jar
 ```
 
-### 3. 测试接口
+### 3. Test Interface
 
-项目启动后，会自动初始化一些示例规则。可以使用以下命令测试：
+After the project starts, some sample rules will be automatically initialized. You can test using the following command:
 
 ```bash
 curl -X POST http://localhost:8080/rule/eval \
@@ -40,14 +40,14 @@ curl -X POST http://localhost:8080/rule/eval \
     "userId": 123456789,
     "eventId": 1001,
     "traceId": 987654321,
-    "dataMap": {
+    "arguments": {
       "amount": {"value": 2000.00, "type": "DECIMAL"},
       "age": {"value": 25, "type": "INTEGER"}
     }
   }'
 ```
 
-**预期响应**:
+**Expected Response**:
 ```json
 {
   "result": {
@@ -58,18 +58,19 @@ curl -X POST http://localhost:8080/rule/eval \
 }
 ```
 
-## 配置说明
+## Configuration
 
-### 环境配置
+### Environment Configuration
 
-编辑 `src/main/resources/application.yml` 中的 `rule.engine.environment`:
+Edit `rule.engine.environment` in `src/main/resources/application.yml`:
 
-- `TEST`: 测试环境（默认）
-- `PRODUCTION`: 生产环境
+- `TEST`: Test environment (default)
+- `PRODUCTION`: Production environment
+- `GRAY`: Gray environment
 
-### RabbitMQ配置（可选）
+### RabbitMQ Configuration (Optional)
 
-如果需要使用RabbitMQ消息队列功能，取消注释 `application.yml` 中的RabbitMQ配置：
+If you need to use RabbitMQ message queue functionality, uncomment the RabbitMQ configuration in `application.yml`:
 
 ```yaml
 spring:
@@ -80,9 +81,9 @@ spring:
     password: guest
 ```
 
-### 数据库配置（可选）
+### Database Configuration (Optional)
 
-如果需要使用SQL查询功能，取消注释 `application.yml` 中的数据库配置：
+If you need to use SQL query functionality, uncomment the database configuration in `application.yml`:
 
 ```yaml
 spring:
@@ -92,43 +93,57 @@ spring:
     password: root
 ```
 
-## 示例规则说明
+## Rule Status Transitions
 
-项目启动时会自动创建以下示例规则：
+Rule status transitions must follow these constraints:
 
-1. **rule_001**: 金额检查规则（表达式）
-   - 检查金额是否大于1000且年龄大于等于18
-   - 状态：全量
+1. **Offline Status (OFFLINE)**: Can only transition to Test status (TEST)
+2. **Test Status (TEST)**: Can transition to Gray status (GRAY) or Offline status (OFFLINE)
+3. **Gray Status (GRAY)**: Can transition to Offline status (OFFLINE) or A/B Test status (AB_TEST)
+4. **A/B Test Status (AB_TEST)**: Can transition to Offline status (OFFLINE) or Full status (FULL)
+5. **Full Status (FULL)**: Can transition to Offline status (OFFLINE) or A/B Test status (AB_TEST)
 
-2. **rule_002**: 计算折扣规则（Groovy脚本）
-   - 根据金额计算折扣（>5000: 10%, >2000: 5%）
-   - 状态：全量
+**Rule Deletion Constraints**:
+- Only rules in Offline status (OFFLINE) can be deleted
 
-3. **rule_003**: A/B测试规则（表达式）
-   - 检查金额是否大于500
-   - 状态：A/B测试（50%比例）
+## Sample Rules
 
-执行序列：
-- eventId=1001: 执行 rule_001 -> rule_002
-- eventId=1002: 执行 rule_001 -> rule_003
+The following sample rules will be automatically created when the project starts:
 
-## 常见问题
+1. **rule_001**: Amount check rule (expression)
+   - Checks if amount is greater than 1000 and age is greater than or equal to 18
+   - Status: Full
 
-### 1. 端口被占用
+2. **rule_002**: Discount calculation rule (Groovy script)
+   - Calculates discount based on amount (>5000: 10%, >2000: 5%)
+   - Status: Full
 
-修改 `application.yml` 中的 `server.port` 配置。
+3. **rule_003**: A/B test rule (expression)
+   - Checks if amount is greater than 500
+   - Status: A/B Test (50% ratio)
 
-### 2. RabbitMQ连接失败
+Execution sequences:
+- eventId=1001: Execute rule_001 -> rule_002
+- eventId=1002: Execute rule_001 -> rule_003
 
-如果未配置RabbitMQ，消息发送功能会自动跳过，不影响主流程。
+## Common Issues
 
-### 3. 数据库连接失败
+### 1. Port Already in Use
 
-如果未配置数据库，SQL查询功能不可用，其他功能正常。
+Modify the `server.port` configuration in `application.yml`.
 
-## 下一步
+### 2. RabbitMQ Connection Failed
 
-- 查看 [README.md](README.md) 了解详细功能
-- 查看 [PRD.md](PRD.md) 了解产品需求
-- 根据需要扩展规则类型和执行器
+If RabbitMQ is not configured, the message sending functionality will automatically skip without affecting the main flow.
 
+### 3. Database Connection Failed
+
+If the database is not configured, SQL query functionality is unavailable, but other features work normally.
+
+## Next Steps
+
+- View [README.md](README.md) for detailed features
+- View [PRD.md](docs/prd/PRD.md) for product requirements
+- View [API_DOCUMENTATION.md](docs/api/API_DOCUMENTATION.md) for RESTful API interfaces
+- View [DATABASE_SCHEMA.md](docs/schema/DATABASE_SCHEMA.md) for database schema
+- Extend rule types and executors as needed

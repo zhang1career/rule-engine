@@ -1,0 +1,34 @@
+@startuml Rule Create
+title Create Rule Interface Activity Diagram
+
+start
+
+:Receive POST /api/rules request;
+:Parse request body RuleQO;
+
+:Validate parameters;
+note right: name, contentType, content cannot be null
+note right: ruleStatus field will be ignored, automatically set to OFFLINE (0)
+
+if (Parameter validation passed?) then (no)
+  :Return 400 error;
+  stop
+endif
+
+:Convert to Rule model;
+:Set rule status to OFFLINE (0);
+:Call RuleService.createRule();
+
+:Create RuleEntity;
+:Set create time and update time;
+:Call RuleMapper.insert();
+
+:Create RuleContentEntity;
+:Call RuleContentMapper.insert();
+
+:Convert to RuleDTO;
+:Return 200 OK;
+
+stop
+
+@enduml

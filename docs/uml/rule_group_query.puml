@@ -1,0 +1,26 @@
+@startuml Rule Group Query
+title Query Rule Group Interface Activity Diagram
+
+start
+
+:Receive GET /api/rule-groups/{groupId} request;
+:Parse path parameters;
+
+:Call RuleGroupService.getRuleGroup();
+
+:Query rule group entity;
+if (Rule group does not exist?) then (yes)
+  :Return 404 error;
+  stop
+endif
+
+:Query rules in rule group;
+:Build RuleGroup model;
+
+:Batch query A/B test ratios of rules in group;
+:Build RuleGroupDTO (includes rules field);
+:Return 200 OK;
+
+stop
+
+@enduml

@@ -1,7 +1,8 @@
 package lab.zhang.rule.rule_engine.executor.impl
 
 import lab.zhang.rule.rule_engine.common.TypedValue
-import lab.zhang.rule.rule_engine.enums.RuleType
+import lab.zhang.rule.rule_engine.enums.ContentTypeEnum
+import lab.zhang.rule.rule_engine.enums.ValueTypeEnum
 import lab.zhang.rule.rule_engine.model.Rule
 import lab.zhang.rule.rule_engine.model.RuleExecutionContext
 import spock.lang.Specification
@@ -14,110 +15,73 @@ class ExpressionRuleExecutorSpec extends Specification {
 
     def executor = new ExpressionRuleExecutor()
 
-    def "test getSupportedRuleType"() {
+    @Unroll
+    def "test getSupportedRuleType - expected: #expected"() {
         expect: "should return EXPRESSION type"
-        executor.supportedRuleType == RuleType.EXPRESSION
+        executor.supportedRuleType == expected
+
+        where:
+        expected << [ContentTypeEnum.EXPRESSION]
     }
 
-    def "test execute simple boolean expression"() {
+    @Unroll
+    def "test execute expression - expression: #expression, userId: #userId, eventId: #eventId, traceId: #traceId, arguments: #arguments, expectedValue: #expectedValue, expectedType: #expectedType"() {
         given: "create rule and execution context"
         def rule = new Rule()
-        rule.ruleId = 1L
-        rule.ruleContent = "amount > 1000 && age >= 18"
+        rule.content = expression
 
         def context = new RuleExecutionContext()
-        context.userId = 123L
-        context.eventId = 1001
-        context.traceId = 999L
-        context.dataMap = [
-            "amount": new TypedValue(2000.0, TypedValue.ValueType.DECIMAL),
-            "age": new TypedValue(25, TypedValue.ValueType.INTEGER)
-        ]
-
+        context.userId = userId
+        context.eventId = eventId
+        context.traceId = traceId
+        context.arguments = arguments ?: [:]
+        
         when: "execute rule"
         def result = executor.execute(rule, context)
-
-        then: "should return boolean value true"
+        
+        then: "should return correct result"
         result != null
-        result.type == TypedValue.ValueType.BOOLEAN
-        result.getBooleanValue() == true
+        result.getType() == expectedType
+        result.getValue() == expectedValue
+        
+        where:
+        expression                          | userId | eventId | traceId | arguments                                                                                                                 | expectedValue | expectedType
+        "amount > 1000 && age >= 18"        | 123L   | 1001    | 999L    | ["amount": new TypedValue(2000.0, ValueTypeEnum.DECIMAL), "age": new TypedValue(25, ValueTypeEnum.INTEGER)] | true  | ValueTypeEnum.BOOLEAN
+        "amount > 1000"                     | null   | null    | null    | ["amount": new TypedValue(500.0, ValueTypeEnum.DECIMAL)]                                                                  | false | ValueTypeEnum.BOOLEAN
+        "amount * 0.1"                      | null   | null    | null    | ["amount": new TypedValue(1000.0, ValueTypeEnum.DECIMAL)]                                                                 | 100.0 | ValueTypeEnum.DECIMAL
+        "userId == 123L && eventId == 1001" | 123L   | 1001    | 999L    | [:]                                                                                                                                     | true  | ValueTypeEnum.BOOLEAN
     }
 
-    def "test execute expression returning false"() {
+    @Unroll
+    def "test execute expression using context variables - expression: #expression, contextVarName: #contextVarName, contextVarValue: #contextVarValue, expectedValue: #expectedValue"() {
         given: "create rule and execution context"
         def rule = new Rule()
-        rule.ruleId = 1L
-        rule.ruleContent = "amount > 1000"
+        rule.content = expression
 
         def context = new RuleExecutionContext()
-        context.dataMap = [
-            "amount": new TypedValue(500.0, TypedValue.ValueType.DECIMAL)
-        ]
+        if (contextVarName != null && contextVarValue != null) {
+            context.setVariable(contextVarName, contextVarValue)
+        }
 
         when: "execute rule"
         def result = executor.execute(rule, context)
 
-        then: "should return boolean value false"
-        result.getBooleanValue() == false
+        then: "should return correct result"
+        result.getValue() == expectedValue
+
+        where:
+        expression           | contextVarName | contextVarValue                                     | expectedValue
+        "lastResult == true" | "lastResult"   | new TypedValue(true, ValueTypeEnum.BOOLEAN)  | true
+        "!lastResult"        | "lastResult"   | new TypedValue(false, ValueTypeEnum.BOOLEAN) | true
+        "lastResult != true" | "lastResult"   | new TypedValue(false, ValueTypeEnum.BOOLEAN) | true
+        "lastAmount > 0"     | "lastAmount"   | new TypedValue(100.0, ValueTypeEnum.DECIMAL) | true
     }
 
-    def "test execute arithmetic expression"() {
+    @Unroll
+    def "test execute invalid expression should throw exception - expression: #expression"() {
         given: "create rule and execution context"
         def rule = new Rule()
-        rule.ruleId = 1L
-        rule.ruleContent = "amount * 0.1"
-
-        def context = new RuleExecutionContext()
-        context.dataMap = [
-            "amount": new TypedValue(1000.0, TypedValue.ValueType.DECIMAL)
-        ]
-
-        when: "execute rule"
-        def result = executor.execute(rule, context)
-
-        then: "should return calculation result"
-        result.getDecimalValue() == 100.0
-    }
-
-    def "test execute expression using system variables"() {
-        given: "create rule and execution context"
-        def rule = new Rule()
-        rule.ruleId = 1L
-        rule.ruleContent = "userId == 123L && eventId == 1001"
-
-        def context = new RuleExecutionContext()
-        context.userId = 123L
-        context.eventId = 1001
-        context.traceId = 999L
-
-        when: "execute rule"
-        def result = executor.execute(rule, context)
-
-        then: "should return true"
-        result.getBooleanValue() == true
-    }
-
-    def "test execute expression using context variables"() {
-        given: "create rule and execution context"
-        def rule = new Rule()
-        rule.ruleId = 1L
-        rule.ruleContent = "lastResult == true"
-
-        def context = new RuleExecutionContext()
-        context.setVariable("lastResult", new TypedValue(true, TypedValue.ValueType.BOOLEAN))
-
-        when: "execute rule"
-        def result = executor.execute(rule, context)
-
-        then: "should return true"
-        result.getBooleanValue() == true
-    }
-
-    def "test execute invalid expression should throw exception"() {
-        given: "create rule and execution context"
-        def rule = new Rule()
-        rule.ruleId = 1L
-        rule.ruleContent = "invalid expression syntax {"
+        rule.content = expression
 
         def context = new RuleExecutionContext()
 
@@ -126,32 +90,38 @@ class ExpressionRuleExecutorSpec extends Specification {
 
         then: "should throw RuntimeException"
         thrown(RuntimeException)
+
+        where:
+        expression << [
+            "invalid expression syntax {",
+            "unclosed bracket (",
+            "undefined variable xyz",
+            "syntax error invalid chars"
+        ]
     }
 
     @Unroll
-    def "test result type conversion for different types - expression: #expression, expected type: #expectedType"() {
+    def "test result type conversion for different types - expression: #expression, arguments: #arguments, expectedType: #expectedType"() {
         given: "create rule and execution context"
         def rule = new Rule()
-        rule.ruleId = 1L
-        rule.ruleContent = expression
+        rule.content = expression
 
         def context = new RuleExecutionContext()
-        context.dataMap = dataMap ?: [:]
+        context.arguments = arguments ?: [:]
 
         when: "execute rule"
         def result = executor.execute(rule, context)
 
         then: "result type should be correct"
-        result.type == expectedType
+        result.getType() == expectedType
 
         where:
-        expression          | dataMap                                                              | expectedType
-        "true"              | [:]                                                                  | TypedValue.ValueType.BOOLEAN
-        "100"               | [:]                                                                  | TypedValue.ValueType.INTEGER
-        "1000L"             | [:]                                                                  | TypedValue.ValueType.LONG
-        "99.99"             | [:]                                                                  | TypedValue.ValueType.DECIMAL
-        "'hello'"           | [:]                                                                  | TypedValue.ValueType.STRING
-        "amount > 100"      | ["amount": new TypedValue(200.0, TypedValue.ValueType.DECIMAL)]     | TypedValue.ValueType.BOOLEAN
+        expression     | arguments                                                       | expectedType
+        "true"         | [:]                                                                    | ValueTypeEnum.BOOLEAN
+        "100"          | [:]                                                                    | ValueTypeEnum.INTEGER
+        "1000L"        | [:]                                                                    | ValueTypeEnum.LONG
+        "99.99"        | [:]                                                                    | ValueTypeEnum.DECIMAL
+        "'hello'"      | [:]                                                                    | ValueTypeEnum.STRING
+        "amount > 100" | ["amount": new TypedValue(200.0, ValueTypeEnum.DECIMAL)] | ValueTypeEnum.BOOLEAN
     }
 }
-

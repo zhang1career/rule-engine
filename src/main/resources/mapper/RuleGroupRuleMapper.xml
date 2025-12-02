@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="lab.zhang.rule.rule_engine.mapper.RuleGroupRuleRelationMapper">
+
+    <!-- Batch update rule group rule relations -->
+    <!-- Note: This method updates all fields for each relation entity in the list -->
+    <!-- MySQL requires allowMultiQueries=true in JDBC URL to support multiple statements separated by semicolons -->
+    <!-- The primary key is composite: (group_id, rule_id) -->
+    <update id="updateBatch" parameterType="java.util.List">
+        <foreach collection="list" item="item" separator=";">
+            UPDATE rule_group_rule_rel
+            <set>
+                ab_test_ratio = #{item.abTestRatio},
+                ut = #{item.ut},
+                ct = #{item.ct}
+            </set>
+            WHERE group_id = #{item.groupId} AND rule_id = #{item.ruleId}
+        </foreach>
+    </update>
+
+    <!-- Batch update rule group rule relations by ID (alias for updateBatch) -->
+    <update id="updateBatchById" parameterType="java.util.List">
+        <foreach collection="list" item="item" separator=";">
+            UPDATE rule_group_rule_rel
+            <set>
+                ab_test_ratio = #{item.abTestRatio},
+                ut = #{item.ut},
+                ct = #{item.ct}
+            </set>
+            WHERE group_id = #{item.groupId} AND rule_id = #{item.ruleId}
+        </foreach>
+    </update>
+
+</mapper>
+

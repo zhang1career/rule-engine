@@ -1,22 +1,25 @@
 package lab.zhang.rule.rule_engine.executor.impl;
 
-import lab.zhang.rule.rule_engine.common.TypedValue;
-import lab.zhang.rule.rule_engine.enums.RuleType;
-import lab.zhang.rule.rule_engine.model.Rule;
-import lab.zhang.rule.rule_engine.model.RuleExecutionContext;
-import lab.zhang.rule.rule_engine.executor.RuleExecutor;
 import groovy.lang.Binding;
 import groovy.lang.GroovyShell;
+import lab.zhang.rule.rule_engine.common.TypedValue;
+import lab.zhang.rule.rule_engine.enums.ContentTypeEnum;
+import lab.zhang.rule.rule_engine.enums.ValueTypeEnum;
+import lab.zhang.rule.rule_engine.executor.RuleExecutor;
+import lab.zhang.rule.rule_engine.model.Rule;
+import lab.zhang.rule.rule_engine.model.RuleExecutionContext;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Component;
 
 /**
  * Groovy script rule executor
- * 
- * @author rule-engine
+ *
+ * @author Rongjin Zhang
  */
 @Slf4j
+@Component
 public class ScriptRuleExecutor implements RuleExecutor {
-    
+
     @Override
     public TypedValue execute(Rule rule, RuleExecutionContext context) {
         try {
@@ -24,8 +27,8 @@ public class ScriptRuleExecutor implements RuleExecutor {
             Binding binding = new Binding();
 
             // Add input parameters to binding
-            if (context.getDataMap() != null) {
-                context.getDataMap().forEach((key, typedValue) -> {
+            if (context.getArguments() != null) {
+                context.getArguments().forEach((key, typedValue) -> {
                     binding.setVariable(key, typedValue.getValue());
                 });
             }
@@ -45,42 +48,53 @@ public class ScriptRuleExecutor implements RuleExecutor {
 
             // Create GroovyShell and execute script
             GroovyShell shell = new GroovyShell(binding);
-            Object result = shell.evaluate(rule.getRuleContent());
+            Object result = shell.evaluate(rule.getContent());
 
             // Convert result to TypedValue
             return convertToTypedValue(result);
         } catch (Exception e) {
-            log.error("Script rule execution failed, ruleId: {}, error: {}", 
-                     rule.getRuleId(), e.getMessage(), e);
+            log.error("Script rule execution failed, ruleId: {}, error: {}",
+                    rule.getId(), e.getMessage(), e);
             throw new RuntimeException("Script execution failed: " + e.getMessage(), e);
         }
     }
-    
+
     @Override
-    public RuleType getSupportedRuleType() {
-        return RuleType.SCRIPT;
+    public ContentTypeEnum getSupportedRuleType() {
+        return ContentTypeEnum.SCRIPT;
     }
-    
+
+    @Override
+    public void validate(String content) {
+        try {
+            // Try to parse the script to validate syntax
+            GroovyShell shell = new GroovyShell();
+            shell.parse(content);
+        } catch (Exception e) {
+            throw new IllegalArgumentException("Invalid Groovy script: " + e.getMessage(), e);
+        }
+    }
+
     /**
      * Convert result to TypedValue
      */
     private TypedValue convertToTypedValue(Object result) {
         if (result == null) {
-            return new TypedValue(null, TypedValue.ValueType.OBJECT);
+            return TypedValue.nullValue();
         }
-        
+
         if (result instanceof String) {
-            return new TypedValue(result, TypedValue.ValueType.STRING);
+            return new TypedValue(result, ValueTypeEnum.STRING);
         } else if (result instanceof Integer) {
-            return new TypedValue(result, TypedValue.ValueType.INTEGER);
+            return new TypedValue(result, ValueTypeEnum.INTEGER);
         } else if (result instanceof Long) {
-            return new TypedValue(result, TypedValue.ValueType.LONG);
+            return new TypedValue(result, ValueTypeEnum.LONG);
         } else if (result instanceof Double || result instanceof Float) {
-            return new TypedValue(result, TypedValue.ValueType.DECIMAL);
+            return new TypedValue(result, ValueTypeEnum.DECIMAL);
         } else if (result instanceof Boolean) {
-            return new TypedValue(result, TypedValue.ValueType.BOOLEAN);
+            return new TypedValue(result, ValueTypeEnum.BOOLEAN);
         } else {
-            return new TypedValue(result, TypedValue.ValueType.OBJECT);
+            return new TypedValue(result, ValueTypeEnum.OBJECT);
         }
     }
 }

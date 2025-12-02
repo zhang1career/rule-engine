@@ -1,0 +1,24 @@
+@startuml Rule Query
+title Query Rule Interface Activity Diagram
+
+start
+
+:Receive GET /api/rules/{ruleId} request;
+:Parse path parameters;
+
+:Call RuleService.getRuleById();
+
+:Query rule entity;
+if (Rule does not exist?) then (yes)
+  :Return 404 error;
+  stop
+endif
+
+:Query rule content;
+:Build Rule model;
+:Convert to RuleDTO;
+:Return 200 OK;
+
+stop
+
+@enduml

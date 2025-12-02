@@ -1,0 +1,65 @@
+@startuml Rule Group Create
+title Create Rule Group Interface Activity Diagram
+
+start
+
+:Receive POST /api/rule-groups request;
+:Parse request body RuleGroupQO;
+
+:Validate parameters;
+note right: rules cannot be null
+
+if (Parameter validation passed?) then (no)
+  :Return 400 error;
+  stop
+endif
+
+:Call RuleGroupService.createRuleGroupWithRules();
+
+:Validate traffic ratios;
+note right: Traffic ratios must be integers between 0-100
+note right: Sum of all traffic ratios must not exceed 100
+
+if (Traffic ratio validation passed?) then (no)
+  :Return 400 error;
+  stop
+endif
+
+:Iterate rule list;
+:Validate if rules exist;
+if (Rule does not exist?) then (yes)
+  :Return 400 error;
+  stop
+endif
+
+:Validate if rule already belongs to other rule group;
+if (Rule belongs to other rule group?) then (yes)
+  :Return 400 error;
+  stop
+endif
+
+:Validate if rule status can transition to AB_TEST;
+note right: Allowed status transitions: GRAY -> AB_TEST, FULL -> AB_TEST, AB_TEST -> AB_TEST
+
+if (Status transition invalid?) then (yes)
+  :Throw IllegalArgumentException;
+  :Return 400 error;
+  stop
+endif
+
+:Create RuleGroupEntity;
+:Set create time and update time;
+:Call RuleGroupMapper.insert();
+
+:Iterate rule list;
+:Change rule status to AB_TEST;
+:Create RuleGroupRuleRelationEntity;
+:Set A/B test ratio;
+:Call RuleGroupRuleRelationMapper.insert();
+
+:Convert to RuleGroupDTO;
+:Return 200 OK;
+
+stop
+
+@enduml

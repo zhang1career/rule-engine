@@ -1,51 +1,60 @@
 package lab.zhang.rule.rule_engine.engine;
 
 import lab.zhang.rule.rule_engine.common.TypedValue;
-import lab.zhang.rule.rule_engine.enums.Environment;
-import lab.zhang.rule.rule_engine.enums.RuleStatus;
-import lab.zhang.rule.rule_engine.enums.RuleType;
+import lab.zhang.rule.rule_engine.constant.EvalArgumentConst;
+import lab.zhang.rule.rule_engine.enums.ContentTypeEnum;
+import lab.zhang.rule.rule_engine.enums.ExecutionItemTypeEnum;
+import lab.zhang.rule.rule_engine.enums.RuleStatusEnum;
+import lab.zhang.rule.rule_engine.enums.ValueTypeEnum;
+import lab.zhang.rule.rule_engine.executor.RuleExecutor;
 import lab.zhang.rule.rule_engine.model.Rule;
 import lab.zhang.rule.rule_engine.model.RuleExecutionContext;
-import lab.zhang.rule.rule_engine.executor.RuleExecutor;
-import lab.zhang.rule.rule_engine.service.ABTestService;
+import lab.zhang.rule.rule_engine.model.RuleGroup;
+import lab.zhang.rule.rule_engine.service.RuleGroupService;
 import lab.zhang.rule.rule_engine.service.RuleService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
 import javax.annotation.PostConstruct;
+import java.util.Arrays;
+import java.util.HashSet;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Rule execution engine
  * Responsible for rule sequence execution, flow control, etc.
- * 
- * @author rule-engine
+ *
+ * @author Rongjin Zhang
  */
 @Slf4j
 @Component
 public class RuleExecutionEngine {
-    
+
     @Autowired
+    @Lazy
     private RuleService ruleService;
-    
+
     @Autowired
-    private ABTestService abTestService;
-    
+    @Lazy
+    private RuleGroupService ruleGroupService;
+
     /**
-     * Rule executor mapping (RuleType -> RuleExecutor)
+     * Rule executor mapping (RuleTypeEnum -> RuleExecutor)
      */
-    private final Map<RuleType, RuleExecutor> executorMap = new HashMap<>();
-    
+    private final Map<ContentTypeEnum, RuleExecutor> executorMap = new HashMap<>();
+
     /**
      * Current environment (read from configuration, default is test environment)
      */
     @Value("${rule.engine.environment:TEST}")
     private String environment;
-    
+
     /**
      * Initialize rule executors
      */
@@ -55,7 +64,7 @@ public class RuleExecutionEngine {
         // Note: Need to inject specific executor implementations here
         // For simplicity, leave it empty first, register later through Spring's auto-injection
     }
-    
+
     /**
      * Register rule executor
      */
@@ -63,117 +72,178 @@ public class RuleExecutionEngine {
         executorMap.put(executor.getSupportedRuleType(), executor);
         log.info("Rule executor registered: type={}", executor.getSupportedRuleType());
     }
-    
+
     /**
-     * Execute rule sequence
-     * 
+     * Execute rule sequence with execution trace
+     *
      * @param eventId event ID
      * @param context execution context
+     * @param trace execution trace to record execution process
      * @return execution result
      */
-    public TypedValue execute(Integer eventId, RuleExecutionContext context) {
-        log.info("Starting rule execution: eventId={}, userId={}, traceId={}", 
+    public TypedValue execute(Long eventId, RuleExecutionContext context, ExecutionTrace trace) {
+        log.info("Starting rule execution: eventId={}, userId={}, traceId={}",
                 eventId, context.getUserId(), context.getTraceId());
-        
-        // Get execution sequence
-        List<Rule> rules = ruleService.getRulesByEventId(eventId);
-        if (rules.isEmpty()) {
-            log.warn("No rules found for eventId: {}", eventId);
-            throw new RuntimeException("No rules found for eventId: " + eventId);
+
+        // Get execution items (rules or rule groups) directly
+        List<ExecutionItem> executionItems = ruleService.getExecutionItemsByEventId(eventId);
+        if (executionItems.isEmpty()) {
+            log.warn("No execution items found for eventId: {}, returning null result", eventId);
+            return TypedValue.nullValue();
         }
-        
-        // Execute rules sequentially
+
+        // Execute items sequentially
         TypedValue lastResult = null;
-        for (Rule rule : rules) {
-            // Check rule status
-            if (!shouldExecuteRule(rule, context)) {
-                log.debug("Rule skipped: ruleId={}, status={}", rule.getRuleId(), rule.getStatus());
+        for (ExecutionItem item : executionItems) {
+            Rule ruleToExecute = null;
+
+            ExecutionTrace.ExecutionStep step = ExecutionTrace.ExecutionStep.builder()
+                    .itemType(item.getType())
+                    .build();
+
+            if (item.getType() == ExecutionItemTypeEnum.RULE) {
+                ruleToExecute = item.getRule();
+                step.setItemId(ruleToExecute != null ? ruleToExecute.getId() : null);
+            } else if (item.getType() == ExecutionItemTypeEnum.RULE_GROUP) {
+                Long ruleGroupId = item.getRuleGroup() != null ? item.getRuleGroup().getId() : null;
+                if (ruleGroupId == null) {
+                    throw new IllegalArgumentException("Rule group ID is null in execution item");
+                }
+                step.setItemId(ruleGroupId);
+                ruleToExecute = selectRuleToExecuteFromGroup(item, context);
+                if (ruleToExecute != null) {
+                    Long abTestedRuleId = ruleToExecute.getId();
+                    step.setAbTestedRuleId(abTestedRuleId);
+                }
+            }
+
+            if (ruleToExecute == null) {
+                // Skip if no rule to execute, do not record in trace
                 continue;
             }
-            
+
+            // Check if rule status matches current environment
+            if (!isRuleStatusAllowedForEnvironment(ruleToExecute.getRuleStatus())) {
+                log.debug("Rule status {} does not match environment {}, skipping rule: ruleId={}",
+                        ruleToExecute.getRuleStatus(), environment, ruleToExecute.getId());
+                // Skip if status doesn't match, do not record in trace
+                continue;
+            }
+
             try {
                 // Execute rule
-                context.incrementDepth();
-                lastResult = executeRule(rule, context);
-                context.decrementDepth();
-                
+                lastResult = executeRule(ruleToExecute, context);
                 // Store rule execution result in context for subsequent rules
                 context.setVariable("lastResult", lastResult);
-                context.setVariable("rule_" + rule.getRuleId() + "_result", lastResult);
+                context.setVariable("rule:" + ruleToExecute.getId() + ":result", lastResult);
+                log.info("Rule executed: ruleId={}, result={}", ruleToExecute.getId(), lastResult);
                 
-                log.info("Rule executed: ruleId={}, result={}", rule.getRuleId(), lastResult);
+                // Record execution step (only executed rules are recorded)
+                step.setResult(lastResult);
+                trace.addStep(step);
                 
                 // Determine whether to break early based on rule's internal logic
-                // Can decide based on the result type and value returned by the rule
-                // For example: if Boolean type and false, can break early
-                if (shouldBreakExecution(rule, lastResult)) {
-                    log.info("Breaking execution after rule: ruleId={}", rule.getRuleId());
+                boolean breakEarly = shouldBreakExecution(ruleToExecute, lastResult);
+                if (breakEarly) {
+                    log.info("Breaking execution after rule: ruleId={}", ruleToExecute.getId());
                     break;
                 }
             } catch (Exception e) {
-                log.error("Rule execution failed: ruleId={}, error={}", 
-                         rule.getRuleId(), e.getMessage(), e);
-                throw new RuntimeException("Rule execution failed: " + rule.getRuleId(), e);
+                log.error("Rule execution failed: ruleId={}, error={}", ruleToExecute.getId(), e.getMessage(), e);
+                // Record execution step even if execution failed
+                step.setErrmsg(e.getMessage());
+                trace.addStep(step);
+                throw new RuntimeException("Rule execution failed: " + ruleToExecute.getId(), e);
             }
         }
-        
+
         if (lastResult == null) {
             log.warn("No rule executed, returning null result");
-            lastResult = new TypedValue(null, TypedValue.ValueType.OBJECT);
+            lastResult = TypedValue.nullValue();
         }
-        
+
         log.info("Rule execution completed: eventId={}, result={}", eventId, lastResult);
         return lastResult;
     }
-    
+
+    private Rule selectRuleToExecuteFromGroup(ExecutionItem item, RuleExecutionContext context) {
+        // Rule group - select one rule to execute
+        RuleGroup group = item.getRuleGroup();
+        if (group == null || group.getRuleIds() == null || group.getRuleIds().isEmpty()) {
+            log.warn("Rule group is empty or not found: groupId={}", group != null ? group.getId() : null);
+            return null;
+        }
+        if (context.getUserId() == null
+                || context.getEventId() == null
+                || context.getArgument(EvalArgumentConst.ARG_USER_HASH) == null
+                || context.getArgument(EvalArgumentConst.ARG_USER_HASH).getValue() == null) {
+            log.warn("Missing userId, eventId or userHash in context for rule group selection: groupId={}", group.getId());
+            return null;
+        }
+
+        Rule ruleToExecute = ruleGroupService.selectRuleFromGroup(group, context);
+        if (ruleToExecute == null) {
+            log.warn("Rule selected from group skipped: groupId={}, no rule selected", group.getId());
+            return null;
+        }
+
+        log.info("Rule selected from group: groupId={}, ruleId={}", group.getId(), ruleToExecute.getId());
+        return ruleToExecute;
+    }
+
     /**
      * Execute single rule
      */
     private TypedValue executeRule(Rule rule, RuleExecutionContext context) {
-        RuleExecutor executor = executorMap.get(rule.getRuleType());
+        RuleExecutor executor = executorMap.get(rule.getContentType());
         if (executor == null) {
-            throw new RuntimeException("No executor found for rule type: " + rule.getRuleType());
+            throw new RuntimeException("No executor found for rule type: " + rule.getContentType());
         }
-        
+
         return executor.execute(rule, context);
     }
-    
+
     /**
-     * Determine whether rule should be executed
+     * Check if rule status is allowed for current environment
+     *
+     * @param ruleStatus rule status to check
+     * @return true if rule status is allowed for current environment, false otherwise
      */
-    private boolean shouldExecuteRule(Rule rule, RuleExecutionContext context) {
-        RuleStatus status = rule.getStatus();
-        Environment env = Environment.valueOf(environment);
-        
-        switch (status) {
-            case OFFLINE:
-                return false;
-                
-            case TEST:
-                // Test status: only allow test environment
-                return env == Environment.TEST;
-                
-            case AB_TEST:
-                // A/B test status: only allow production environment, and need to meet A/B test conditions
-                if (env != Environment.PRODUCTION) {
-                    return false;
-                }
-                return abTestService.shouldExecuteABTest(
-                    context.getUserId(), 
-                    context.getEventId(), 
-                    rule.getRuleId(), 
-                    rule.getAbTestRatio()
-                );
-                
-            case FULL:
-                // Full status: only allow production environment
-                return env == Environment.PRODUCTION;
-                
-            default:
-                return false;
+    private boolean isRuleStatusAllowedForEnvironment(RuleStatusEnum ruleStatus) {
+        if (ruleStatus == null) {
+            return false;
         }
+
+        // Map environment string to allowed rule statuses
+        // TEST environment: only TEST status
+        // GRAY environment: GRAY, AB_TEST, FULL status
+        // PRODUCTION environment: AB_TEST, FULL status
+        Set<RuleStatusEnum> allowedStatuses;
+        try {
+            String envUpper = environment != null ? environment.toUpperCase() : "TEST";
+            switch (envUpper) {
+                case "TEST":
+                    allowedStatuses = new HashSet<>(Arrays.asList(RuleStatusEnum.TEST));
+                    break;
+                case "GRAY":
+                    allowedStatuses = new HashSet<>(Arrays.asList(RuleStatusEnum.GRAY, RuleStatusEnum.AB_TEST, RuleStatusEnum.FULL));
+                    break;
+                case "PRODUCTION":
+                    allowedStatuses = new HashSet<>(Arrays.asList(RuleStatusEnum.AB_TEST, RuleStatusEnum.FULL));
+                    break;
+                default:
+                    log.warn("Unknown environment: {}, defaulting to TEST", environment);
+                    allowedStatuses = new HashSet<>(Arrays.asList(RuleStatusEnum.TEST));
+                    break;
+            }
+        } catch (Exception e) {
+            log.warn("Error parsing environment: {}, defaulting to TEST", environment, e);
+            allowedStatuses = new HashSet<>(Arrays.asList(RuleStatusEnum.TEST));
+        }
+
+        return allowedStatuses.contains(ruleStatus);
     }
-    
+
     /**
      * Determine whether to break execution early
      * Can decide whether to continue executing subsequent rules based on rule return result
@@ -181,13 +251,14 @@ public class RuleExecutionEngine {
     private boolean shouldBreakExecution(Rule rule, TypedValue result) {
         // Can implement early break logic based on business requirements here
         // For example: if rule returns false, then break
-        if (result != null && result.getType() == TypedValue.ValueType.BOOLEAN) {
-            Boolean boolValue = result.getBooleanValue();
-            if (boolValue != null && !boolValue) {
-                return true;
-            }
+        if (result == null || result.getType() != ValueTypeEnum.BOOLEAN) {
+            return false;
         }
-        return false;
+        Boolean boolValue = (Boolean) result.getValue();
+        if (boolValue == null) {
+            return false;
+        }
+        return !boolValue;
     }
 }
 

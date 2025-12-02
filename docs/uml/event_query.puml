@@ -1,0 +1,24 @@
+@startuml Event Query
+title Query Event Interface Activity Diagram
+
+start
+
+:Receive GET /api/events/{eventId} request;
+:Parse path parameters;
+
+:Call EventService.getEventById();
+
+:Query event entity;
+if (Event does not exist?) then (yes)
+  :Return 404 error;
+  stop
+endif
+
+:Convert to EventDTO;
+note right: EventDTO does not contain executionItems
+note right: To query execution items, use GET /api/events/{eventId}/execution-items
+:Return 200 OK;
+
+stop
+
+@enduml

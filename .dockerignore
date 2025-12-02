@@ -1,0 +1,61 @@
+# Git files
+.git
+.gitignore
+.gitattributes
+
+# IDE files
+.idea
+.vscode
+*.iml
+*.ipr
+*.iws
+.DS_Store
+
+# Maven files
+target/
+.mvn/
+mvnw
+mvnw.cmd
+
+# Test files
+src/test/
+
+# Documentation
+docs/
+*.md
+!README.md
+
+# Docker files
+Dockerfile*
+docker-compose*.yml
+.dockerignore
+
+# CI/CD files
+.github/
+.gitlab-ci.yml
+Jenkinsfile
+
+# Logs
+*.log
+logs/
+
+# Temporary files
+*.tmp
+*.bak
+*.swp
+*~
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Build artifacts
+*.jar
+*.war
+*.ear
+*.class
+
+# OS files
+Thumbs.db
+

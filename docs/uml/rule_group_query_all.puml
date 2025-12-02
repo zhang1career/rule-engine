@@ -1,0 +1,20 @@
+@startuml Rule Group Query All
+title Query All Rule Groups Interface Activity Diagram
+
+start
+
+:Receive GET /api/rule-groups request;
+
+:Call RuleGroupService.getAllRuleGroups();
+
+:Query all rule group entities;
+:Iterate each rule group;
+:Query rules in rule group;
+:Build RuleGroup model;
+note right: rules field not included in response
+:Build RuleGroupDTO list;
+:Return 200 OK;
+
+stop
+
+@enduml

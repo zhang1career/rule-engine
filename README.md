@@ -1,16 +1,16 @@
-# 规则引擎系统
+# Rule Engine System
 
-基于SpringBoot的规则计算服务，支持多种规则类型和灵活的规则执行流程。
+A rule calculation service based on SpringBoot, supporting multiple rule types and flexible rule execution flows.
 
-## 技术栈
+## Technology Stack
 
 - **JDK**: 1.8
-- **框架**: SpringBoot 2.7.18
-- **构建工具**: Maven 3.6
-- **脚本引擎**: Groovy 3.0.17
-- **表达式引擎**: MVEL 2.4.14
+- **Framework**: SpringBoot 2.7.18
+- **Build Tool**: Maven 3.6
+- **Script Engine**: Groovy 3.0.17
+- **Expression Engine**: MVEL 2.4.14
 
-## 项目结构
+## Project Structure
 
 ```
 rule-engine/
@@ -18,66 +18,90 @@ rule-engine/
 │   ├── main/
 │   │   ├── java/
 │   │   │   └── com/ruleengine/
-│   │   │       ├── RuleEngineApplication.java      # 主启动类
-│   │   │       ├── common/                         # 通用类
-│   │   │       │   └── TypedValue.java             # 类型化值封装
-│   │   │       ├── config/                         # 配置类
-│   │   │       │   └── RuleEngineConfig.java       # 规则引擎配置
-│   │   │       ├── controller/                     # 控制器层
-│   │   │       │   └── RuleController.java         # 规则计算接口
-│   │   │       ├── dto/                            # 数据传输对象
-│   │   │       │   ├── EvalRequest.java            # 计算请求
-│   │   │       │   └── EvalResponse.java           # 计算响应
-│   │   │       ├── engine/                         # 规则引擎
-│   │   │       │   └── RuleExecutionEngine.java    # 规则执行引擎
-│   │   │       ├── enums/                          # 枚举类
-│   │   │       │   ├── Environment.java            # 环境类型
-│   │   │       │   ├── RuleStatus.java             # 规则状态
-│   │   │       │   └── RuleType.java               # 规则类型
-│   │   │       ├── model/                          # 实体模型
-│   │   │       │   ├── ABTestRecord.java           # A/B测试记录
-│   │   │       │   ├── ExecutionSequence.java      # 执行序列
-│   │   │       │   ├── Rule.java                   # 规则实体
-│   │   │       │   └── RuleExecutionContext.java   # 执行上下文
-│   │   │       ├── rule/                           # 规则相关
-│   │   │       │   └── executor/                   # 规则执行器
-│   │   │       │       ├── RuleExecutor.java       # 执行器接口
-│   │   │       │       └── impl/                   # 执行器实现
-│   │   │       │           ├── ApiQueryRuleExecutor.java    # 接口查询执行器
-│   │   │       │           ├── ExpressionRuleExecutor.java  # 表达式执行器
-│   │   │       │           ├── ScriptRuleExecutor.java      # 脚本执行器
-│   │   │       │           └── SqlQueryRuleExecutor.java    # SQL查询执行器
-│   │   │       └── service/                        # 服务层
-│   │   │           ├── ABTestService.java          # A/B测试服务
-│   │   │           ├── EvalService.java            # 计算服务
-│   │   │           ├── MessageQueueService.java   # 消息队列服务
-│   │   │           ├── RuleService.java            # 规则服务
-│   │   │           └── impl/                       # 服务实现
-│   │   │               ├── ABTestServiceImpl.java
+│   │   │       ├── RuleEngineApplication.java      # Main application class
+│   │   │       ├── common/                         # Common classes
+│   │   │       │   └── TypedValue.java             # Typed value wrapper
+│   │   │       ├── config/                         # Configuration classes
+│   │   │       │   └── RuleEngineConfig.java       # Rule engine configuration
+│   │   │       ├── controller/                     # Controller layer
+│   │   │       │   └── RuleController.java         # Rule calculation interface
+│   │   │       ├── dto/                            # Data transfer objects
+│   │   │       │   ├── EvalRequest.java            # Evaluation request
+│   │   │       │   └── EvalResponse.java           # Evaluation response
+│   │   │       ├── engine/                         # Rule engine
+│   │   │       │   └── RuleExecutionEngine.java    # Rule execution engine
+│   │   │       ├── enums/                          # Enumeration classes
+│   │   │       │   ├── Environment.java           # Environment type
+│   │   │       │   ├── RuleStatus.java             # Rule status
+│   │   │       │   └── RuleType.java               # Rule type
+│   │   │       ├── model/                          # Entity models
+│   │   │       │   ├── ABTestRecord.java           # A/B test record
+│   │   │       │   ├── ExecutionSequence.java      # Execution sequence
+│   │   │       │   ├── Rule.java                   # Rule entity
+│   │   │       │   └── RuleExecutionContext.java   # Execution context
+│   │   │       ├── rule/                           # Rule related
+│   │   │       │   └── executor/                   # Rule executors
+│   │   │       │       ├── RuleExecutor.java       # Executor interface
+│   │   │       │       └── impl/                   # Executor implementations
+│   │   │       │           ├── ApiQueryRuleExecutor.java    # API query executor
+│   │   │       │           ├── ExpressionRuleExecutor.java  # Expression executor
+│   │   │       │           ├── ScriptRuleExecutor.java      # Script executor
+│   │   │       │           └── SqlQueryRuleExecutor.java    # SQL query executor
+│   │   │       └── service/                        # Service layer
+│   │   │           ├── EvalService.java            # Evaluation service
+│   │   │           ├── MessageQueueService.java   # Message queue service
+│   │   │           ├── RuleGroupService.java       # Rule group service (A/B testing)
+│   │   │           ├── RuleService.java            # Rule service
+│   │   │           └── impl/                        # Service implementations
 │   │   │               ├── EvalServiceImpl.java
 │   │   │               ├── MessageQueueServiceImpl.java
+│   │   │               ├── RuleGroupServiceImpl.java
 │   │   │               └── RuleServiceImpl.java
 │   │   └── resources/
-│   │       └── application.yml                      # 配置文件
-│   └── test/                                        # 测试代码
-├── pom.xml                                          # Maven配置
-├── PRD.md                                           # 产品需求文档
-└── README.md                                        # 项目说明
+│   │       └── application.yml                      # Configuration file
+│   └── test/                                        # Test code
+├── pom.xml                                          # Maven configuration
+├── README.md                                        # Project documentation
+├── QUICKSTART.md                                    # Quick start guide
+└── docs/                                            # Documentation directory
+    ├── prd/                                         # Product requirements document
+    │   └── PRD.md
+    ├── api/                                         # API interface documentation
+    │   └── API_DOCUMENTATION.md
+    ├── schema/                                      # Database schema documentation
+    │   └── DATABASE_SCHEMA.md
+    └── uml/                                         # UML activity diagrams
+        └── *.puml
 ```
 
-## 核心功能
+## Core Features
 
-### 1. 规则计算接口
+- Rule execution engine: Supports multiple rule types (expression, script, API query, SQL query)
+- Rule status management: Supports five statuses: offline, test, A/B test, full, gray
+- **Status transition constraints**: Strict status transition rules to ensure the legality of rule status changes
+- **Rule deletion constraints**: Only rules in offline status can be deleted
+- A/B testing support: Rule group mechanism for probabilistic rule selection
+- Execution sequence management: Supports configuring different rule execution sequences for different events
+- Intelligent relationship management:
+  - Automatically create/delete rule groups when rule status changes
+  - Automatically synchronize event relationships between rules and rule groups
+  - Automatically clean up empty rule groups and their relationships
+- **RESTful API**: Provides complete event, rule, and rule group management interfaces
+  - Event management: CRUD operations, associate rules/rule groups, modify execution order
+  - Rule management: CRUD operations
+  - Rule group management: Query, modify rule execution probability
 
-**接口路径**: `POST /rule/eval`
+### 1. Rule Evaluation Interface
 
-**请求示例**:
+**Interface Path**: `POST /rule/eval`
+
+**Request Example**:
 ```json
 {
   "userId": 123456789,
   "eventId": 1001,
   "traceId": 987654321,
-  "dataMap": {
+  "arguments": {
     "amount": {
       "value": 1000.00,
       "type": "DECIMAL"
@@ -90,7 +114,7 @@ rule-engine/
 }
 ```
 
-**响应示例**:
+**Response Example**:
 ```json
 {
   "result": {
@@ -101,49 +125,73 @@ rule-engine/
 }
 ```
 
-### 2. 规则类型
+### 2. Rule Types
 
-- **逻辑表达式 (EXPRESSION)**: 使用MVEL表达式引擎执行逻辑表达式
-- **接口查询 (API_QUERY)**: 调用外部HTTP接口获取数据
-- **SQL查询 (SQL_QUERY)**: 执行数据库查询操作
-- **脚本执行 (SCRIPT)**: 执行Groovy脚本
+- **Logical Expression (EXPRESSION)**: Uses MVEL expression engine to execute logical expressions
+- **API Query (API_QUERY)**: Calls external HTTP interfaces to retrieve data
+- **SQL Query (SQL_QUERY)**: Executes database query operations
+- **Script Execution (SCRIPT)**: Executes Groovy scripts
 
-### 3. 规则状态
+### 3. Rule Statuses
 
-- **下线 (OFFLINE)**: 规则不可用，不允许执行
-- **测试 (TEST)**: 仅测试环境可执行
-- **A/B测试 (AB_TEST)**: 生产环境按比例执行
-- **全量 (FULL)**: 生产环境全量执行
+- **Offline (OFFLINE)**: Rule unavailable, execution not allowed
+- **Test (TEST)**: Executable only in test environment
+- **A/B Test (AB_TEST)**: Executed proportionally in production and gray environments
+- **Full (FULL)**: Fully executed in production and gray environments
+- **Gray (GRAY)**: Executable only in gray environment
 
-### 4. 执行流程
+#### Status Transition Constraints
 
-1. 根据`eventId`获取执行序列
-2. 按顺序执行序列中的规则
-3. 根据规则状态判断是否执行
-4. 支持根据规则结果提前跳出
-5. 支持规则间数据传递
-6. 支持循环和递归调用（通过执行深度控制）
+Rule status transitions must follow these constraints:
 
-## 快速开始
+1. **Offline Status (OFFLINE)**: Can only transition to Test status (TEST)
+2. **Test Status (TEST)**: Can transition to Gray status (GRAY) or Offline status (OFFLINE)
+3. **Gray Status (GRAY)**: Can transition to Offline status (OFFLINE) or A/B Test status (AB_TEST)
+4. **A/B Test Status (AB_TEST)**: Can transition to Offline status (OFFLINE) or Full status (FULL)
+5. **Full Status (FULL)**: Can transition to Offline status (OFFLINE) or A/B Test status (AB_TEST)
 
-### 1. 环境要求
+**Status Transition Diagram**:
+```
+OFFLINE → TEST
+TEST → GRAY, OFFLINE
+GRAY → OFFLINE, AB_TEST
+AB_TEST → OFFLINE, FULL
+FULL → OFFLINE, AB_TEST
+```
+
+**Rule Deletion Constraints**:
+- Only rules in Offline status (OFFLINE) can be deleted
+- Attempting to delete rules in non-offline status will throw an exception
+
+### 4. Execution Flow
+
+1. Get execution sequence based on `eventId`
+2. Execute rules in the sequence in order
+3. Determine execution based on rule status
+4. Support early exit based on rule results
+5. Support data transfer between rules
+6. Support loops and recursive calls (controlled by execution depth)
+
+## Quick Start
+
+### 1. Environment Requirements
 
 - JDK 1.8+
 - Maven 3.6+
-- MySQL 5.7+ (可选，仅当使用SQL查询功能时需要)
-- RabbitMQ (可选，仅当需要消息队列功能时需要)
+- MySQL 5.7+ (optional, only needed when using SQL query functionality)
+- RabbitMQ (optional, only needed when message queue functionality is required)
 
-### 2. 配置说明
+### 2. Configuration
 
-编辑 `src/main/resources/application.yml`:
+Edit `src/main/resources/application.yml`:
 
 ```yaml
-# 规则引擎环境配置
+# Rule engine environment configuration
 rule:
   engine:
-    environment: TEST  # 或 PRODUCTION
+    environment: TEST  # or PRODUCTION or GRAY
 
-# RabbitMQ配置（可选）
+# RabbitMQ configuration (optional)
 spring:
   rabbitmq:
     host: localhost
@@ -151,7 +199,7 @@ spring:
     username: guest
     password: guest
 
-# 数据库配置（可选）
+# Database configuration (optional)
 spring:
   datasource:
     url: jdbc:mysql://localhost:3306/rule_engine
@@ -159,21 +207,21 @@ spring:
     password: root
 ```
 
-### 3. 编译运行
+### 3. Build and Run
 
 ```bash
-# 编译项目
+# Build project
 mvn clean compile
 
-# 运行项目
+# Run project
 mvn spring-boot:run
 
-# 或打包后运行
+# Or package and run
 mvn clean package
-java -jar target/rule-engine-1.0.0-SNAPSHOT.jar
+java -jar target/rule-engine-0.7.0-SNAPSHOT.jar
 ```
 
-### 4. 测试接口
+### 4. Test Interface
 
 ```bash
 curl -X POST http://localhost:8080/rule/eval \
@@ -182,63 +230,70 @@ curl -X POST http://localhost:8080/rule/eval \
     "userId": 123456789,
     "eventId": 1001,
     "traceId": 987654321,
-    "dataMap": {
+    "arguments": {
       "amount": {"value": 1000.00, "type": "DECIMAL"},
       "age": {"value": 25, "type": "INTEGER"}
     }
   }'
 ```
 
-## 扩展说明
+## Extension Guide
 
-### 1. 添加新的规则类型
+### 1. Adding New Rule Types
 
-1. 在`RuleType`枚举中添加新类型
-2. 实现`RuleExecutor`接口
-3. 在`RuleEngineConfig`中注册执行器
+1. Add new type to `RuleType` enumeration
+2. Implement `RuleExecutor` interface
+3. Register executor in `RuleEngineConfig`
 
-### 2. 支持RPC调用
+### 2. Supporting RPC Calls
 
-预留了RPC接口扩展点，可以通过以下方式扩展：
+RPC interface extension points are reserved and can be extended as follows:
 
-- 创建`RpcRuleController`实现RPC接口
-- 在`EvalService`中支持RPC调用方式
+- Create `RpcRuleController` to implement RPC interface
+- Support RPC call methods in `EvalService`
 
-### 3. 支持异步非阻塞调用
+### 3. Supporting Asynchronous Non-blocking Calls
 
-- 使用Spring WebFlux实现响应式编程
-- 在Controller层添加异步接口
+- Use Spring WebFlux to implement reactive programming
+- Add asynchronous interfaces at Controller layer
 
-### 4. 数据持久化
+### 4. Data Persistence
 
-当前使用内存存储，可以替换为：
+Currently uses database storage (MySQL + MyBatis Plus), supporting:
 
-- 数据库存储（MySQL/PostgreSQL等）
-- 配置中心（Nacos/Apollo等）
-- Redis缓存
+- Persistent storage of rules, rule groups, and events
+- Persistent storage of execution sequences
+- Persistent storage of rule content
 
-## 注意事项
+## Documentation
 
-1. **规则配置**: 当前使用内存存储，生产环境需要实现持久化存储
-2. **A/B测试记录**: 当前使用内存存储，生产环境需要持久化
-3. **执行深度限制**: 默认最大执行深度为100，防止无限递归
-4. **消息队列**: RabbitMQ为可选配置，未配置时消息发送会跳过
-5. **数据库**: 数据库为可选配置，未配置时SQL查询功能不可用
+- [Product Requirements Document (PRD)](docs/prd/PRD.md)
+- [API Interface Documentation](docs/api/API_DOCUMENTATION.md)
+- [Database Schema Documentation](docs/schema/DATABASE_SCHEMA.md)
+- [UML Activity Diagrams](docs/uml/)
 
-## 开发计划
+## Notes
 
-- [x] 基础架构搭建
-- [x] HTTP同步阻塞接口
-- [x] 基础规则执行引擎
-- [x] 规则状态控制
-- [x] RabbitMQ消息发送
-- [ ] A/B测试功能完善
-- [ ] 规则配置持久化
-- [ ] RPC接口实现
-- [ ] 异步非阻塞调用
-- [ ] 规则执行监控和日志
+1. **Rule Configuration**: Uses MySQL database for persistent storage
+2. **A/B Testing**: Implemented using rule group mechanism, data persisted in database
+3. **Execution Depth Limit**: Default maximum execution depth is 100 to prevent infinite recursion
+4. **Message Queue**: RabbitMQ is optional configuration, message sending will be skipped if not configured
+5. **Database**: Database is required for storing rules, events, rule groups, etc.
+6. **Redis Cache**: Rule selection cache uses Redis storage, cache key format is `rule:gw:abt:{userId}:{eventId}:{groupId}`, used to record selection results for each rule group, cache expiration time is 24 hours
 
-## 许可证
+## Development Plan
+
+- [x] Basic architecture setup
+- [x] HTTP synchronous blocking interface
+- [x] Basic rule execution engine
+- [x] Rule status control
+- [x] RabbitMQ message sending
+- [ ] A/B testing feature improvements
+- [ ] Rule configuration persistence
+- [ ] RPC interface implementation
+- [ ] Asynchronous non-blocking calls
+- [ ] Rule execution monitoring and logging
+
+## License
 
 MIT License
-

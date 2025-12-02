@@ -1,0 +1,1090 @@
+openapi: 3.0.3
+info:
+  title: Rule Engine API
+  description: RESTful API for Rule Engine System - Event, Rule, and Rule Group Management
+  version: 1.0.0
+  contact:
+    name: Rule Engine Team
+    email: support@rule-engine.com
+
+servers:
+  - url: http://localhost:8080/api
+    description: Development server
+  - url: https://api.rule-engine.com/api
+    description: Production server
+
+tags:
+  - name: Events
+    description: Event management operations
+  - name: Rules
+    description: Rule management operations
+  - name: Rule Groups
+    description: Rule group management operations
+  - name: Evaluation
+    description: Rule evaluation operations
+  - name: Dictionary
+    description: Enumeration value query operations
+
+paths:
+  /events:
+    get:
+      tags:
+        - Events
+      summary: Get all events
+      description: Retrieve a list of all events
+      operationId: getAllEvents
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseListEventDTO'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    
+    post:
+      tags:
+        - Events
+      summary: Create event
+      description: Create a new event with specified ID
+      operationId: createEvent
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EventQO'
+      responses:
+        '200':
+          description: Event created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseEventDTO'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /events/{eventId}:
+    get:
+      tags:
+        - Events
+      summary: Get event by ID
+      description: Retrieve a specific event by its ID
+      operationId: getEventById
+      parameters:
+        - $ref: '#/components/parameters/EventIdPath'
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseEventDTO'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    
+    put:
+      tags:
+        - Events
+      summary: Update event
+      description: Update an existing event. Only provided fields will be updated.
+      operationId: updateEvent
+      parameters:
+        - $ref: '#/components/parameters/EventIdPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EventUpdateQO'
+      responses:
+        '200':
+          description: Event updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseEventDTO'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    
+    delete:
+      tags:
+        - Events
+      summary: Delete event
+      description: Delete an event by ID
+      operationId: deleteEvent
+      parameters:
+        - $ref: '#/components/parameters/EventIdPath'
+      responses:
+        '200':
+          description: Event deleted successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseVoid'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /events/{eventId}/execution-items:
+    get:
+      tags:
+        - Events
+      summary: Get execution items for event
+      description: Retrieve execution items (rules and rule groups) associated with an event
+      operationId: getExecutionItems
+      parameters:
+        - $ref: '#/components/parameters/EventIdPath'
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseListExecutionItemDTO'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    
+    put:
+      tags:
+        - Events
+      summary: Batch set execution items for event
+      description: |
+        Batch set execution items (rules and rule groups) for an event.
+        The order of items in the list represents the execution order (starting from 1).
+        - If event already has relationships, relationships not in the request will be deleted
+        - New relationships in the request will be created
+        - Existing relationships in both will be preserved (execution order will be updated)
+        - If empty list is provided, all relationships will be deleted
+      operationId: batchSetExecutionItems
+      parameters:
+        - $ref: '#/components/parameters/EventIdPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BatchSetExecutionItemsQO'
+      responses:
+        '200':
+          description: Execution items set successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseVoid'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /rules:
+    get:
+      tags:
+        - Rules
+      summary: Get all rules
+      description: Retrieve a list of all rules
+      operationId: getAllRules
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseListRuleDTO'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    
+    post:
+      tags:
+        - Rules
+      summary: Create rule
+      description: |
+        Create a new rule. New rules are always created with OFFLINE status (status ID = 0).
+        The ruleStatus field in the request body will be ignored.
+      operationId: createRule
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RuleCreateQO'
+      responses:
+        '200':
+          description: Rule created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseRuleDTO'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /rules/{ruleId}:
+    get:
+      tags:
+        - Rules
+      summary: Get rule by ID
+      description: Retrieve a specific rule by its ID
+      operationId: getRuleById
+      parameters:
+        - $ref: '#/components/parameters/RuleIdPath'
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseRuleDTO'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    
+    put:
+      tags:
+        - Rules
+      summary: Update rule
+      description: |
+        Update an existing rule. Only provided fields will be updated.
+        - name, contentType, ruleStatus, description, content are optional
+        - contentType can be updated if a valid value is provided
+      operationId: updateRule
+      parameters:
+        - $ref: '#/components/parameters/RuleIdPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RuleUpdateQO'
+      responses:
+        '200':
+          description: Rule updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseRuleDTO'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    
+    delete:
+      tags:
+        - Rules
+      summary: Delete rule
+      description: Delete a rule by ID. Only rules with OFFLINE status can be deleted.
+      operationId: deleteRule
+      parameters:
+        - $ref: '#/components/parameters/RuleIdPath'
+      responses:
+        '200':
+          description: Rule deleted successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseVoid'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /rule-groups:
+    get:
+      tags:
+        - Rule Groups
+      summary: Get all rule groups
+      description: Retrieve a list of all rule groups. Rules field is not included in the response.
+      operationId: getAllRuleGroups
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseListRuleGroupDTO'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    
+    post:
+      tags:
+        - Rule Groups
+      summary: Create rule group
+      description: |
+        Create a new rule group with rules and their A/B test ratios.
+        Validation rules:
+        1. Traffic ratios must be integers between 0-100
+        2. Sum of all traffic ratios must not exceed 100
+        3. Rules that already belong to other rule groups cannot be added
+        4. System will validate rule status transitions to AB_TEST:
+           - Allowed transitions: GRAY -> AB_TEST, FULL -> AB_TEST, AB_TEST -> AB_TEST (ignored if already AB_TEST)
+           - If rule status is invalid, IllegalArgumentException will be thrown
+        If validation passes, rule status will be changed to AB_TEST and rule group will be created.
+      operationId: createRuleGroup
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RuleGroupQO'
+      responses:
+        '200':
+          description: Rule group created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseRuleGroupDTO'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /rule-groups/{groupId}:
+    get:
+      tags:
+        - Rule Groups
+      summary: Get rule group by ID
+      description: Retrieve a specific rule group by its ID, including rules and their ratios
+      operationId: getRuleGroupById
+      parameters:
+        - $ref: '#/components/parameters/GroupIdPath'
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseRuleGroupDTO'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    
+    put:
+      tags:
+        - Rule Groups
+      summary: Update rule group
+      description: |
+        Update an existing rule group with rules and their A/B test ratios.
+        Validation rules:
+        1. Traffic ratios must be integers between 0-100
+        2. Sum of all traffic ratios must not exceed 100
+        3. Rules that already belong to other rule groups cannot be added (except rules in current group)
+        4. System will validate rule status transitions to AB_TEST (or already AB_TEST):
+           - Allowed transitions: GRAY -> AB_TEST, FULL -> AB_TEST, AB_TEST -> AB_TEST (ignored if already AB_TEST)
+           - If rule status is invalid, IllegalArgumentException will be thrown
+        If rules are valid, rule status will be changed to AB_TEST.
+        Rules in the original group that are not in the request will have their status set to OFFLINE and be removed from the group.
+      operationId: updateRuleGroup
+      parameters:
+        - $ref: '#/components/parameters/GroupIdPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RuleGroupQO'
+      responses:
+        '200':
+          description: Rule group updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseVoid'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    
+    delete:
+      tags:
+        - Rule Groups
+      summary: Delete rule group
+      description: |
+        Delete a rule group. When deleting a rule group:
+        1. All rules in the group will have their status set to OFFLINE
+        2. Rules will be removed from the group
+        3. The rule group will be deleted
+      operationId: deleteRuleGroup
+      parameters:
+        - $ref: '#/components/parameters/GroupIdPath'
+      responses:
+        '200':
+          description: Rule group deleted successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseVoid'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /eval:
+    post:
+      tags:
+        - Evaluation
+      summary: Execute rule evaluation
+      description: |
+        Execute rule calculation based on event ID and user ID, returning calculation results.
+        This is a synchronous blocking HTTP interface.
+        
+        Execution flow:
+        1. Query execution items (rules and rule groups) associated with the event
+        2. Execute in order:
+           - If it's a rule, execute rule calculation directly
+           - If it's a rule group, select a rule based on user hash and rule probability, then execute
+        3. Return the result of the last execution item
+        4. Asynchronously send calculation results to message queue (RabbitMQ) for subsequent processing
+        
+        Note: This interface is synchronous blocking and will wait for rule calculation to complete before returning results.
+        If an exception occurs during rule calculation, an error message will be returned, but no HTTP exception will be thrown (always returns 200 status code).
+        Message queue send failures will not affect the main flow, only logs will be recorded.
+      operationId: eval
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EvalQO'
+      responses:
+        '200':
+          description: Evaluation result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EvalResultDTO'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /dicts:
+    get:
+      tags:
+        - Dictionary
+      summary: Query enumeration values
+      description: |
+        Query enumeration values in the project. Input enumeration class names (comma-separated if multiple),
+        returns a map with enumeration class names as keys, and their enumeration IDs and enumeration values as values.
+        The value is a list of objects. Each object has "name" (enumeration value) and "value" (enumeration ID).
+        Non-existent class names will be ignored.
+      operationId: getEnumValues
+      parameters:
+        - name: keys
+          in: query
+          description: Comma-separated enumeration class names (e.g., "RuleStatusEnum,ContentTypeEnum,ExecutionItemTypeEnum,EnvironmentEnum")
+          required: false
+          schema:
+            type: string
+            default: ""
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseDictMap'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+components:
+  parameters:
+    EventIdPath:
+      name: eventId
+      in: path
+      required: true
+      description: Event ID (positive integer)
+      schema:
+        type: integer
+        format: int64
+        minimum: 1
+    
+    RuleIdPath:
+      name: ruleId
+      in: path
+      required: true
+      description: Rule ID (positive integer)
+      schema:
+        type: integer
+        format: int64
+        minimum: 1
+    
+    GroupIdPath:
+      name: groupId
+      in: path
+      required: true
+      description: Rule Group ID (positive integer)
+      schema:
+        type: integer
+        format: int64
+        minimum: 1
+
+  responses:
+    BadRequest:
+      description: Bad request - Invalid parameters
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiResponseVoid'
+          example:
+            code: 400
+            msg: "Invalid request parameters"
+            data: null
+    
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiResponseVoid'
+          example:
+            code: 404
+            msg: "Resource not found"
+            data: null
+    
+    InternalServerError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiResponseVoid'
+          example:
+            code: 500
+            msg: "Internal server error"
+            data: null
+
+  schemas:
+    ApiResponseVoid:
+      type: object
+      properties:
+        code:
+          type: integer
+          description: Response code (0 for success, non-zero for error)
+          example: 0
+        msg:
+          type: string
+          description: Response message
+          example: "success"
+        data:
+          type: object
+          nullable: true
+          description: Response data (null for void responses)
+    
+    ApiResponseEventDTO:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponseVoid'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/EventDTO'
+    
+    ApiResponseListEventDTO:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponseVoid'
+        - type: object
+          properties:
+            data:
+              type: array
+              items:
+                $ref: '#/components/schemas/EventDTO'
+    
+    ApiResponseRuleDTO:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponseVoid'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/RuleDTO'
+    
+    ApiResponseListRuleDTO:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponseVoid'
+        - type: object
+          properties:
+            data:
+              type: array
+              items:
+                $ref: '#/components/schemas/RuleDTO'
+    
+    ApiResponseRuleGroupDTO:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponseVoid'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/RuleGroupDTO'
+    
+    ApiResponseListRuleGroupDTO:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponseVoid'
+        - type: object
+          properties:
+            data:
+              type: array
+              items:
+                $ref: '#/components/schemas/RuleGroupDTO'
+    
+    ApiResponseListExecutionItemDTO:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponseVoid'
+        - type: object
+          properties:
+            data:
+              type: array
+              items:
+                $ref: '#/components/schemas/ExecutionItemDTO'
+    
+    ApiResponseDictMap:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponseVoid'
+        - type: object
+          properties:
+            data:
+              type: object
+              additionalProperties:
+                type: array
+                items:
+                  $ref: '#/components/schemas/EnumValueItem'
+
+    EventDTO:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+          description: Event ID (unsigned long integer)
+          example: 10000001
+        name:
+          type: string
+          description: Event name (max 100 characters)
+          maxLength: 100
+          example: "用户注册事件"
+        description:
+          type: string
+          description: Event description (max 250 characters, optional)
+          maxLength: 250
+          example: "用户注册时触发的事件"
+      required:
+        - id
+        - name
+
+    EventQO:
+      type: object
+      description: Request object for creating an event
+      properties:
+        id:
+          type: integer
+          format: int64
+          description: Event ID (required, must be specified, cannot be empty)
+          minimum: 1
+          example: 10000001
+        name:
+          type: string
+          description: Event name (required, max 100 characters)
+          maxLength: 100
+          example: "用户注册事件"
+        description:
+          type: string
+          description: Event description (optional, max 250 characters)
+          maxLength: 250
+          example: "用户注册时触发的事件"
+      required:
+        - id
+        - name
+
+    EventUpdateQO:
+      type: object
+      description: Request object for updating an event. All fields are optional - only provided fields will be updated.
+      properties:
+        name:
+          type: string
+          description: Event name (optional, max 100 characters)
+          maxLength: 100
+          example: "用户注册事件（更新）"
+        description:
+          type: string
+          description: Event description (optional, max 250 characters)
+          maxLength: 250
+          example: "更新后的描述"
+
+    ExecutionItemDTO:
+      type: object
+      description: Execution item DTO representing a rule or rule group in execution sequence
+      properties:
+        itemType:
+          type: integer
+          description: Item type ID (enumeration ID: 0=RULE, 1=RULE_GROUP)
+          enum: [0, 1]
+          example: 0
+        itemId:
+          type: integer
+          format: int64
+          description: Item ID (rule ID or rule group ID)
+          example: 10000001
+        executionOrder:
+          type: integer
+          description: Execution order (starting from 1)
+          minimum: 1
+          example: 1
+      required:
+        - itemType
+        - itemId
+        - executionOrder
+
+    ExecutionItemQO:
+      type: object
+      description: Execution item QO for batch setting execution items
+      properties:
+        itemType:
+          type: integer
+          description: Item type ID (enumeration ID: 0=RULE, 1=RULE_GROUP)
+          enum: [0, 1]
+          example: 0
+        itemId:
+          type: integer
+          format: int64
+          description: Item ID (rule ID or rule group ID, must be positive)
+          minimum: 1
+          example: 10000001
+      required:
+        - itemType
+        - itemId
+
+    BatchSetExecutionItemsQO:
+      type: object
+      description: Request object for batch setting execution items. The order of items in the list represents the execution order (starting from 1).
+      properties:
+        executionItems:
+          type: array
+          description: List of execution items (rules and rule groups). The order in the list represents the execution order.
+          items:
+            $ref: '#/components/schemas/ExecutionItemQO'
+          minItems: 0
+      required:
+        - executionItems
+
+    RuleDTO:
+      type: object
+      description: Rule DTO for REST API. Enumeration fields use enumeration IDs (integers) instead of enumeration values.
+      properties:
+        id:
+          type: integer
+          format: int64
+          description: Rule ID
+          example: 10000001
+        name:
+          type: string
+          description: Rule name
+          maxLength: 100
+          example: "金额检查规则"
+        description:
+          type: string
+          description: Rule description
+          maxLength: 250
+          example: "检查金额是否大于1000"
+        contentType:
+          type: integer
+          description: Rule content type ID (enumeration ID: 0=EXPRESSION, 1=API_QUERY, 2=SQL_QUERY, 3=SCRIPT)
+          enum: [0, 1, 2, 3]
+          example: 0
+        content:
+          type: string
+          description: Rule content
+          example: "amount > 1000"
+        ruleStatus:
+          type: integer
+          description: Rule status ID (enumeration ID: 0=OFFLINE, 1=TEST, 2=GRAY, 3=AB_TEST, 4=FULL)
+          enum: [0, 1, 2, 3, 4]
+          example: 0
+        ruleGroupId:
+          type: integer
+          format: int64
+          nullable: true
+          description: Rule group ID, only valid when status is AB_TEST
+          example: null
+      required:
+        - id
+        - name
+        - contentType
+        - content
+        - ruleStatus
+
+    RuleCreateQO:
+      type: object
+      description: Request object for creating a rule. New rules are always created with OFFLINE status (status ID = 0). The ruleStatus field will be ignored.
+      properties:
+        name:
+          type: string
+          description: Rule name (required, max 100 characters)
+          maxLength: 100
+          example: "金额检查规则"
+        description:
+          type: string
+          description: Rule description (optional, max 250 characters)
+          maxLength: 250
+          example: "检查金额是否大于1000"
+        contentType:
+          type: integer
+          description: Rule content type ID (required, enumeration ID: 0=EXPRESSION, 1=API_QUERY, 2=SQL_QUERY, 3=SCRIPT)
+          enum: [0, 1, 2, 3]
+          example: 0
+        content:
+          type: string
+          description: Rule content (required)
+          example: "amount > 1000"
+      required:
+        - name
+        - contentType
+        - content
+
+    RuleUpdateQO:
+      type: object
+      description: Request object for updating a rule. All fields are optional - only provided fields will be updated.
+      properties:
+        name:
+          type: string
+          description: Rule name (optional, max 100 characters)
+          maxLength: 100
+          example: "金额检查规则（更新）"
+        description:
+          type: string
+          description: Rule description (optional, max 250 characters)
+          maxLength: 250
+          example: "更新后的描述"
+        contentType:
+          type: integer
+          description: Rule content type ID (optional, enumeration ID: 0=EXPRESSION, 1=API_QUERY, 2=SQL_QUERY, 3=SCRIPT)
+          enum: [0, 1, 2, 3]
+          example: 0
+        ruleStatus:
+          type: integer
+          description: Rule status ID (optional, enumeration ID: 0=OFFLINE, 1=TEST, 2=GRAY, 3=AB_TEST, 4=FULL)
+          enum: [0, 1, 2, 3, 4]
+          example: 4
+        content:
+          type: string
+          description: Rule content (optional)
+          example: "amount > 2000"
+
+    RuleGroupDTO:
+      type: object
+      description: Rule group DTO for REST API
+      properties:
+        id:
+          type: integer
+          format: int64
+          description: Rule group ID
+          example: 10000001
+        rules:
+          type: object
+          description: Map of rule ID to A/B test ratio (0-100)
+          additionalProperties:
+            type: integer
+            minimum: 0
+            maximum: 100
+          example:
+            "10000001": 50
+            "10000002": 50
+      required:
+        - id
+        - rules
+
+    RuleGroupQO:
+      type: object
+      description: Request object for creating or updating a rule group
+      properties:
+        rules:
+          type: object
+          description: Map of rule ID to A/B test ratio (0-100). Traffic ratios must be integers between 0-100, and sum must not exceed 100.
+          additionalProperties:
+            type: integer
+            minimum: 0
+            maximum: 100
+          example:
+            "10000001": 50
+            "10000002": 50
+      required:
+        - rules
+
+    EvalQO:
+      type: object
+      description: Rule evaluation request object
+      properties:
+        userId:
+          type: integer
+          format: int64
+          description: User ID (required, must be positive)
+          minimum: 1
+          example: 123456
+        eventId:
+          type: integer
+          format: int64
+          description: Event ID (required, unsigned long integer, must be positive)
+          minimum: 1
+          example: 10000001
+        traceId:
+          type: integer
+          format: int64
+          description: Business request trace ID (required)
+          example: 999999
+        arguments:
+          type: object
+          description: Parameter dictionary for rule calculation (required)
+          additionalProperties:
+            $ref: '#/components/schemas/TypedValue'
+          example:
+            amount:
+              value: 1000.0
+              type: "DECIMAL"
+            age:
+              value: 25
+              type: "INTEGER"
+            isVip:
+              value: true
+              type: "BOOLEAN"
+      required:
+        - userId
+        - eventId
+        - traceId
+        - arguments
+
+    TypedValue:
+      type: object
+      description: Typed value wrapper class for encapsulating input parameters and output results in rule calculation
+      properties:
+        value:
+          description: Actual value (can be string, integer, number, boolean, object, etc.)
+          oneOf:
+            - type: string
+            - type: integer
+            - type: number
+            - type: boolean
+            - type: object
+          example: 1000.0
+        type:
+          type: string
+          description: Value type
+          enum: [STRING, INTEGER, LONG, DECIMAL, BOOLEAN, DATE, OBJECT]
+          example: "DECIMAL"
+      required:
+        - value
+        - type
+
+    EvalResultDTO:
+      type: object
+      description: Rule evaluation response DTO
+      properties:
+        result:
+          $ref: '#/components/schemas/TypedValue'
+          nullable: true
+          description: Calculation result (null if failed)
+        success:
+          type: boolean
+          description: Whether successful
+          example: true
+        errmsg:
+          type: string
+          nullable: true
+          description: Error message (only exists when success is false)
+          example: null
+        trace:
+          $ref: '#/components/schemas/ExecutionTrace'
+          nullable: true
+          description: Execution trace information (execution process details)
+      required:
+        - success
+
+    EnumValueItem:
+      type: object
+      description: Enumeration value item
+      properties:
+        name:
+          type: string
+          description: Enumeration value name
+          example: "OFFLINE"
+        value:
+          type: integer
+          description: Enumeration ID
+          example: 0
+      required:
+        - name
+        - value
+
+    ExecutionTrace:
+      type: object
+      description: Execution trace information. Records information about executed rules. Only rules that have been executed are recorded in the trace.
+      properties:
+        steps:
+          type: array
+          description: List of execution steps. Each step represents an executed rule. The last element in the list represents the last executed rule.
+          items:
+            $ref: '#/components/schemas/ExecutionStep'
+          example: []
+      required:
+        - steps
+
+    ExecutionStep:
+      type: object
+      description: Execution step information
+      properties:
+        itemType:
+          type: integer
+          description: Execution item type ID (enumeration ID: 0=RULE, 1=RULE_GROUP)
+          enum: [0, 1]
+          example: 0
+        itemId:
+          type: integer
+          format: int64
+          description: Item ID (rule ID if itemType is RULE, rule group ID if itemType is RULE_GROUP)
+          example: 10000001
+        abTestedRuleId:
+          type: integer
+          format: int64
+          nullable: true
+          description: Selected rule ID from group (if itemType is RULE_GROUP)
+          example: null
+        result:
+          $ref: '#/components/schemas/TypedValue'
+          nullable: true
+          description: Execution result
+        errmsg:
+          type: string
+          nullable: true
+          description: Error message (if execution failed)
+          example: null
+      required:
+        - itemType
+        - itemId
+

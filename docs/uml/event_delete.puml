@@ -1,0 +1,23 @@
+@startuml Event Delete
+title Delete Event Interface Activity Diagram
+
+start
+
+:Receive DELETE /api/events/{eventId} request;
+:Parse path parameters;
+
+:Call EventService.deleteEvent();
+
+:Query if event exists;
+if (Event does not exist?) then (yes)
+  :Return 404 error;
+  stop
+endif
+
+:Delete all execution event relations;
+:Delete event entity;
+:Return 200 OK;
+
+stop
+
+@enduml

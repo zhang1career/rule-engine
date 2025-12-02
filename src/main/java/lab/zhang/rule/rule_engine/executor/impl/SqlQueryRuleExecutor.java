@@ -1,7 +1,8 @@
 package lab.zhang.rule.rule_engine.executor.impl;
 
 import lab.zhang.rule.rule_engine.common.TypedValue;
-import lab.zhang.rule.rule_engine.enums.RuleType;
+import lab.zhang.rule.rule_engine.enums.ContentTypeEnum;
+import lab.zhang.rule.rule_engine.enums.ValueTypeEnum;
 import lab.zhang.rule.rule_engine.model.Rule;
 import lab.zhang.rule.rule_engine.model.RuleExecutionContext;
 import lab.zhang.rule.rule_engine.executor.RuleExecutor;
@@ -14,7 +15,7 @@ import java.util.Map;
 /**
  * SQL query rule executor
  * 
- * @author rule-engine
+ * @author Rongjin Zhang
  */
 @Slf4j
 public class SqlQueryRuleExecutor implements RuleExecutor {
@@ -29,7 +30,7 @@ public class SqlQueryRuleExecutor implements RuleExecutor {
     public TypedValue execute(Rule rule, RuleExecutionContext context) {
         try {
             // Execute SQL query
-            List<Map<String, Object>> results = jdbcTemplate.queryForList(rule.getRuleContent());
+            List<Map<String, Object>> results = jdbcTemplate.queryForList(rule.getContent());
             
             // Return query result
             // If only one record, return that record; otherwise return the entire result set
@@ -41,22 +42,33 @@ public class SqlQueryRuleExecutor implements RuleExecutor {
                     return convertToTypedValue(value);
                 } else {
                     // Multiple columns, return Map
-                    return new TypedValue(singleResult, TypedValue.ValueType.OBJECT);
+                    return new TypedValue(singleResult, ValueTypeEnum.OBJECT);
                 }
             } else {
                 // Multiple records, return List
-                return new TypedValue(results, TypedValue.ValueType.OBJECT);
+                return new TypedValue(results, ValueTypeEnum.OBJECT);
             }
         } catch (Exception e) {
             log.error("SQL query rule execution failed, ruleId: {}, error: {}", 
-                     rule.getRuleId(), e.getMessage(), e);
+                     rule.getId(), e.getMessage(), e);
             throw new RuntimeException("SQL query execution failed: " + e.getMessage(), e);
         }
     }
     
     @Override
-    public RuleType getSupportedRuleType() {
-        return RuleType.SQL_QUERY;
+    public ContentTypeEnum getSupportedRuleType() {
+        return ContentTypeEnum.SQL_QUERY;
+    }
+    
+    @Override
+    public void validate(String content) {
+        // Basic SQL syntax validation: check if it's a SELECT statement
+        String trimmedContent = content.trim().toUpperCase();
+        if (!trimmedContent.startsWith("SELECT")) {
+            throw new IllegalArgumentException("SQL query must be a SELECT statement");
+        }
+        // Note: More comprehensive SQL validation could be added here,
+        // but for now we just check that it starts with SELECT
     }
     
     /**
@@ -64,21 +76,21 @@ public class SqlQueryRuleExecutor implements RuleExecutor {
      */
     private TypedValue convertToTypedValue(Object result) {
         if (result == null) {
-            return new TypedValue(null, TypedValue.ValueType.OBJECT);
+            return TypedValue.nullValue();
         }
         
         if (result instanceof String) {
-            return new TypedValue(result, TypedValue.ValueType.STRING);
+            return new TypedValue(result, ValueTypeEnum.STRING);
         } else if (result instanceof Integer) {
-            return new TypedValue(result, TypedValue.ValueType.INTEGER);
+            return new TypedValue(result, ValueTypeEnum.INTEGER);
         } else if (result instanceof Long) {
-            return new TypedValue(result, TypedValue.ValueType.LONG);
+            return new TypedValue(result, ValueTypeEnum.LONG);
         } else if (result instanceof Double || result instanceof Float) {
-            return new TypedValue(result, TypedValue.ValueType.DECIMAL);
+            return new TypedValue(result, ValueTypeEnum.DECIMAL);
         } else if (result instanceof Boolean) {
-            return new TypedValue(result, TypedValue.ValueType.BOOLEAN);
+            return new TypedValue(result, ValueTypeEnum.BOOLEAN);
         } else {
-            return new TypedValue(result, TypedValue.ValueType.OBJECT);
+            return new TypedValue(result, ValueTypeEnum.OBJECT);
         }
     }
 }

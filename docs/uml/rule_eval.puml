@@ -1,0 +1,57 @@
+@startuml Rule Eval
+title Rule Evaluation Interface Activity Diagram
+
+start
+
+:Receive POST /api/eval request;
+:Parse request body EvalQO;
+
+:Validate request parameters;
+note right: userId, eventId cannot be null
+
+if (Parameter validation passed?) then (no)
+  :Return error response;
+  stop
+endif
+
+:Call EvalService.eval();
+
+:Build RuleExecutionContext;
+note right: Contains userId, eventId, traceId, arguments
+
+:Call RuleExecutionEngine.execute();
+
+:Query execution items by eventId;
+note right: Query rules and rule groups
+
+if (Execution items empty?) then (yes)
+  :Return default result or error;
+  stop
+endif
+
+:Iterate execution items in execution order;
+
+if (Execution item type?) then (rule group)
+  :Calculate rule selection based on user hash;
+  :Select one rule from rule group;
+  :Execute selected rule;
+else (rule)
+  :Execute rule directly;
+endif
+
+:Get rule calculation result;
+
+if (More execution items?) then (yes)
+  :Continue to next execution item;
+else (no)
+  :Use last result as final result;
+endif
+
+:Asynchronously send result to message queue;
+note right: Send failure does not affect main flow
+
+:Return calculation result;
+
+stop
+
+@enduml

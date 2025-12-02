@@ -1,0 +1,31 @@
+@startuml Rule Delete
+title Delete Rule Interface Activity Diagram
+
+start
+
+:Receive DELETE /api/rules/{ruleId} request;
+:Parse path parameters;
+
+:Call RuleService.deleteRule();
+
+:Query if rule exists;
+if (Rule does not exist?) then (yes)
+  :Return 400 error;
+  stop
+endif
+
+:Check rule status;
+if (Status is not OFFLINE?) then (yes)
+  :Return 400 error;
+  note right: Only rules with OFFLINE status can be deleted
+  stop
+endif
+
+:Delete rule content;
+:Delete rule entity;
+:Delete execution event relations;
+:Return 200 OK;
+
+stop
+
+@enduml

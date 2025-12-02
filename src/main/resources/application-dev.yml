@@ -8,5 +8,5 @@ spring:
 
 rule:
   engine:
-    environment: TEST
+    environment: DEV
 

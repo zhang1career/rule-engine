@@ -1,0 +1,43 @@
+@startuml Rule Update
+title Update Rule Interface Activity Diagram
+
+start
+
+:Receive PUT /api/rules/{ruleId} request;
+:Parse path parameters and request body RuleQO;
+
+:Validate parameters;
+note right: All fields are optional, only provided fields will be updated
+
+if (Parameter validation passed?) then (no)
+  :Return 400 error;
+  stop
+endif
+
+:Convert to Rule model;
+:Call RuleService.updateRule();
+
+:Query if rule exists;
+if (Rule does not exist?) then (yes)
+  :Return 404 error;
+  stop
+endif
+
+:Check if status changed;
+if (Status changed?) then (yes)
+  :Validate status transition;
+  if (Status transition invalid?) then (yes)
+    :Return 400 error;
+    stop
+  endif
+  :Handle status change business logic;
+endif
+
+:Update RuleEntity (only update provided fields);
+:Update RuleContentEntity (if content provided);
+:Convert to RuleDTO;
+:Return 200 OK;
+
+stop
+
+@enduml

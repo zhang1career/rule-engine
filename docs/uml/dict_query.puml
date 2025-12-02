@@ -1,0 +1,78 @@
+@startuml Dict Query
+title Query Enumeration Values Interface Activity Diagram
+
+start
+
+:Receive GET /api/dicts?keys=xxx request;
+:Parse query parameter keys;
+:Log: keys={keys};
+
+:Call EnumUtil.getEnumInfoMap(keys);
+
+if (keys empty or null?) then (yes)
+  :Return empty Map;
+else (no)
+  :Split enumeration class names by comma;
+  
+  repeat
+    :Trim whitespace;
+    if (Class name empty?) then (yes)
+      :Skip;
+    else (no)
+      :Parse full class name;
+      if (Class name contains package path?) then (yes)
+        :Use full class name;
+      else (no)
+        :Find predefined enumeration class mapping;
+        if (Mapping found?) then (yes)
+          :Use mapped full class name;
+        else (no)
+          :Try common package prefix resolution;
+          if (Class exists?) then (yes)
+            :Use resolved full class name;
+          else (no)
+            :Skip this enumeration class;
+          endif
+        endif
+      endif
+      
+      if (Full class name resolution successful?) then (yes)
+        :Load enumeration class via reflection;
+        if (Class is not enumeration type?) then (yes)
+          :Skip;
+        else (no)
+          :Get all enumeration constants;
+          
+          repeat
+            :Create Map object;
+            :Set name = enumeration value name;
+            :Try calling getId() method;
+            if (getId() method exists?) then (yes)
+              :Set value = enumeration ID;
+            else (no)
+              :Set value = ordinal();
+            endif
+            :Add to result list;
+          repeat while (More enumeration constants?)
+          
+          if (Enumeration info list not empty?) then (yes)
+            :Add enumeration info to result Map;
+          endif
+        endif
+      endif
+    endif
+  repeat while (More enumeration class names?)
+endif
+
+if (Processing successful?) then (yes)
+  :Build ApiResponseDTO.success();
+  :Return 200 OK;
+else (no)
+  :Log error;
+  :Build ApiResponseDTO.error();
+  :Return 500 error;
+endif
+
+stop
+
+@enduml

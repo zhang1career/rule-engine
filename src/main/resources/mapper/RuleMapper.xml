@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="lab.zhang.rule.rule_engine.mapper.RuleMapper">
+
+    <!-- Batch update rules -->
+    <!-- Note: This method updates all fields for each rule entity in the list -->
+    <!-- MySQL requires allowMultiQueries=true in JDBC URL to support multiple statements separated by semicolons -->
+    <update id="updateBatchById" parameterType="java.util.List">
+        <foreach collection="list" item="item" separator=";">
+            UPDATE rule
+            <set>
+                name = #{item.name},
+                content_type = #{item.contentType},
+                rule_status = #{item.ruleStatus},
+                rule_group_id = #{item.ruleGroupId},
+                description = #{item.description},
+                ut = #{item.ut},
+                ct = #{item.ct}
+            </set>
+            WHERE id = #{item.id}
+        </foreach>
+    </update>
+
+</mapper>
+

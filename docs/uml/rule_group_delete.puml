@@ -1,0 +1,30 @@
+@startuml Rule Group Delete
+title Delete Rule Group Interface Activity Diagram
+
+start
+
+:Receive DELETE /api/rule-groups/{groupId} request;
+:Parse path parameters;
+
+:Call RuleGroupService.deleteRuleGroup();
+
+:Query if rule group exists;
+if (Rule group does not exist?) then (yes)
+  :Return 404 error;
+  stop
+endif
+
+:Query all rules in rule group;
+
+:Iterate rule list;
+:Set rule status to OFFLINE;
+:Update RuleEntity;
+:Remove rule from rule group;
+:Delete RuleGroupRuleRelationEntity;
+
+:Delete RuleGroupEntity;
+:Return 200 OK;
+
+stop
+
+@enduml

@@ -1,0 +1,33 @@
+@startuml Event Update
+title Update Event Interface Activity Diagram
+
+start
+
+:Receive PUT /api/events/{eventId} request;
+:Parse path parameters and request body EventQO;
+
+:Validate parameters;
+note right: name, description are optional, only provided fields will be updated
+
+if (Parameter validation passed?) then (no)
+  :Return 400 error;
+  stop
+endif
+
+:Call EventService.updateEvent();
+
+:Query if event exists;
+if (Event does not exist?) then (yes)
+  :Return 404 error;
+  stop
+endif
+
+:Update event name and description;
+:Update update time;
+:Save to database;
+:Convert to EventDTO;
+:Return 200 OK;
+
+stop
+
+@enduml

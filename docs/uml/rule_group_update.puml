@@ -1,0 +1,83 @@
+@startuml Rule Group Update
+title Update Rule Group Interface Activity Diagram
+
+start
+
+:Receive PUT /api/rule-groups/{groupId} request;
+:Parse path parameters and request body RuleGroupQO;
+
+:Validate parameters;
+note right: rules cannot be null
+
+if (Parameter validation passed?) then (no)
+  :Return 400 error;
+  stop
+endif
+
+:Call RuleGroupService.updateRuleGroupWithRules();
+
+:Query if rule group exists;
+if (Rule group does not exist?) then (yes)
+  :Return 404 error;
+  stop
+endif
+
+:Validate traffic ratios;
+note right: Traffic ratios must be integers between 0-100
+note right: Sum of all traffic ratios must not exceed 100
+
+if (Traffic ratio validation passed?) then (no)
+  :Return 400 error;
+  stop
+endif
+
+:Query original rules in rule group;
+
+:Iterate new rule list;
+:Validate if rule exists;
+if (Rule does not exist?) then (yes)
+  :Return 400 error;
+  stop
+endif
+
+:Validate if rule already belongs to other rule group;
+note right: Rules in current rule group are excluded
+
+if (Rule belongs to other rule group?) then (yes)
+  :Return 400 error;
+  stop
+endif
+
+:Validate if rule status can transition to AB_TEST;
+note right: Allowed status transitions: GRAY -> AB_TEST, FULL -> AB_TEST
+note right: If already AB_TEST, ignore
+
+if (Status transition invalid?) then (yes)
+  :Throw IllegalArgumentException;
+  :Return 400 error;
+  stop
+endif
+
+:Iterate original rule list;
+if (Rule not in new list?) then (yes)
+  :Change rule status to OFFLINE;
+  :Remove rule from rule group;
+endif
+
+:Iterate new rule list;
+if (Rule not in original list?) then (yes)
+  :Change rule status to AB_TEST;
+  :Create RuleGroupRuleRelationEntity;
+else (no)
+  :Update RuleGroupRuleRelationEntity;
+endif
+
+:Set A/B test ratio;
+:Update RuleGroupRuleRelationMapper;
+
+:Convert to RuleGroupDTO;
+:Return 200 OK;
+
+stop
+
+@enduml

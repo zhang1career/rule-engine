@@ -1,0 +1,34 @@
+@startuml Event Create
+title Create Event Interface Activity Diagram
+
+start
+
+:Receive POST /api/events request;
+:Parse request body EventQO;
+
+:Validate parameters;
+note right: id, name cannot be null
+note right: id must be specified and cannot be empty
+
+if (Parameter validation passed?) then (no)
+  :Return 400 error;
+  stop
+endif
+
+:Check if event ID already exists;
+if (Event ID exists?) then (yes)
+  :Return 400 error;
+  stop
+endif
+
+:Call EventService.createEvent();
+:Create EventEntity;
+:Set create time and update time;
+:Call EventMapper.insert();
+
+:Convert to EventDTO;
+:Return 200 OK;
+
+stop
+
+@enduml

@@ -1,106 +1,106 @@
-# 测试说明文档
+# Test Documentation
 
-本项目使用Spock框架编写单元测试。Spock是一个基于Groovy的测试框架，提供了更简洁和表达力更强的测试语法。
+This project uses the Spock framework for writing unit tests. Spock is a Groovy-based testing framework that provides more concise and expressive test syntax.
 
-## 测试框架
+## Test Framework
 
 - **Spock Framework**: 2.3-groovy-3.0
 - **Groovy**: 3.0.17
 
-## 运行测试
+## Running Tests
 
-### 运行所有测试
+### Run All Tests
 
 ```bash
 mvn test
 ```
 
-### 运行特定测试类
+### Run Specific Test Class
 
 ```bash
 mvn test -Dtest=TypedValueSpec
 ```
 
-### 运行特定测试方法
+### Run Specific Test Method
 
 ```bash
-mvn test -Dtest=TypedValueSpec#测试TypedValue的基本创建和getValue方法
+mvn test -Dtest=TypedValueSpec#testTypedValueBasicCreationAndGetValue
 ```
 
-## 测试覆盖范围
+## Test Coverage
 
-### 1. 核心类测试
+### 1. Core Class Tests
 
-- **TypedValueSpec**: 测试TypedValue类的类型转换和值获取
-- **RuleExecutionContextSpec**: 测试规则执行上下文的功能
+- **TypedValueSpec**: Tests TypedValue class type conversion and value retrieval
+- **RuleExecutionContextSpec**: Tests rule execution context functionality
 
-### 2. 服务层测试
+### 2. Service Layer Tests
 
-- **RuleServiceImplSpec**: 测试规则服务的CRUD操作
-  - 保存和获取规则
-  - 保存执行序列
-  - 规则状态过滤
-  - 异常处理
+- **RuleServiceImplSpec**: Tests rule service CRUD operations
+  - Save and retrieve rules
+  - Save execution sequences
+  - Rule status filtering
+  - Exception handling
 
-- **ABTestServiceImplSpec**: 测试A/B测试服务
-  - A/B测试决策逻辑
-  - 记录和查询A/B测试记录
-  - 参数验证
+- **RuleGroupServiceImplSpec**: Tests rule group service (A/B testing functionality)
+  - A/B testing decision logic
+  - Record and query A/B test records
+  - Parameter validation
 
-- **EvalServiceImplSpec**: 测试规则计算服务
-  - 正常执行流程
-  - 消息队列异常处理
-  - 执行上下文构建
+- **EvalServiceImplSpec**: Tests rule evaluation service
+  - Normal execution flow
+  - Message queue exception handling
+  - Execution context construction
 
-### 3. 规则执行器测试
+### 3. Rule Executor Tests
 
-- **ExpressionRuleExecutorSpec**: 测试表达式规则执行器
-  - 布尔表达式执行
-  - 算术表达式执行
-  - 系统变量和上下文变量使用
-  - 异常处理
+- **ExpressionRuleExecutorSpec**: Tests expression rule executor
+  - Boolean expression execution
+  - Arithmetic expression execution
+  - System variables and context variable usage
+  - Exception handling
 
-- **ScriptRuleExecutorSpec**: 测试Groovy脚本执行器
-  - 简单脚本执行
-  - 复杂脚本执行
-  - 变量访问
-  - 异常处理
+- **ScriptRuleExecutorSpec**: Tests Groovy script executor
+  - Simple script execution
+  - Complex script execution
+  - Variable access
+  - Exception handling
 
-### 4. 规则引擎测试
+### 4. Rule Engine Tests
 
-- **RuleExecutionEngineSpec**: 测试规则执行引擎
-  - 规则序列执行
-  - 规则状态控制
-  - 环境判断
-  - A/B测试规则执行
-  - 提前跳出逻辑
-  - 异常处理
+- **RuleExecutionEngineSpec**: Tests rule execution engine
+  - Rule sequence execution
+  - Rule status control
+  - Environment judgment
+  - A/B test rule execution
+  - Early exit logic
+  - Exception handling
 
-### 5. 控制器测试
+### 5. Controller Tests
 
-- **RuleControllerSpec**: 测试HTTP接口
-  - 正常请求处理
-  - 异常处理
-  - 参数传递验证
+- **RuleControllerSpec**: Tests HTTP interfaces
+  - Normal request processing
+  - Exception handling
+  - Parameter passing validation
 
-## Spock测试语法说明
+## Spock Test Syntax
 
-### Given-When-Then结构
+### Given-When-Then Structure
 
 ```groovy
-def "测试示例"() {
-    given: "准备测试数据"
+def "test example"() {
+    given: "prepare test data"
     def value = 100
     
-    when: "执行操作"
+    when: "execute operation"
     def result = value * 2
     
-    then: "验证结果"
+    then: "verify result"
     result == 200
 }
 ```
 
-### Mock对象
+### Mock Objects
 
 ```groovy
 def service = Mock(Service)
@@ -109,14 +109,14 @@ when:
 service.doSomething()
 
 then:
-1 * service.doSomething()  // 验证方法被调用一次
+1 * service.doSomething()  // Verify method is called once
 ```
 
-### 参数化测试
+### Parameterized Tests
 
 ```groovy
 @Unroll
-def "测试类型转换 - 值: #value, 类型: #type"() {
+def "test type conversion - value: #value, type: #type"() {
     expect:
     convert(value) == expected
     
@@ -127,43 +127,43 @@ def "测试类型转换 - 值: #value, 类型: #type"() {
 }
 ```
 
-### 异常测试
+### Exception Tests
 
 ```groovy
 when:
 service.doSomething()
 
 then:
-thrown(RuntimeException)  // 验证抛出异常
+thrown(RuntimeException)  // Verify exception is thrown
 ```
 
-## 测试覆盖率
+## Test Coverage
 
-运行测试覆盖率报告：
+Run test coverage report:
 
 ```bash
 mvn clean test jacoco:report
 ```
 
-覆盖率报告将生成在 `target/site/jacoco/index.html`
+Coverage report will be generated at `target/site/jacoco/index.html`
 
-## 注意事项
+## Notes
 
-1. **Groovy版本**: 确保Groovy版本与Spock兼容（当前使用3.0.17）
-2. **测试隔离**: 每个测试方法都是独立的，不会相互影响
-3. **Mock对象**: 使用Spock的Mock功能可以轻松模拟依赖
-4. **参数化测试**: 使用`@Unroll`注解可以生成多个测试用例
+1. **Groovy Version**: Ensure Groovy version is compatible with Spock (currently using 3.0.17)
+2. **Test Isolation**: Each test method is independent and does not affect each other
+3. **Mock Objects**: Using Spock's Mock functionality can easily simulate dependencies
+4. **Parameterized Tests**: Using `@Unroll` annotation can generate multiple test cases
 
-## 扩展测试
+## Extending Tests
 
-### 添加新的测试类
+### Adding New Test Classes
 
-1. 在`src/test/groovy`目录下创建对应的测试类
-2. 类名以`Spec`结尾（Spock约定）
-3. 继承`Specification`类
-4. 使用Spock的测试语法编写测试用例
+1. Create corresponding test class in `src/test/groovy` directory
+2. Class name ends with `Spec` (Spock convention)
+3. Extend `Specification` class
+4. Write test cases using Spock test syntax
 
-### 示例
+### Example
 
 ```groovy
 package lab.zhang.rule.rule_engine.service.impl
@@ -174,26 +174,25 @@ class MyServiceSpec extends Specification {
 
     def service = new MyService()
 
-    def "测试方法"() {
+    def "test method"() {
         given:
-        // 准备数据
+        // Prepare data
 
         when:
-        // 执行操作
+        // Execute operation
 
         then:
-        // 验证结果
+        // Verify result
     }
 }
 ```
 
-## 持续集成
+## Continuous Integration
 
-测试可以在CI/CD流程中自动运行：
+Tests can be automatically run in CI/CD processes:
 
 ```yaml
-# 示例：GitHub Actions
+# Example: GitHub Actions
 - name: Run Tests
   run: mvn test
 ```
-

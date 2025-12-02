@@ -1,0 +1,52 @@
+@startuml Event Batch Set Execution Items
+title Batch Set Event Execution Items Interface Activity Diagram
+
+start
+
+:Receive PUT /api/events/{eventId}/execution-items request;
+:Parse path parameters and request body BatchSetExecutionItemsQO;
+
+:Validate parameters;
+note right: eventId, executionItems cannot be null
+
+if (Parameter validation passed?) then (no)
+  :Return 400 error;
+  stop
+endif
+
+:Call EventService.batchSetExecutionItems();
+
+:Query if event exists;
+if (Event does not exist?) then (yes)
+  :Return 400 error;
+  stop
+endif
+
+:Query existing relations;
+:Build existing relation map (itemType:itemId -> relation entity);
+
+:Iterate new execution item list;
+note right: List order represents execution order
+
+:Validate if execution item exists;
+if (Rule/rule group does not exist?) then (yes)
+  :Return 400 error;
+  stop
+endif
+
+:Check if relation already exists;
+if (Relation exists?) then (yes)
+  :Update execution order and update time;
+else (no)
+  :Create new relation;
+  :Set create time and update time;
+endif
+
+:Mark relation in new list;
+
+:Delete original relations not in new list;
+:Return 200 OK;
+
+stop
+
+@enduml
