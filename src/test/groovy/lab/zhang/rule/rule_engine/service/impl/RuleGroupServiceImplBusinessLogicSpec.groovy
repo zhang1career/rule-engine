@@ -2,28 +2,21 @@ package lab.zhang.rule.rule_engine.service.impl
 
 import com.baomidou.mybatisplus.core.conditions.Wrapper
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper
-import lab.zhang.rule.rule_engine.entity.ExecutionEventRelationEntity
-import lab.zhang.rule.rule_engine.entity.RuleEntity
+import lab.zhang.rule.rule_engine.entity.ExecutionArrangementEntity
 import lab.zhang.rule.rule_engine.entity.RuleGroupEntity
-import lab.zhang.rule.rule_engine.entity.RuleGroupRuleRelationEntity
 import lab.zhang.rule.rule_engine.enums.ContentTypeEnum
-import lab.zhang.rule.rule_engine.enums.ExecutionItemTypeEnum
 import lab.zhang.rule.rule_engine.enums.RuleStatusEnum
-import lab.zhang.rule.rule_engine.mapper.ExecutionEventRelationMapper
+import lab.zhang.rule.rule_engine.mapper.ExecutionArrangementMapper
 import lab.zhang.rule.rule_engine.mapper.RuleGroupMapper
-import lab.zhang.rule.rule_engine.mapper.RuleGroupRuleRelationMapper
-import lab.zhang.rule.rule_engine.mapper.RuleMapper
 import lab.zhang.rule.rule_engine.common.TypedValue
 import lab.zhang.rule.rule_engine.constant.EvalArgumentConst
 import lab.zhang.rule.rule_engine.enums.ValueTypeEnum
-import lab.zhang.rule.rule_engine.mapper.RuleContentMapper
 import lab.zhang.rule.rule_engine.model.Rule
 import lab.zhang.rule.rule_engine.model.RuleExecutionContext
 import lab.zhang.rule.rule_engine.model.RuleGroup
 import lab.zhang.rule.rule_engine.service.RuleSelectionCacheService
 import lab.zhang.rule.rule_engine.service.RuleService
 import lab.zhang.rule.rule_engine.struct_mapper.RuleGroupStructMapper
-import lab.zhang.rule.rule_engine.struct_mapper.RuleStructMapper
 import org.apache.commons.lang3.tuple.Pair
 import spock.lang.Specification
 import spock.lang.Unroll
@@ -39,69 +32,64 @@ class RuleGroupServiceImplBusinessLogicSpec extends Specification {
     RuleGroupServiceImpl ruleGroupService
     RuleService ruleService = Mock()
     RuleGroupMapper ruleGroupMapper = Mock()
-    ExecutionEventRelationMapper executionEventRelationMapper = Mock()
-    RuleMapper ruleMapper = Mock()
+    ExecutionArrangementMapper executionEventRelationMapper = Mock()
     RuleGroupStructMapper ruleGroupStructMapper = Mock()
     RuleSelectionCacheService ruleSelectionCacheService = Mock()
-    RuleStructMapper ruleStructMapper = Mock()
-    RuleGroupRuleRelationMapper ruleGroupRuleRelationMapper = Mock()
-    RuleContentMapper ruleContentMapper = Mock()
 
     def setup() {
         ruleGroupService = new RuleGroupServiceImpl()
         ruleGroupService.ruleService = ruleService
         ruleGroupService.ruleGroupMapper = ruleGroupMapper
-        ruleGroupService.ruleGroupRuleRelationMapper = ruleGroupRuleRelationMapper
-        ruleGroupService.executionEventRelationMapper = executionEventRelationMapper
-        ruleGroupService.ruleMapper = ruleMapper
+        ruleGroupService.executionArrangementMapper = executionEventRelationMapper
         ruleGroupService.ruleGroupStructMapper = ruleGroupStructMapper
         ruleGroupService.ruleSelectionCacheService = ruleSelectionCacheService
-        ruleGroupService.ruleStructMapper = ruleStructMapper
-        ruleGroupService.ruleContentMapper = ruleContentMapper
     }
 
     @Unroll
     def "Business Logic 1: Create rule group and copy rule-event associations - ruleId: #ruleId, eventIds: #eventIds"() {
-        given: "a rule in AB_TEST status with event associations"
+        given: "a rule in ONLINE status with event associations"
         def rule = Rule.builder()
                 .id(ruleId)
                 .name("Test Rule")
                 .contentType(ContentTypeEnum.EXPRESSION)
-                .ruleStatus(RuleStatusEnum.AB_TEST)
+                .ruleStatus(RuleStatusEnum.ONLINE)
                 .build()
 
-        // Mock rule-event associations
+        // Mock rule-event associations (standalone rules with groupId = 0)
         def ruleEventRelations = eventIds.collect { eventId ->
-            def relation = new ExecutionEventRelationEntity()
+            def relation = new ExecutionArrangementEntity()
             relation.setEventId(eventId)
-            relation.setItemType(ExecutionItemTypeEnum.RULE.getId())
-            relation.setItemId(ruleId)
-            relation.setExecutionOrder(eventIds.indexOf(eventId) + 1)
+            relation.setRuleId(ruleId)
+            relation.setGroupId(0L) // Standalone rule
+            relation.setExeOrder(eventIds.indexOf(eventId))
+            relation.setAbRatio(0)
             return relation
         }
 
-        // Track calls to selectList - first call should return rule-event relations
-        def selectListCalls = 0
-
-        // Mock selectList: first call returns rule-event relations (in copyRuleEventAssociationsToGroup)
+        // Mock selectList: return rule-event relations when querying for RULE type
         executionEventRelationMapper.selectList(_ as LambdaQueryWrapper) >> { LambdaQueryWrapper wrapper ->
-            selectListCalls++
-            // First call is from copyRuleEventAssociationsToGroup, return rule-event relations
-            if (selectListCalls == 1) {
-                return ruleEventRelations
-            }
-            // All other calls return empty list
-            return []
+            // Return rule-event relations when querying for RULE type
+            return ruleEventRelations
         }
 
-        // Mock selectOne for checking existing group-event associations (should return null = not exists)
-        executionEventRelationMapper.selectOne(_ as LambdaQueryWrapper) >> null
+        // Mock selectOne with different behavior based on the query
+        def selectOneCallCount = 0
+        executionEventRelationMapper.selectOne(_ as LambdaQueryWrapper) >> {
+            selectOneCallCount++
+            if (selectOneCallCount == 1) {
+                // First call: Check for existing group associations (group_id != 0) - should return null
+                return null
+            } else {
+                // Second call: Find standalone relation (group_id = 0) - should return the relation
+                return ruleEventRelations.find { it.ruleId == ruleId && it.groupId == 0L }
+            }
+        }
 
         // Mock insert for group-event associations
-        executionEventRelationMapper.insert(_ as ExecutionEventRelationEntity) >> { ExecutionEventRelationEntity entity ->
+        executionEventRelationMapper.insert(_ as ExecutionArrangementEntity) >> { ExecutionArrangementEntity entity ->
             // Verify it's a group-event association
-            assert entity.getItemType() == ExecutionItemTypeEnum.RULE_GROUP.getId()
-            assert entity.getItemId() == 10000001L
+            assert entity.getRuleId() == ruleId
+            assert entity.getGroupId() == 10000001L
             assert eventIds.contains(entity.getEventId())
             return 1
         }
@@ -111,27 +99,12 @@ class RuleGroupServiceImplBusinessLogicSpec extends Specification {
             return 1
         }
 
-        ruleGroupRuleRelationMapper.selectOne(_ as LambdaQueryWrapper) >> null
-        // Mock insert for rule-group relation
-        ruleGroupRuleRelationMapper.insert(_ as RuleGroupRuleRelationEntity) >> { RuleGroupRuleRelationEntity entity ->
-            // Verify it's the correct relation
-            assert entity.getGroupId() == 10000001L
-            assert entity.getRuleId() == ruleId
-            assert entity.getAbTestRatio() == 0
-            return 1
-        }
-
-        // Mock ruleMapper for updating rule's groupId
-        def ruleEntity = new RuleEntity()
-        ruleEntity.setId(ruleId)
-        ruleEntity.setName("Test Rule")
-        ruleEntity.setContentType(ContentTypeEnum.EXPRESSION.getId())
-        ruleEntity.setRuleStatus(RuleStatusEnum.AB_TEST.getId())
-        ruleMapper.selectById(ruleId) >> ruleEntity
-        ruleMapper.updateById(_ as RuleEntity) >> 1
+        // Note: GreRelationMapper is no longer used, relations are now managed via ExecutionArrangementMapper
 
         when: "create rule group"
-        def group = ruleGroupService.createRuleGroup(rule)
+        // createRuleGroup now requires eventId parameter
+        def eventId = eventIds[0] // Use the first eventId from the test parameters
+        def group = ruleGroupService.createRuleGroup(rule, eventId)
 
         then: "group should be created and rule-event associations copied to group"
         group != null
@@ -139,7 +112,7 @@ class RuleGroupServiceImplBusinessLogicSpec extends Specification {
         group.getRuleIds().contains(ruleId)
 
         // Verify group-event associations were created (one for each eventId)
-        eventIds.size() * executionEventRelationMapper.insert(_ as ExecutionEventRelationEntity)
+        eventIds.size() * executionEventRelationMapper.insert(_ as ExecutionArrangementEntity)
 
         where:
         ruleId | eventIds
@@ -148,97 +121,18 @@ class RuleGroupServiceImplBusinessLogicSpec extends Specification {
         3L     | [1001, 1002, 1003]
     }
 
-    @Unroll
-    def "Business Logic 2: When adding rule to existing group, copy group-event associations to rule - groupId: #groupId, ruleId: #ruleId, eventIds: #eventIds"() {
-        given: "an existing group with event associations and a rule to add"
-        def rule = Rule.builder()
-                .id(ruleId)
-                .name("Test Rule")
-                .contentType(ContentTypeEnum.EXPRESSION)
-                .ruleStatus(RuleStatusEnum.AB_TEST)
-                .build()
-
-        def groupEntity = new RuleGroupEntity()
-        groupEntity.setId(groupId)
-        ruleGroupMapper.selectById(groupId) >> groupEntity
-
-        // Mock group-event associations
-        def groupEventRelations = eventIds.collect { eventId ->
-            def relation = new ExecutionEventRelationEntity()
-            relation.setEventId(eventId)
-            relation.setItemType(ExecutionItemTypeEnum.RULE_GROUP.getId())
-            relation.setItemId(groupId)
-            relation.setExecutionOrder(eventIds.indexOf(eventId) + 1)
-            return relation
-        }
-
-        ruleGroupRuleRelationMapper.selectOne(_ as LambdaQueryWrapper) >> null
-        // Mock insert for rule-group relation
-        ruleGroupRuleRelationMapper.insert(_ as RuleGroupRuleRelationEntity) >> { RuleGroupRuleRelationEntity entity ->
-            // Verify it's the correct relation
-            assert entity.getGroupId() == groupId
-            assert entity.getRuleId() == ruleId
-            assert entity.getAbTestRatio() == 0
-            return 1
-        }
-
-        // Mock selectList: return group-event relations when querying for RULE_GROUP type
-        // The copyGroupEventAssociationsToRule method queries for RULE_GROUP type with groupId
-        // Simply return groupEventRelations directly (Spock will handle the closure correctly)
-        executionEventRelationMapper.selectList(_ as LambdaQueryWrapper) >> groupEventRelations
-
-        // Mock selectOne for checking existing rule-event associations (should return null = not exists)
-        executionEventRelationMapper.selectOne(_ as LambdaQueryWrapper) >> null
-
-        // Mock insert for rule-event associations
-        // Store eventIds in a local variable to avoid closure variable capture issues
-        def expectedEventIds = eventIds
-        def expectedRuleId = ruleId
-        executionEventRelationMapper.insert(_ as ExecutionEventRelationEntity) >> { ExecutionEventRelationEntity entity ->
-            // Verify it's a rule-event association
-            assert entity.getItemType() == ExecutionItemTypeEnum.RULE.getId()
-            assert entity.getItemId() == expectedRuleId
-            assert expectedEventIds.contains(entity.getEventId())
-            return 1
-        }
-
-        // Mock ruleMapper for updating rule's groupId
-        def ruleEntity = new RuleEntity()
-        ruleEntity.setId(ruleId)
-        ruleEntity.setName("Test Rule")
-        ruleEntity.setContentType(ContentTypeEnum.EXPRESSION.getId())
-        ruleEntity.setRuleStatus(RuleStatusEnum.AB_TEST.getId())
-        ruleMapper.selectById(ruleId) >> ruleEntity
-        ruleMapper.updateById(_ as RuleEntity) >> 1
-
-        when: "add rule to group"
-        ruleGroupService.addRuleToGroup(rule, groupId)
-
-        then: "rule should be added and group-event associations copied to rule"
-        rule.getRuleGroupId() == groupId
-
-        // Verify rule-event associations were created
-        eventIds.size() * executionEventRelationMapper.insert(_ as ExecutionEventRelationEntity)
-
-        where:
-        groupId   | ruleId | eventIds
-        10000001L | 1L     | [1001, 1002]
-        10000002L | 2L     | [1001]
-        10000003L | 3L     | [1001, 1002, 1003]
-    }
 
     @Unroll
-    def "Business Logic 3: When rule changes from AB_TEST to #newStatus, delete rule group - ruleId: #ruleId, groupId: #groupId"() {
-        given: "a rule in AB_TEST status in a group"
+    def "Business Logic 3: When rule changes from ONLINE to #newStatus, delete rule group - ruleId: #ruleId, groupId: #groupId"() {
+        given: "a rule in ONLINE status in a group"
 
         when: "delete rule group"
-        ruleGroupService.doDeleteRuleGroup(groupId)
+        ruleGroupService.deleteRuleGroup(groupId)
 
         then: "rule group and all associations should be deleted"
-        // Verify rule-group relations are deleted
-        1 * ruleGroupRuleRelationMapper.delete(_ as Wrapper<RuleGroupRuleRelationEntity>)
-        // Verify group-event relations are deleted
-        1 * executionEventRelationMapper.delete(_ as Wrapper<ExecutionEventRelationEntity>)
+        // Note: Relations are now managed via ExecutionArrangementMapper, not GreRelationMapper
+        // Verify group-event relations are deleted/updated
+        1 * executionEventRelationMapper.delete(_ as Wrapper<ExecutionArrangementEntity>)
         // Verify rule group entity is deleted
         1 * ruleGroupMapper.deleteById(groupId)
 
@@ -246,7 +140,7 @@ class RuleGroupServiceImplBusinessLogicSpec extends Specification {
         ruleId | groupId   | newStatus
         1L     | 10000001L | RuleStatusEnum.OFFLINE
         2L     | 10000002L | RuleStatusEnum.TEST
-        3L     | 10000003L | RuleStatusEnum.FULL
+        3L     | 10000003L | RuleStatusEnum.ONLINE
     }
 
     @Unroll
@@ -258,23 +152,33 @@ class RuleGroupServiceImplBusinessLogicSpec extends Specification {
         ruleGroupMapper.selectById(groupId) >> groupEntity
 
         // Mock rule group rule relations (empty - no rules in group)
-        ruleGroupRuleRelationMapper.selectList(_ as LambdaQueryWrapper) >> []
+        // Note: GreRelationMapper is no longer used
 
-        // Mock group-event associations
-        def groupEventRelations = eventIds.collect { eventId ->
-            def relation = new ExecutionEventRelationEntity()
+        // Mock group-event associations (empty group - no rules, but may have old associations to clean up)
+        // For empty group, getRuleGroup should return empty relations
+        def emptyGroupRelations = [] // Empty group has no rules
+        
+        // But deleteRuleGroupIfEmpty may find old associations to clean up
+        def oldGroupRelations = eventIds.collect { eventId ->
+            def relation = new ExecutionArrangementEntity()
             relation.setEventId(eventId)
-            relation.setItemType(ExecutionItemTypeEnum.RULE_GROUP.getId())
-            relation.setItemId(groupId)
+            relation.setRuleId(1L) // Some old rule ID (not important for empty group)
+            relation.setGroupId(groupId) // Group ID
+            relation.setExeOrder(0)
+            relation.setAbRatio(0)
             return relation
         }
 
-        // Mock selectList for querying group-event associations (not used in deleteRuleGroupIfEmpty, but may be called)
+        // Mock selectList - getRuleGroup returns empty, deleteRuleGroupIfEmpty finds old relations
+        def callCount = 0
         executionEventRelationMapper.selectList(_ as LambdaQueryWrapper) >> { LambdaQueryWrapper wrapper ->
-            if (wrapper.toString().contains("RULE_GROUP")) {
-                return groupEventRelations
+            callCount++
+            // First call: getRuleGroup queries by groupId, should return empty for empty group
+            if (callCount == 1) {
+                return emptyGroupRelations
             }
-            return []
+            // Second call: deleteRuleGroupIfEmpty queries by groupId to find old associations
+            return oldGroupRelations
         }
 
         // Mock delete operations
@@ -287,12 +191,12 @@ class RuleGroupServiceImplBusinessLogicSpec extends Specification {
         then: "group and its event associations should be deleted"
         // Verify getRuleGroup was called (which calls selectById, selectList, and entityToModel)
         1 * ruleGroupMapper.selectById(groupId) >> groupEntity
-        1 * ruleGroupRuleRelationMapper.selectList(_ as LambdaQueryWrapper) >> []
+        // Note: GreRelationMapper is no longer used
         // Mock ruleGroupStructMapper.entityToModel to return empty RuleGroup
         // getRuleGroup calls entityToModel with empty relationsMap, so it should return empty RuleGroup
-        1 * ruleGroupStructMapper.entityToModel(groupEntity, _) >> { RuleGroupEntity entity, Map relationsMap ->
-            // Verify relationsMap is empty
-            assert relationsMap.isEmpty()
+        1 * ruleGroupStructMapper.entityToModelWithRuleRatios(groupEntity, _) >> { RuleGroupEntity entity, List entityList ->
+            // Verify entityList is empty or null
+            assert entityList == null || entityList.isEmpty()
             return RuleGroup.builder()
                     .id(groupId)
                     .rules(new HashMap<>())
@@ -309,137 +213,9 @@ class RuleGroupServiceImplBusinessLogicSpec extends Specification {
         10000003L | []
     }
 
-    @Unroll
-    def "createRuleGroupWithRules: should validate rule existence in batch - existingRuleIds: #existingRuleIds, nonExistentRuleIds: #nonExistentRuleIds"() {
-        given: "mock rules and setup"
-        def rules = [:]
-        existingRuleIds.each { ruleId ->
-            rules[ruleId] = 50
-        }
-        nonExistentRuleIds.each { ruleId ->
-            rules[ruleId] = 50
-        }
-
-        // Mock existing rules
-        def existingRuleEntities = existingRuleIds.collect { ruleId ->
-            def entity = new RuleEntity()
-            entity.setId(ruleId)
-            entity.setName("Rule $ruleId")
-            entity.setContentType(ContentTypeEnum.EXPRESSION.getId())
-            entity.setRuleStatus(RuleStatusEnum.GRAY.getId())
-            return entity
-        }
-
-        // Mock ruleMapper.selectBatchIds to return existing rules
-        ruleMapper.selectBatchIds(_ as Collection<? extends Serializable>) >> existingRuleEntities
-
-        // Mock ruleService.getRuleById for each existing rule
-        existingRuleIds.each { ruleId ->
-            def rule = Rule.builder()
-                    .id(ruleId)
-                    .name("Rule $ruleId")
-                    .contentType(ContentTypeEnum.EXPRESSION)
-                    .ruleStatus(RuleStatusEnum.GRAY)
-                    .build()
-            ruleService.getRuleById(ruleId) >> rule
-        }
-
-        // Mock ruleGroupRuleRelationMapper.selectOne to return null (no existing group relation)
-        ruleGroupRuleRelationMapper.selectOne(_ as Wrapper<RuleGroupRuleRelationEntity>) >> null
-
-        // Mock ruleGroupMapper.insert
-        ruleGroupMapper.insert(_ as RuleGroupEntity) >> { RuleGroupEntity entity ->
-            entity.setId(10000001L)
-            return 1
-        }
-
-        // Mock ruleGroupRuleRelationMapper.insert
-        ruleGroupRuleRelationMapper.insert(_ as RuleGroupRuleRelationEntity) >> 1
-
-        // Mock ruleMapper.updateById
-        ruleMapper.updateById(_ as RuleEntity) >> 1
-
-        // Mock ruleMapper.selectById for updating rule status
-        existingRuleIds.each { ruleId ->
-            def ruleEntity = new RuleEntity()
-            ruleEntity.setId(ruleId)
-            ruleEntity.setName("Rule $ruleId")
-            ruleEntity.setContentType(ContentTypeEnum.EXPRESSION.getId())
-            ruleEntity.setRuleStatus(RuleStatusEnum.AB_TEST.getId())
-            ruleMapper.selectById(ruleId) >> ruleEntity
-        }
-
-        when: "create rule group with rules"
-        def group = ruleGroupService.createRuleGroupWithRules(rules as Map<Long, Integer>)
-
-        then: "group should be created successfully"
-        group != null
-        group.getId() == 10000001L
-        group.getRuleIds().size() == existingRuleIds.size()
-
-        // Verify batch validation was called
-        1 * ruleMapper.selectBatchIds(_)
-
-        where:
-        existingRuleIds | nonExistentRuleIds
-        [1L, 2L, 3L]    | []
-    }
 
     @Unroll
-    def "createRuleGroupWithRules: should throw exception when rules do not exist - existingRuleIds: #existingRuleIds, nonExistentRuleIds: #nonExistentRuleIds"() {
-        given: "mock rules and setup"
-        def rules = [:]
-        existingRuleIds.each { ruleId ->
-            rules[ruleId] = 50
-        }
-        nonExistentRuleIds.each { ruleId ->
-            rules[ruleId] = 50
-        }
-
-        // Mock ruleService.getRuleById for existing rules
-        existingRuleIds.each { ruleId ->
-            def rule = Rule.builder()
-                    .id(ruleId)
-                    .name("Rule $ruleId")
-                    .contentType(ContentTypeEnum.EXPRESSION)
-                    .ruleStatus(RuleStatusEnum.GRAY)
-                    .build()
-            ruleService.getRuleById(ruleId) >> rule
-        }
-
-        // Mock ruleService.getRuleById for non-existent rules (return null)
-        nonExistentRuleIds.each { ruleId ->
-            ruleService.getRuleById(ruleId) >> null
-        }
-
-        // Mock ruleGroupRuleRelationMapper.selectOne for validateRuleAlreadyGrouped (should return null)
-        ruleGroupRuleRelationMapper.selectOne(_ as LambdaQueryWrapper) >> null
-
-        when: "create rule group with rules"
-        def exception = null
-        try {
-            ruleGroupService.createRuleGroupWithRules(rules)
-        } catch (IllegalArgumentException e) {
-            exception = e
-        }
-        
-        then: "should throw exception with non-existent rule IDs"
-        exception != null
-        exception.message.contains("Rule IDs do not exist in database")
-        // Verify that all non-existent rule IDs are mentioned in the exception message
-        nonExistentRuleIds.each { ruleId ->
-            assert exception.message.contains(ruleId.toString())
-        }
-
-        where:
-        existingRuleIds | nonExistentRuleIds
-        [1L, 2L]        | [999L]
-        [1L]            | [999L, 1000L]
-        []              | [999L, 1000L]
-    }
-
-    @Unroll
-    def "updateRuleGroupWithRules: should validate rule existence in batch - groupId: #groupId, existingRuleIds: #existingRuleIds, nonExistentRuleIds: #nonExistentRuleIds"() {
+    def "updateRuleGroupRatios: should validate rule existence in batch - groupId: #groupId, existingRuleIds: #existingRuleIds, nonExistentRuleIds: #nonExistentRuleIds"() {
         given: "mock existing group and rules"
         def rules = [:]
         existingRuleIds.each { ruleId ->
@@ -455,20 +231,7 @@ class RuleGroupServiceImplBusinessLogicSpec extends Specification {
         ruleGroupMapper.selectById(groupId) >> groupEntity
 
         // Mock existing group rules (empty for simplicity)
-        ruleGroupRuleRelationMapper.selectList(_) >> []
-
-        // Mock existing rules
-        def existingRuleEntities = existingRuleIds.collect { ruleId ->
-            def entity = new RuleEntity()
-            entity.setId(ruleId)
-            entity.setName("Rule $ruleId")
-            entity.setContentType(ContentTypeEnum.EXPRESSION.getId())
-            entity.setRuleStatus(RuleStatusEnum.GRAY.getId())
-            return entity
-        }
-
-        // Mock ruleMapper.selectBatchIds to return existing rules
-        ruleMapper.selectBatchIds(_) >> existingRuleEntities
+        // Note: GreRelationMapper is no longer used
 
         // Mock ruleService.getRuleById for each existing rule
         existingRuleIds.each { ruleId ->
@@ -481,42 +244,26 @@ class RuleGroupServiceImplBusinessLogicSpec extends Specification {
             ruleService.getRuleById(ruleId) >> rule
         }
 
-        // Mock ruleGroupRuleRelationMapper.selectOne to return null (no existing group relation)
-        ruleGroupRuleRelationMapper.selectOne(_) >> null
-
-        // Mock ruleGroupRuleRelationMapper.insert
-        ruleGroupRuleRelationMapper.insert(_) >> 1
-
-        // Mock ruleMapper.updateById
-        ruleMapper.updateById(_) >> 1
-
-        // Mock ruleMapper.selectById for updating rule status
-        existingRuleIds.each { ruleId ->
-            def ruleEntity = new RuleEntity()
-            ruleEntity.setId(ruleId)
-            ruleEntity.setName("Rule $ruleId")
-            ruleEntity.setContentType(ContentTypeEnum.EXPRESSION.getId())
-            ruleEntity.setRuleStatus(RuleStatusEnum.AB_TEST.getId())
-            ruleMapper.selectById(ruleId) >> ruleEntity
-        }
+        // Note: GreRelationMapper is no longer used, relations are now managed via ExecutionArrangementMapper
 
         // Mock getRuleGroup to return empty group
         def emptyGroupEntity = new RuleGroupEntity()
         emptyGroupEntity.setId(groupId)
         ruleGroupMapper.selectById(groupId) >> emptyGroupEntity
-        ruleGroupRuleRelationMapper.selectList(_) >> []
+        // Note: GreRelationMapper is no longer used
         def emptyGroup = RuleGroup.builder()
                 .id(groupId)
                 .rules([:])
                 .build()
-        ruleGroupStructMapper.entityToModel(emptyGroupEntity, _) >> emptyGroup
+        ruleGroupStructMapper.entityToModelWithRuleRatios(emptyGroupEntity, _ as List) >> emptyGroup
 
-        when: "update rule group with rules"
-        ruleGroupService.updateRuleGroupWithRules(groupId, rules)
+        when: "update rule group ratios"
+        ruleGroupService.updateRuleGroupRatios(groupId, rules)
 
-        then: "group should be updated successfully"
-        // Verify batch validation was called
-        1 * ruleMapper.selectBatchIds(_)
+        then: "group ratios should be updated successfully"
+        // Note: GreRelationMapper is no longer used, ratios are now updated via ExecutionArrangementMapper
+        // Verify ratios were updated in table x
+        1 * executionEventRelationMapper.update(_, _) >> 1
 
         where:
         groupId   | existingRuleIds | nonExistentRuleIds
@@ -524,7 +271,7 @@ class RuleGroupServiceImplBusinessLogicSpec extends Specification {
     }
 
     @Unroll
-    def "updateRuleGroupWithRules: should throw exception when rules do not exist - groupId: #groupId, existingRuleIds: #existingRuleIds, nonExistentRuleIds: #nonExistentRuleIds"() {
+    def "updateRuleGroupRatios: should throw exception when rules do not exist - groupId: #groupId, existingRuleIds: #existingRuleIds, nonExistentRuleIds: #nonExistentRuleIds"() {
         given: "mock existing group and rules"
         def rules = [:]
         existingRuleIds.each { ruleId ->
@@ -540,7 +287,7 @@ class RuleGroupServiceImplBusinessLogicSpec extends Specification {
         ruleGroupMapper.selectById(groupId) >> groupEntity
 
         // Mock existing group rules (empty for simplicity)
-        ruleGroupRuleRelationMapper.selectList(_) >> []
+        // Note: GreRelationMapper is no longer used
 
         // Mock ruleService.getRuleById for existing rules
         existingRuleIds.each { ruleId ->
@@ -558,8 +305,7 @@ class RuleGroupServiceImplBusinessLogicSpec extends Specification {
             ruleService.getRuleById(ruleId) >> null
         }
 
-        // Mock ruleGroupRuleRelationMapper.selectOne for validateRuleAlreadyGrouped (should return null)
-        ruleGroupRuleRelationMapper.selectOne(_ as LambdaQueryWrapper) >> null
+        // Note: GreRelationMapper is no longer used
 
         // Mock getRuleGroup to return empty group
         def emptyGroupEntity = new RuleGroupEntity()
@@ -568,12 +314,12 @@ class RuleGroupServiceImplBusinessLogicSpec extends Specification {
                 .id(groupId)
                 .rules([:])
                 .build()
-        ruleGroupStructMapper.entityToModel(emptyGroupEntity, _) >> emptyGroup
+        ruleGroupStructMapper.entityToModelWithRuleRatios(emptyGroupEntity, _ as List) >> emptyGroup
 
         when: "update rule group with rules"
         def exception = null
         try {
-            ruleGroupService.updateRuleGroupWithRules(groupId, rules)
+            ruleGroupService.updateRuleGroupRatios(groupId, rules)
         } catch (IllegalArgumentException e) {
             exception = e
         }
@@ -600,15 +346,13 @@ class RuleGroupServiceImplBusinessLogicSpec extends Specification {
                 .id(1L)
                 .name("Rule 1")
                 .contentType(ContentTypeEnum.EXPRESSION)
-                .ruleStatus(RuleStatusEnum.AB_TEST)
-                .ruleGroupId(groupId)
+                .ruleStatus(RuleStatusEnum.ONLINE)
                 .build()
         def rule2 = Rule.builder()
                 .id(2L)
                 .name("Rule 2")
                 .contentType(ContentTypeEnum.EXPRESSION)
-                .ruleStatus(RuleStatusEnum.AB_TEST)
-                .ruleGroupId(groupId)
+                .ruleStatus(RuleStatusEnum.ONLINE)
                 .build()
 
         def ruleGroup = RuleGroup.builder()
@@ -617,9 +361,9 @@ class RuleGroupServiceImplBusinessLogicSpec extends Specification {
                 .build()
 
         def userId = 1000L
-        def eventId = 2000L
+        def eventId = 2000
         def cachedRuleId = 1L
-        def context = new RuleExecutionContext(userId, eventId, 9999L, [:])
+        def context = new RuleExecutionContext(userId, eventId != null ? eventId.intValue() : null, 9999L, [:])
         context.putArgument(EvalArgumentConst.ARG_USER_HASH_INT, new TypedValue(25, ValueTypeEnum.INTEGER))
 
         when: "selectRuleFromGroup is called with cached rule ID"
@@ -639,15 +383,13 @@ class RuleGroupServiceImplBusinessLogicSpec extends Specification {
                 .id(1L)
                 .name("Rule 1")
                 .contentType(ContentTypeEnum.EXPRESSION)
-                .ruleStatus(RuleStatusEnum.AB_TEST)
-                .ruleGroupId(groupId)
+                .ruleStatus(RuleStatusEnum.ONLINE)
                 .build()
         def rule2 = Rule.builder()
                 .id(2L)
                 .name("Rule 2")
                 .contentType(ContentTypeEnum.EXPRESSION)
-                .ruleStatus(RuleStatusEnum.AB_TEST)
-                .ruleGroupId(groupId)
+                .ruleStatus(RuleStatusEnum.ONLINE)
                 .build()
 
         def ruleGroup = RuleGroup.builder()
@@ -656,9 +398,9 @@ class RuleGroupServiceImplBusinessLogicSpec extends Specification {
                 .build()
 
         def userId = 1000L
-        def eventId = 2000L
+        def eventId = 2000
         def hashInt = 25  // Should select rule1 (cumulative ratio: 30)
-        def context = new RuleExecutionContext(userId, eventId, 9999L, [:])
+        def context = new RuleExecutionContext(userId, eventId != null ? eventId.intValue() : null, 9999L, [:])
         context.putArgument(EvalArgumentConst.ARG_USER_HASH_INT, new TypedValue(hashInt, ValueTypeEnum.INTEGER))
 
         when: "selectRuleFromGroup is called without cache"
@@ -681,15 +423,13 @@ class RuleGroupServiceImplBusinessLogicSpec extends Specification {
                 .id(1L)
                 .name("Rule 1")
                 .contentType(ContentTypeEnum.EXPRESSION)
-                .ruleStatus(RuleStatusEnum.AB_TEST)
-                .ruleGroupId(groupId)
+                .ruleStatus(RuleStatusEnum.ONLINE)
                 .build()
         def rule2 = Rule.builder()
                 .id(2L)
                 .name("Rule 2")
                 .contentType(ContentTypeEnum.EXPRESSION)
-                .ruleStatus(RuleStatusEnum.AB_TEST)
-                .ruleGroupId(groupId)
+                .ruleStatus(RuleStatusEnum.ONLINE)
                 .build()
 
         def ruleGroup = RuleGroup.builder()
@@ -698,9 +438,9 @@ class RuleGroupServiceImplBusinessLogicSpec extends Specification {
                 .build()
 
         def userId = 1000L
-        def eventId = 2000L
+        def eventId = 2000
         def hashInt = 35  // Should select rule2 (cumulative ratio: 30 + 40 = 70, 35 > 30)
-        def context = new RuleExecutionContext(userId, eventId, 9999L, [:])
+        def context = new RuleExecutionContext(userId, eventId != null ? eventId.intValue() : null, 9999L, [:])
         context.putArgument(EvalArgumentConst.ARG_USER_HASH_INT, new TypedValue(hashInt, ValueTypeEnum.INTEGER))
 
         when: "selectRuleFromGroup is called"
@@ -723,15 +463,13 @@ class RuleGroupServiceImplBusinessLogicSpec extends Specification {
                 .id(1L)
                 .name("Rule 1")
                 .contentType(ContentTypeEnum.EXPRESSION)
-                .ruleStatus(RuleStatusEnum.AB_TEST)
-                .ruleGroupId(groupId)
+                .ruleStatus(RuleStatusEnum.ONLINE)
                 .build()
         def rule2 = Rule.builder()
                 .id(2L)
                 .name("Rule 2")
                 .contentType(ContentTypeEnum.EXPRESSION)
-                .ruleStatus(RuleStatusEnum.AB_TEST)
-                .ruleGroupId(groupId)
+                .ruleStatus(RuleStatusEnum.ONLINE)
                 .build()
 
         def ruleGroup = RuleGroup.builder()
@@ -740,9 +478,9 @@ class RuleGroupServiceImplBusinessLogicSpec extends Specification {
                 .build()
 
         def userId = 1000L
-        def eventId = 2000L
+        def eventId = 2000
         def hashInt = 80  // Exceeds total ratio (30 + 40 = 70)
-        def context = new RuleExecutionContext(userId, eventId, 9999L, [:])
+        def context = new RuleExecutionContext(userId, eventId != null ? eventId.intValue() : null, 9999L, [:])
         context.putArgument(EvalArgumentConst.ARG_USER_HASH_INT, new TypedValue(hashInt, ValueTypeEnum.INTEGER))
 
         when: "selectRuleFromGroup is called"
@@ -765,9 +503,9 @@ class RuleGroupServiceImplBusinessLogicSpec extends Specification {
                 .build()
 
         def userId = 1000L
-        def eventId = 2000L
+        def eventId = 2000
         def hashInt = 25
-        def context = new RuleExecutionContext(userId, eventId, 9999L, [:])
+        def context = new RuleExecutionContext(userId, eventId != null ? eventId.intValue() : null, 9999L, [:])
         context.putArgument(EvalArgumentConst.ARG_USER_HASH_INT, new TypedValue(hashInt, ValueTypeEnum.INTEGER))
 
         when: "selectRuleFromGroup is called"
@@ -788,8 +526,7 @@ class RuleGroupServiceImplBusinessLogicSpec extends Specification {
                 .id(1L)
                 .name("Rule 1")
                 .contentType(ContentTypeEnum.EXPRESSION)
-                .ruleStatus(RuleStatusEnum.AB_TEST)
-                .ruleGroupId(groupId)
+                .ruleStatus(RuleStatusEnum.ONLINE)
                 .build()
 
         def ruleGroup = RuleGroup.builder()
@@ -801,7 +538,7 @@ class RuleGroupServiceImplBusinessLogicSpec extends Specification {
         def eventId = 2000L
         def cachedRuleId = 999L  // Not in group's rules map
         def hashInt = 25
-        def context = new RuleExecutionContext(userId, eventId, 9999L, [:])
+        def context = new RuleExecutionContext(userId, eventId != null ? eventId.intValue() : null, 9999L, [:])
         context.putArgument(EvalArgumentConst.ARG_USER_HASH_INT, new TypedValue(hashInt, ValueTypeEnum.INTEGER))
 
         when: "selectRuleFromGroup is called with invalid cached rule ID"
@@ -825,22 +562,19 @@ class RuleGroupServiceImplBusinessLogicSpec extends Specification {
                 .id(1L)
                 .name("Rule 1")
                 .contentType(ContentTypeEnum.EXPRESSION)
-                .ruleStatus(RuleStatusEnum.AB_TEST)
-                .ruleGroupId(groupId)
+                .ruleStatus(RuleStatusEnum.ONLINE)
                 .build()
         def rule2 = Rule.builder()
                 .id(2L)
                 .name("Rule 2")
                 .contentType(ContentTypeEnum.EXPRESSION)
-                .ruleStatus(RuleStatusEnum.AB_TEST)
-                .ruleGroupId(groupId)
+                .ruleStatus(RuleStatusEnum.ONLINE)
                 .build()
         def rule3 = Rule.builder()
                 .id(3L)
                 .name("Rule 3")
                 .contentType(ContentTypeEnum.EXPRESSION)
-                .ruleStatus(RuleStatusEnum.AB_TEST)
-                .ruleGroupId(groupId)
+                .ruleStatus(RuleStatusEnum.ONLINE)
                 .build()
 
         def ruleGroup = RuleGroup.builder()
@@ -850,7 +584,7 @@ class RuleGroupServiceImplBusinessLogicSpec extends Specification {
 
         def userId = 1000L
         def eventId = 2000L
-        def context = new RuleExecutionContext(userId, eventId, 9999L, [:])
+        def context = new RuleExecutionContext(userId, eventId != null ? eventId.intValue() : null, 9999L, [:])
         context.putArgument(EvalArgumentConst.ARG_USER_HASH_INT, new TypedValue(hashInt, ValueTypeEnum.INTEGER))
 
         when: "selectRuleFromGroup is called"
@@ -880,8 +614,7 @@ class RuleGroupServiceImplBusinessLogicSpec extends Specification {
                 .id(1L)
                 .name("Rule 1")
                 .contentType(ContentTypeEnum.EXPRESSION)
-                .ruleStatus(RuleStatusEnum.AB_TEST)
-                .ruleGroupId(groupId)
+                .ruleStatus(RuleStatusEnum.ONLINE)
                 .build()
 
         // Create a rule group with a null Pair entry (simulating corrupted data)
@@ -898,7 +631,7 @@ class RuleGroupServiceImplBusinessLogicSpec extends Specification {
         def eventId = 2000L
         def cachedRuleId = 999L  // Points to null Pair
         def hashInt = 25
-        def context = new RuleExecutionContext(userId, eventId, 9999L, [:])
+        def context = new RuleExecutionContext(userId, eventId != null ? eventId.intValue() : null, 9999L, [:])
         context.putArgument(EvalArgumentConst.ARG_USER_HASH_INT, new TypedValue(hashInt, ValueTypeEnum.INTEGER))
 
         when: "selectRuleFromGroup is called with cached rule ID pointing to null Pair"
@@ -921,8 +654,7 @@ class RuleGroupServiceImplBusinessLogicSpec extends Specification {
                 .id(1L)
                 .name("Rule 1")
                 .contentType(ContentTypeEnum.EXPRESSION)
-                .ruleStatus(RuleStatusEnum.AB_TEST)
-                .ruleGroupId(groupId)
+                .ruleStatus(RuleStatusEnum.ONLINE)
                 .build()
 
         // Create a rule group with a Pair that has null Left (Rule)
@@ -939,7 +671,7 @@ class RuleGroupServiceImplBusinessLogicSpec extends Specification {
         def eventId = 2000L
         def cachedRuleId = 999L  // Points to Pair with null Rule
         def hashInt = 25
-        def context = new RuleExecutionContext(userId, eventId, 9999L, [:])
+        def context = new RuleExecutionContext(userId, eventId != null ? eventId.intValue() : null, 9999L, [:])
         context.putArgument(EvalArgumentConst.ARG_USER_HASH_INT, new TypedValue(hashInt, ValueTypeEnum.INTEGER))
 
         when: "selectRuleFromGroup is called with cached rule ID pointing to Pair with null Rule"
@@ -963,8 +695,7 @@ class RuleGroupServiceImplBusinessLogicSpec extends Specification {
                 .id(1L)
                 .name("Rule 1")
                 .contentType(ContentTypeEnum.EXPRESSION)
-                .ruleStatus(RuleStatusEnum.AB_TEST)
-                .ruleGroupId(groupId)
+                .ruleStatus(RuleStatusEnum.ONLINE)
                 .build()
 
         def rulesMap = new HashMap<Long, Pair<Rule, Integer>>()
@@ -981,8 +712,7 @@ class RuleGroupServiceImplBusinessLogicSpec extends Specification {
                     .id(2L)
                     .name("Rule 2")
                     .contentType(ContentTypeEnum.EXPRESSION)
-                    .ruleStatus(RuleStatusEnum.AB_TEST)
-                    .ruleGroupId(groupId)
+                    .ruleStatus(RuleStatusEnum.ONLINE)
                     .build()
             rulesMap.put(2L, Pair.of(rule2, 50))
         }
@@ -996,7 +726,7 @@ class RuleGroupServiceImplBusinessLogicSpec extends Specification {
         def eventId = 2000L
         def cachedRuleId = (ruleRatioPairNull || ruleNull) ? 999L : 2L
         def hashInt = 25
-        def context = new RuleExecutionContext(userId, eventId, 9999L, [:])
+        def context = new RuleExecutionContext(userId, eventId != null ? eventId.intValue() : null, 9999L, [:])
         context.putArgument(EvalArgumentConst.ARG_USER_HASH_INT, new TypedValue(hashInt, ValueTypeEnum.INTEGER))
 
         when: "selectRuleFromGroup is called"

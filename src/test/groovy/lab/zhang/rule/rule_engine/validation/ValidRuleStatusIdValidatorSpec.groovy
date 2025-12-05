@@ -45,8 +45,8 @@ class ValidRuleStatusIdValidatorSpec extends Specification {
         0          | true   // OFFLINE
         1          | true   // TEST
         2          | true   // GRAY
-        3          | true   // AB_TEST
-        4          | true   // FULL
+        3          | true   // ONLINE
+        4          | false  // Invalid (no such status)
         5          | false  // Invalid
         6          | false  // Invalid
         -1         | false  // Invalid
@@ -102,8 +102,7 @@ class ValidRuleStatusIdValidatorSpec extends Specification {
         validatorInstance.isValid(0, Mock(javax.validation.ConstraintValidatorContext)) == true  // OFFLINE
         validatorInstance.isValid(1, Mock(javax.validation.ConstraintValidatorContext)) == true  // TEST
         validatorInstance.isValid(2, Mock(javax.validation.ConstraintValidatorContext)) == true  // GRAY
-        validatorInstance.isValid(3, Mock(javax.validation.ConstraintValidatorContext)) == true  // AB_TEST
-        validatorInstance.isValid(4, Mock(javax.validation.ConstraintValidatorContext)) == true  // FULL
+        validatorInstance.isValid(3, Mock(javax.validation.ConstraintValidatorContext)) == true  // ONLINE
     }
 
     def "test ValidRuleStatusId validator directly - invalid values"() {

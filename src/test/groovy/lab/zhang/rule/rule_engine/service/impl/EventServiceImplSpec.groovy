@@ -1,19 +1,19 @@
 package lab.zhang.rule.rule_engine.service.impl
 
-import com.baomidou.mybatisplus.core.conditions.Wrapper
+
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper
 import lab.zhang.rule.rule_engine.entity.EventEntity
-import lab.zhang.rule.rule_engine.entity.ExecutionEventRelationEntity
+import lab.zhang.rule.rule_engine.entity.ExecutionArrangementEntity
 import lab.zhang.rule.rule_engine.entity.RuleEntity
-import lab.zhang.rule.rule_engine.entity.RuleGroupEntity
-import lab.zhang.rule.rule_engine.enums.ExecutionItemTypeEnum
+import lab.zhang.rule.rule_engine.config.RuleStatusConfig
+import lab.zhang.rule.rule_engine.enums.ExecutionArrangementTypeEnum
+import lab.zhang.rule.rule_engine.enums.RuleStatusEnum
 import lab.zhang.rule.rule_engine.mapper.EventMapper
-import lab.zhang.rule.rule_engine.mapper.ExecutionEventRelationMapper
-import lab.zhang.rule.rule_engine.mapper.RuleGroupMapper
+import lab.zhang.rule.rule_engine.mapper.ExecutionArrangementMapper
 import lab.zhang.rule.rule_engine.mapper.RuleMapper
 import lab.zhang.rule.rule_engine.model.Event
-import lab.zhang.rule.rule_engine.pojo.qo.ExecutionItemQO
 import lab.zhang.rule.rule_engine.struct_mapper.EventStructMapper
+import lab.zhang.rule.rule_engine.struct_mapper.ExecutionArrangementStructMapper
 import spock.lang.Specification
 import spock.lang.Unroll
 
@@ -23,18 +23,20 @@ import spock.lang.Unroll
 class EventServiceImplSpec extends Specification {
 
     def eventMapper = Mock(EventMapper)
-    def executionEventRelationMapper = Mock(ExecutionEventRelationMapper)
+    def executionArrangementMapper = Mock(ExecutionArrangementMapper)
     def ruleMapper = Mock(RuleMapper)
-    def ruleGroupMapper = Mock(RuleGroupMapper)
     def eventStructMapper = Mock(EventStructMapper)
+    def executionArrangementStructMapper = Mock(ExecutionArrangementStructMapper)
+    def ruleStatusConfig = Mock(RuleStatusConfig)
     def eventService = new EventServiceImpl()
 
     def setup() {
         eventService.eventMapper = eventMapper
-        eventService.executionEventRelationMapper = executionEventRelationMapper
+        eventService.executionArrangementMapper = executionArrangementMapper
         eventService.ruleMapper = ruleMapper
-        eventService.ruleGroupMapper = ruleGroupMapper
         eventService.eventStructMapper = eventStructMapper
+        eventService.executionArrangementStructMapper = executionArrangementStructMapper
+        eventService.ruleStatusConfig = ruleStatusConfig
 
         // Setup default mock for eventStructMapper
         _ * eventStructMapper.modelToEntity(_ as Event) >> { Event event ->
@@ -238,7 +240,7 @@ class EventServiceImplSpec extends Specification {
         def eventEntity = new EventEntity()
         eventEntity.setId(eventId)
         eventMapper.selectById(eventId) >> eventEntity
-        executionEventRelationMapper.delete(_ as LambdaQueryWrapper) >> 1
+        executionArrangementMapper.delete(_ as LambdaQueryWrapper) >> 1
         eventMapper.deleteById(eventId) >> 1
 
         when: "delete event"
@@ -246,7 +248,7 @@ class EventServiceImplSpec extends Specification {
 
         then: "event should be deleted"
         1 * eventMapper.selectById(eventId) >> eventEntity
-        1 * executionEventRelationMapper.delete(_ as LambdaQueryWrapper) >> 1
+        1 * executionArrangementMapper.delete(_ as LambdaQueryWrapper) >> 1
         1 * eventMapper.deleteById(eventId) >> 1
 
         where:
@@ -280,13 +282,15 @@ class EventServiceImplSpec extends Specification {
         // Mock existing relations
         def existingRelations = []
         if (hasExisting) {
-            def existing1 = new ExecutionEventRelationEntity()
-            existing1.setEventId(eventId)
-            existing1.setItemType(ExecutionItemTypeEnum.RULE.getId())
-            existing1.setItemId(999L) // This will be deleted if not in new list
+            def existing1 = new ExecutionArrangementEntity()
+            existing1.setEventId(eventId != null ? eventId.intValue() : null)
+            existing1.setRuleId(999L) // This will be deleted if not in new list
+            existing1.setGroupId(0L)
+            existing1.setExeOrder(0)
+            existing1.setAbRatio(0)
             existingRelations.add(existing1)
         }
-        executionEventRelationMapper.selectList(_ as LambdaQueryWrapper) >> existingRelations
+        executionArrangementMapper.selectList(_ as LambdaQueryWrapper) >> existingRelations
 
         // Mock batch validation - rules
         def ruleEntities = []
@@ -295,6 +299,11 @@ class EventServiceImplSpec extends Specification {
             rule1.setId(1L)
             ruleEntities.add(rule1)
         }
+        if (newItemCount >= 2) {
+            def rule3 = new RuleEntity()
+            rule3.setId(10000001L)
+            ruleEntities.add(rule3)
+        }
         if (newItemCount >= 3) {
             def rule2 = new RuleEntity()
             rule2.setId(2L)
@@ -302,76 +311,56 @@ class EventServiceImplSpec extends Specification {
         }
         ruleMapper.selectBatchIds(_) >> ruleEntities
 
-        // Mock batch validation - rule groups
-        def groupEntities = []
-        if (newItemCount >= 2) {
-            def group1 = new RuleGroupEntity()
-            group1.setId(10000001L)
-            groupEntities.add(group1)
-        }
-        ruleGroupMapper.selectBatchIds(_) >> groupEntities
-
         // Mock insert, update, and delete
-        executionEventRelationMapper.insert(_ as ExecutionEventRelationEntity) >> 1
-        executionEventRelationMapper.updateById(_ as ExecutionEventRelationEntity) >> 1
-        executionEventRelationMapper.delete(_ as LambdaQueryWrapper) >> 1
+        executionArrangementMapper.insert(_ as ExecutionArrangementEntity) >> 1
+        executionArrangementMapper.updateById(_ as ExecutionArrangementEntity) >> 1
+        executionArrangementMapper.delete(_ as LambdaQueryWrapper) >> 1
 
         // Build execution items DTO
         def executionItems = []
         if (newItemCount >= 1) {
-            executionItems.add(ExecutionItemQO.builder()
-                    .itemType(ExecutionItemTypeEnum.RULE.getId())
-                    .itemId(1L)
-                    .build())
+            executionItems.add(1L)
         }
         if (newItemCount >= 2) {
-            executionItems.add(ExecutionItemQO.builder()
-                    .itemType(ExecutionItemTypeEnum.RULE_GROUP.getId())
-                    .itemId(10000001L)
-                    .build())
+            executionItems.add(10000001L)
         }
         if (newItemCount >= 3) {
-            executionItems.add(ExecutionItemQO.builder()
-                    .itemType(ExecutionItemTypeEnum.RULE.getId())
-                    .itemId(2L)
-                    .build())
+            executionItems.add(2L)
         }
 
         when: "batch set execution items"
-        eventService.batchSetExecutionItems(eventId, executionItems)
+        Integer eventIdInt = eventId != null ? eventId.intValue() : null
+        eventService.setExecutionArrangements(eventIdInt, executionItems)
 
         then: "execution items should be set correctly"
         1 * eventMapper.selectById(eventId) >> eventEntity
 
         // Batch validation calls
         if (newItemCount > 0) {
-            // Count rules and groups separately
+            // Count rules
             def ruleCount = newItemCount >= 1 ? 1 : 0
+            ruleCount += newItemCount >= 2 ? 1 : 0
             ruleCount += newItemCount >= 3 ? 1 : 0
-            def groupCount = newItemCount >= 2 ? 1 : 0
 
             if (ruleCount > 0) {
                 1 * ruleMapper.selectBatchIds(_) >> ruleEntities
             }
-            if (groupCount > 0) {
-                1 * ruleGroupMapper.selectBatchIds(_) >> groupEntities
-            }
         }
 
-        1 * executionEventRelationMapper.selectList(_ as LambdaQueryWrapper) >> existingRelations
+        1 * executionArrangementMapper.selectList(_ as LambdaQueryWrapper) >> existingRelations
 
         // All new items will be inserted (since they don't exist in existingRelations)
         if (newItemCount > 0) {
-            newItemCount * executionEventRelationMapper.insert(_ as ExecutionEventRelationEntity) >> 1
+            newItemCount * executionArrangementMapper.insert(_ as ExecutionArrangementEntity) >> 1
         }
 
         // If there are existing relations not in new list, delete will be called
         if (hasExisting && newItemCount == 0) {
             // All existing relations will be deleted
-            1 * executionEventRelationMapper.delete(_ as LambdaQueryWrapper) >> 1
+            1 * executionArrangementMapper.delete(_ as LambdaQueryWrapper) >> 1
         } else if (hasExisting && newItemCount > 0) {
             // The existing relation (999L) is not in new list, so it will be deleted
-            1 * executionEventRelationMapper.delete(_ as LambdaQueryWrapper) >> 1
+            1 * executionArrangementMapper.delete(_ as LambdaQueryWrapper) >> 1
         }
 
         where:
@@ -395,16 +384,10 @@ class EventServiceImplSpec extends Specification {
         // Build execution items
         def executionItems = []
         existingRuleIds.each { ruleId ->
-            executionItems.add(ExecutionItemQO.builder()
-                    .itemType(ExecutionItemTypeEnum.RULE.getId())
-                    .itemId(ruleId)
-                    .build())
+            executionItems.add(ruleId)
         }
         nonExistentRuleIds.each { ruleId ->
-            executionItems.add(ExecutionItemQO.builder()
-                    .itemType(ExecutionItemTypeEnum.RULE.getId())
-                    .itemId(ruleId)
-                    .build())
+            executionItems.add(ruleId)
         }
 
         // Mock existing rules for batch query
@@ -416,16 +399,17 @@ class EventServiceImplSpec extends Specification {
         ruleMapper.selectBatchIds(_) >> existingRuleEntities
 
         // Mock existing relations (empty)
-        executionEventRelationMapper.selectList(_) >> []
+        executionArrangementMapper.selectList(_) >> []
 
         when: "batch set execution items"
-        eventService.batchSetExecutionItems(eventId, executionItems)
+        Integer eventIdInt = eventId != null ? eventId.intValue() : null
+        eventService.setExecutionArrangements(eventIdInt, executionItems)
 
         then: "should succeed"
         1 * eventMapper.selectById(eventId) >> eventEntity
         1 * ruleMapper.selectBatchIds(_) >> existingRuleEntities
-        1 * executionEventRelationMapper.selectList(_) >> []
-        executionItems.size() * executionEventRelationMapper.insert(_) >> 1
+        1 * executionArrangementMapper.selectList(_) >> []
+        executionItems.size() * executionArrangementMapper.insert(_) >> 1
 
         where:
         existingRuleIds | nonExistentRuleIds
@@ -443,16 +427,10 @@ class EventServiceImplSpec extends Specification {
         // Build execution items
         def executionItems = []
         existingRuleIds.each { ruleId ->
-            executionItems.add(ExecutionItemQO.builder()
-                    .itemType(ExecutionItemTypeEnum.RULE.getId())
-                    .itemId(ruleId)
-                    .build())
+            executionItems.add(ruleId)
         }
         nonExistentRuleIds.each { ruleId ->
-            executionItems.add(ExecutionItemQO.builder()
-                    .itemType(ExecutionItemTypeEnum.RULE.getId())
-                    .itemId(ruleId)
-                    .build())
+            executionItems.add(ruleId)
         }
 
         // Mock existing rules for batch query
@@ -466,15 +444,15 @@ class EventServiceImplSpec extends Specification {
         when: "batch set execution items"
         def exception = null
         try {
-            eventService.batchSetExecutionItems(eventId, executionItems)
+            Integer eventIdInt = eventId != null ? eventId.intValue() : null
+            eventService.setExecutionArrangements(eventIdInt, executionItems)
         } catch (IllegalArgumentException e) {
             exception = e
         }
 
         then: "should throw exception with non-existent rule IDs"
         exception != null
-        exception.message.contains("Execution items not found in database")
-        exception.message.contains("Rule IDs")
+        exception.message.contains("Rules not found in database")
         nonExistentRuleIds.each { ruleId ->
             assert exception.message.contains(ruleId.toString())
         }
@@ -497,40 +475,40 @@ class EventServiceImplSpec extends Specification {
         eventEntity.setId(eventId)
         eventMapper.selectById(eventId) >> eventEntity
 
-        // Build execution items with rule groups
+        // Build execution items with rule groups (these will be treated as rule IDs)
         def executionItems = []
         existingGroupIds.each { groupId ->
-            executionItems.add(ExecutionItemQO.builder()
-                    .itemType(ExecutionItemTypeEnum.RULE_GROUP.getId())
-                    .itemId(groupId)
-                    .build())
+            executionItems.add(groupId)
         }
         nonExistentGroupIds.each { groupId ->
-            executionItems.add(ExecutionItemQO.builder()
-                    .itemType(ExecutionItemTypeEnum.RULE_GROUP.getId())
-                    .itemId(groupId)
-                    .build())
+            executionItems.add(groupId)
         }
 
-        // Mock existing rule groups for batch query
-        def existingGroupEntities = existingGroupIds.collect { groupId ->
-            def entity = new RuleGroupEntity()
+        // Mock rule entities for group IDs (treating them as rule IDs)
+        def ruleEntities = existingGroupIds.collect { groupId ->
+            def entity = new RuleEntity()
             entity.setId(groupId)
             return entity
         }
-        ruleGroupMapper.selectBatchIds(_) >> existingGroupEntities
+        ruleMapper.selectBatchIds(_) >> { List<Long> ids ->
+            // Return only existing group IDs that are treated as rule IDs
+            return ruleEntities.findAll { it.id in ids }
+        }
 
         // Mock existing relations (empty)
-        executionEventRelationMapper.selectList(_) >> []
+        executionArrangementMapper.selectList(_) >> []
 
         when: "batch set execution items"
-        eventService.batchSetExecutionItems(eventId, executionItems)
+        Integer eventIdInt = eventId != null ? eventId.intValue() : null
+        eventService.setExecutionArrangements(eventIdInt, executionItems)
 
-        then: "should succeed"
+        then: "should succeed if group IDs are treated as valid rule IDs"
         1 * eventMapper.selectById(eventId) >> eventEntity
-        1 * ruleGroupMapper.selectBatchIds(_) >> existingGroupEntities
-        1 * executionEventRelationMapper.selectList(_) >> []
-        executionItems.size() * executionEventRelationMapper.insert(_) >> 1
+        if (!executionItems.isEmpty()) {
+            1 * ruleMapper.selectBatchIds(_) >> ruleEntities
+        }
+        1 * executionArrangementMapper.selectList(_) >> []
+        executionItems.size() * executionArrangementMapper.insert(_) >> 1
 
         where:
         existingGroupIds | nonExistentGroupIds
@@ -548,44 +526,33 @@ class EventServiceImplSpec extends Specification {
         // Build execution items with rule groups
         def executionItems = []
         existingGroupIds.each { groupId ->
-            executionItems.add(ExecutionItemQO.builder()
-                    .itemType(ExecutionItemTypeEnum.RULE_GROUP.getId())
-                    .itemId(groupId)
-                    .build())
+            executionItems.add(groupId)
         }
         nonExistentGroupIds.each { groupId ->
-            executionItems.add(ExecutionItemQO.builder()
-                    .itemType(ExecutionItemTypeEnum.RULE_GROUP.getId())
-                    .itemId(groupId)
-                    .build())
+            executionItems.add(groupId)
         }
-
-        // Mock existing rule groups for batch query
-        def existingGroupEntities = existingGroupIds.collect { groupId ->
-            def entity = new RuleGroupEntity()
-            entity.setId(groupId)
-            return entity
-        }
-        ruleGroupMapper.selectBatchIds(_) >> existingGroupEntities
 
         when: "batch set execution items"
         def exception = null
         try {
-            eventService.batchSetExecutionItems(eventId, executionItems)
+            Integer eventIdInt = eventId != null ? eventId.intValue() : null
+            eventService.setExecutionArrangements(eventIdInt, executionItems)
         } catch (IllegalArgumentException e) {
             exception = e
         }
 
-        then: "should throw exception with non-existent group IDs"
+        then: "should throw exception with non-existent rule IDs"
         exception != null
-        exception.message.contains("Execution items not found in database")
-        exception.message.contains("Rule group IDs")
+        exception.message.contains("Rules not found in database")
         nonExistentGroupIds.each { groupId ->
             assert exception.message.contains(groupId.toString())
         }
 
         1 * eventMapper.selectById(eventId) >> eventEntity
-        1 * ruleGroupMapper.selectBatchIds(_)
+        1 * ruleMapper.selectBatchIds(_) >> { List<Long> ids ->
+            // Return empty list since these are group IDs, not rule IDs
+            return []
+        }
 
         where:
         existingGroupIds | nonExistentGroupIds
@@ -604,28 +571,16 @@ class EventServiceImplSpec extends Specification {
         // Build execution items with mixed types
         def executionItems = []
         existingRuleIds.each { ruleId ->
-            executionItems.add(ExecutionItemQO.builder()
-                    .itemType(ExecutionItemTypeEnum.RULE.getId())
-                    .itemId(ruleId)
-                    .build())
+            executionItems.add(ruleId)
         }
         existingGroupIds.each { groupId ->
-            executionItems.add(ExecutionItemQO.builder()
-                    .itemType(ExecutionItemTypeEnum.RULE_GROUP.getId())
-                    .itemId(groupId)
-                    .build())
+            executionItems.add(groupId)
         }
         nonExistentRuleIds.each { ruleId ->
-            executionItems.add(ExecutionItemQO.builder()
-                    .itemType(ExecutionItemTypeEnum.RULE.getId())
-                    .itemId(ruleId)
-                    .build())
+            executionItems.add(ruleId)
         }
         nonExistentGroupIds.each { groupId ->
-            executionItems.add(ExecutionItemQO.builder()
-                    .itemType(ExecutionItemTypeEnum.RULE_GROUP.getId())
-                    .itemId(groupId)
-                    .build())
+            executionItems.add(groupId)
         }
 
         // Mock existing rules
@@ -634,38 +589,35 @@ class EventServiceImplSpec extends Specification {
             entity.setId(ruleId)
             return entity
         }
-        ruleMapper.selectBatchIds(_) >> { List<Long> ids ->
-            // Return only existing rules
-            return existingRuleEntities.findAll { it.id in ids }
-        }
-
-        // Mock existing rule groups
-        def existingGroupEntities = existingGroupIds.collect { groupId ->
-            def entity = new RuleGroupEntity()
+        
+        // Mock rule entities for group IDs (treating them as rule IDs)
+        def groupRuleEntities = existingGroupIds.collect { groupId ->
+            def entity = new RuleEntity()
             entity.setId(groupId)
             return entity
         }
-        ruleGroupMapper.selectBatchIds(_) >> { List<Long> ids ->
-            // Return only existing groups
-            return existingGroupEntities.findAll { it.id in ids }
+        
+        def allRuleEntities = existingRuleEntities + groupRuleEntities
+        
+        ruleMapper.selectBatchIds(_) >> { List<Long> ids ->
+            // Return only existing rules and group IDs (treated as rule IDs)
+            return allRuleEntities.findAll { it.id in ids }
         }
 
         // Mock existing relations (empty)
-        executionEventRelationMapper.selectList(_) >> []
+        executionArrangementMapper.selectList(_) >> []
 
         when: "batch set execution items"
-        eventService.batchSetExecutionItems(eventId, executionItems)
+        Integer eventIdInt = eventId != null ? eventId.intValue() : null
+        eventService.setExecutionArrangements(eventIdInt, executionItems)
 
         then: "should succeed"
         1 * eventMapper.selectById(eventId) >> eventEntity
-        if (!existingRuleIds.isEmpty()) {
-            1 * ruleMapper.selectBatchIds(_) >> existingRuleEntities
+        if (!executionItems.isEmpty()) {
+            1 * ruleMapper.selectBatchIds(_) >> allRuleEntities
         }
-        if (!existingGroupIds.isEmpty()) {
-            1 * ruleGroupMapper.selectBatchIds(_) >> existingGroupEntities
-        }
-        1 * executionEventRelationMapper.selectList(_) >> []
-        executionItems.size() * executionEventRelationMapper.insert(_) >> 1
+        1 * executionArrangementMapper.selectList(_) >> []
+        executionItems.size() * executionArrangementMapper.insert(_) >> 1
 
         where:
         existingRuleIds | existingGroupIds | nonExistentRuleIds | nonExistentGroupIds
@@ -683,28 +635,16 @@ class EventServiceImplSpec extends Specification {
         // Build execution items with mixed types
         def executionItems = []
         existingRuleIds.each { ruleId ->
-            executionItems.add(ExecutionItemQO.builder()
-                    .itemType(ExecutionItemTypeEnum.RULE.getId())
-                    .itemId(ruleId)
-                    .build())
+            executionItems.add(ruleId)
         }
         existingGroupIds.each { groupId ->
-            executionItems.add(ExecutionItemQO.builder()
-                    .itemType(ExecutionItemTypeEnum.RULE_GROUP.getId())
-                    .itemId(groupId)
-                    .build())
+            executionItems.add(groupId)
         }
         nonExistentRuleIds.each { ruleId ->
-            executionItems.add(ExecutionItemQO.builder()
-                    .itemType(ExecutionItemTypeEnum.RULE.getId())
-                    .itemId(ruleId)
-                    .build())
+            executionItems.add(ruleId)
         }
         nonExistentGroupIds.each { groupId ->
-            executionItems.add(ExecutionItemQO.builder()
-                    .itemType(ExecutionItemTypeEnum.RULE_GROUP.getId())
-                    .itemId(groupId)
-                    .build())
+            executionItems.add(groupId)
         }
 
         // Mock existing rules
@@ -713,47 +653,50 @@ class EventServiceImplSpec extends Specification {
             entity.setId(ruleId)
             return entity
         }
-        ruleMapper.selectBatchIds(_) >> { List<Long> ids ->
-            // Return only existing rules
-            return existingRuleEntities.findAll { it.id in ids }
-        }
-
-        // Mock existing rule groups
-        def existingGroupEntities = existingGroupIds.collect { groupId ->
-            def entity = new RuleGroupEntity()
+        
+        // Mock rule entities for group IDs (treating them as rule IDs)
+        def groupRuleEntities = existingGroupIds.collect { groupId ->
+            def entity = new RuleEntity()
             entity.setId(groupId)
             return entity
         }
-        ruleGroupMapper.selectBatchIds(_) >> { List<Long> ids ->
-            // Return only existing groups
-            return existingGroupEntities.findAll { it.id in ids }
+        
+        def allRuleEntities = existingRuleEntities + groupRuleEntities
+        
+        ruleMapper.selectBatchIds(_) >> { List<Long> ids ->
+            // Return only existing rules and group IDs (treated as rule IDs)
+            return allRuleEntities.findAll { it.id in ids }
         }
 
         when: "batch set execution items"
         def exception = null
         try {
-            eventService.batchSetExecutionItems(eventId, executionItems)
+            Integer eventIdInt = eventId != null ? eventId.intValue() : null
+            eventService.setExecutionArrangements(eventIdInt, executionItems)
         } catch (IllegalArgumentException e) {
             exception = e
         }
 
         then: "should throw exception with all non-existent IDs"
         exception != null
-        exception.message.contains("Execution items not found in database")
+        exception.message.contains("Rules not found in database")
         if (!nonExistentRuleIds.isEmpty()) {
-            exception.message.contains("Rule IDs")
             nonExistentRuleIds.each { ruleId ->
                 assert exception.message.contains(ruleId.toString())
             }
         }
         if (!nonExistentGroupIds.isEmpty()) {
-            exception.message.contains("Rule group IDs")
+            // Group IDs will also be treated as rule IDs and fail validation
             nonExistentGroupIds.each { groupId ->
                 assert exception.message.contains(groupId.toString())
             }
         }
 
         1 * eventMapper.selectById(eventId) >> eventEntity
+        1 * ruleMapper.selectBatchIds(_) >> { List<Long> ids ->
+            // Return only existing rules and group IDs (treated as rule IDs)
+            return allRuleEntities.findAll { it.id in ids }
+        }
 
         where:
         existingRuleIds | existingGroupIds | nonExistentRuleIds | nonExistentGroupIds
@@ -762,49 +705,71 @@ class EventServiceImplSpec extends Specification {
         [1L, 2L]        | [10000001L]      | [999L]             | [999999L]
     }
 
-    def "test getExecutionEventRelations - should return relations ordered by execution order"() {
+    def "test getExecutionItems - should return relations ordered by execution order"() {
         given: "event with execution relations"
         def eventId = 10000001L
+        def eventIdInt = eventId.intValue()
         // Create relations in unsorted order
-        def relation1 = createRelation(eventId, ExecutionItemTypeEnum.RULE, 1L, 2)
-        def relation2 = createRelation(eventId, ExecutionItemTypeEnum.RULE, 2L, 1)
-        def relation3 = createRelation(eventId, ExecutionItemTypeEnum.RULE_GROUP, 10000001L, 3)
+        def relation1 = createRelation(eventIdInt, ExecutionArrangementTypeEnum.RULE, 1L, 2)
+        def relation2 = createRelation(eventIdInt, ExecutionArrangementTypeEnum.RULE, 2L, 1)
+        def relation3 = createRelation(eventIdInt, ExecutionArrangementTypeEnum.RULE_GROUP, 10000001L, 3)
         // MyBatis Plus will return them sorted by executionOrder ASC
         def relations = [relation2, relation1, relation3] // Sorted: 1, 2, 3
 
+        // Mock rule status config
+        def allowedStatuses = [RuleStatusEnum.ONLINE, RuleStatusEnum.GRAY] as Set
+        ruleStatusConfig.getEvalAvailableRuleStatuses() >> allowedStatuses
+
+        // Mock struct mapper - convert entity to model
+        executionArrangementStructMapper.entityToModel(_ as ExecutionArrangementEntity) >> { ExecutionArrangementEntity e ->
+            def model = new lab.zhang.rule.rule_engine.model.ExecutionArrangement()
+            model.setEventId(e.eventId)
+            model.setRuleId(e.ruleId)
+            model.setGroupId(e.groupId)
+            model.setExeOrder(e.exeOrder)
+            model.setAbRatio(e.abRatio)
+            return model
+        }
+
         when: "get execution event relations"
-        def result = eventService.getExecutionEventRelations(eventId)
+        def result = eventService.getExecutionArrangements(eventId.intValue())
 
         then: "should return relations ordered by execution order"
-        1 * executionEventRelationMapper.selectList(_ as LambdaQueryWrapper) >> relations
+        1 * ruleStatusConfig.getEvalAvailableRuleStatuses() >> allowedStatuses
+        1 * executionArrangementMapper.selectByEventIdOnRuleStatus(eventIdInt, _) >> relations
         result != null
         result.size() == 3
-        result[0].executionOrder == 1
-        result[1].executionOrder == 2
-        result[2].executionOrder == 3
+        result[0].exeOrder == 1
+        result[1].exeOrder == 2
+        result[2].exeOrder == 3
     }
 
-    def "test getExecutionEventRelations - should return empty list when no relations exist"() {
+    def "test getExecutionItems - should return empty list when no relations exist"() {
         given: "event with no relations"
         def eventId = 10000001L
-        executionEventRelationMapper.selectList(_ as Wrapper<ExecutionEventRelationEntity>) >> null
+        def eventIdInt = eventId.intValue()
+        
+        // Mock rule status config
+        def allowedStatuses = [RuleStatusEnum.ONLINE, RuleStatusEnum.GRAY] as Set
+        ruleStatusConfig.getEvalAvailableRuleStatuses() >> allowedStatuses
 
         when: "get execution event relations"
-        def result = eventService.getExecutionEventRelations(eventId)
+        def result = eventService.getExecutionArrangements(eventIdInt)
 
         then: "should return empty list"
-        1 * executionEventRelationMapper.selectList(_)
+        1 * ruleStatusConfig.getEvalAvailableRuleStatuses() >> allowedStatuses
+        1 * executionArrangementMapper.selectByEventIdOnRuleStatus(eventIdInt, _) >> []
         result != null
         result.isEmpty()
     }
 
     // Helper method
-    private static ExecutionEventRelationEntity createRelation(Long eventId, ExecutionItemTypeEnum itemType, Long itemId, Integer order) {
-        def relation = new ExecutionEventRelationEntity()
+    private static ExecutionArrangementEntity createRelation(Integer eventId, ExecutionArrangementTypeEnum itemType, Long ruleId, Integer order) {
+        def relation = new ExecutionArrangementEntity()
         relation.setEventId(eventId)
-        relation.setItemTypeEnum(itemType)
-        relation.setItemId(itemId)
-        relation.setExecutionOrder(order)
+        relation.setRuleId(ruleId)
+        relation.setGroupId(itemType == ExecutionArrangementTypeEnum.RULE_GROUP ? 1 : 0)
+        relation.setExeOrder(order)
         return relation
     }
 }

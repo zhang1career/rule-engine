@@ -4,7 +4,8 @@ import lab.zhang.rule.rule_engine.common.TypedValue;
 import lab.zhang.rule.rule_engine.engine.ExecutionTrace;
 import lombok.Data;
 
-import java.io.Serializable;
+import java.util.List;
+import java.util.Map;
 
 /**
  * Rule evaluation response DTO
@@ -12,47 +13,19 @@ import java.io.Serializable;
  * @author Rongjin Zhang
  */
 @Data
-public class EvalResultDTO implements Serializable {
-
-    private static final long serialVersionUID = 1L;
+public class EvalResultDTO {
 
     /**
      * Calculation result
      */
     private TypedValue result;
 
-    /**
-     * Whether successful
-     */
-    private Boolean success;
+    private Map<TypedValue, List<ExecutionTrace.ExecutionStep>> briefSteps;
 
-    /**
-     * Error message
-     */
-    private String errmsg;
 
-    /**
-     * Execution trace information (execution process details)
-     */
-    private ExecutionTrace trace;
-
-    public EvalResultDTO() {
-    }
-
-    public EvalResultDTO(TypedValue result) {
+    public EvalResultDTO(TypedValue result, Map<TypedValue, List<ExecutionTrace.ExecutionStep>> briefStepMap) {
         this.result = result;
-        this.success = true;
-    }
-
-    public EvalResultDTO(TypedValue result, ExecutionTrace trace) {
-        this.result = result;
-        this.success = true;
-        this.trace = trace;
-    }
-
-    public EvalResultDTO(String errmsg) {
-        this.success = false;
-        this.errmsg = errmsg;
+        this.briefSteps = briefStepMap;
     }
 }
 

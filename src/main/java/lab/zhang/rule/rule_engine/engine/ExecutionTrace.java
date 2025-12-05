@@ -1,15 +1,17 @@
 package lab.zhang.rule.rule_engine.engine;
 
 import lab.zhang.rule.rule_engine.common.TypedValue;
-import lab.zhang.rule.rule_engine.enums.ExecutionItemTypeEnum;
+import lab.zhang.rule.rule_engine.pojo.dto.EvalDTO;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import javax.validation.constraints.NotNull;
 import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Execution trace information
@@ -27,12 +29,40 @@ public class ExecutionTrace implements Serializable {
     private static final long serialVersionUID = 1L;
 
     /**
+     * Business request trace ID
+     */
+    private Long traceId;
+
+    /**
+     * User ID
+     */
+    private Long userId;
+
+    /**
+     * Event ID (unsigned long integer)
+     */
+    private Long eventId;
+
+    /**
+     * Parameter dictionary for rule calculation
+     */
+    private Map<String, TypedValue> arguments;
+
+    /**
      * List of execution steps
      * Each step represents an executed rule
      * The last element in the list represents the last executed rule
      */
     @Builder.Default
     private List<ExecutionStep> steps = new ArrayList<>();
+
+
+    public ExecutionTrace(@NotNull EvalDTO dto) {
+        this.traceId = dto.getTraceId();
+        this.userId = dto.getUserId();
+        this.eventId = dto.getEventId();
+        this.arguments = dto.getArguments();
+    }
 
     /**
      * Add an execution step
@@ -60,19 +90,14 @@ public class ExecutionTrace implements Serializable {
         private static final long serialVersionUID = 1L;
 
         /**
-         * Execution item type (RULE or RULE_GROUP)
+         * Rule ID
          */
-        private ExecutionItemTypeEnum itemType;
+        private Long ruleId;
 
         /**
-         * Item ID (rule ID if itemType is RULE, rule group ID if itemType is RULE_GROUP)
+         * Rule group ID (0 if standalone rule, non-zero if rule belongs to a group)
          */
-        private Long itemId;
-
-        /**
-         * Selected rule ID from group (if itemType is RULE_GROUP)
-         */
-        private Long abTestedRuleId;
+        private Long groupId;
 
         // todo: Consider adding version of the executed rule content
 

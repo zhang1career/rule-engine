@@ -30,7 +30,12 @@ public class RuleEntity extends BaseEntity {
      * Rule name
      */
     private String name;
-    
+
+    /**
+     * Rule description
+     */
+    private String description;
+
     /**
      * Rule content type ID (enumeration ID, stored in database)
      */
@@ -42,17 +47,6 @@ public class RuleEntity extends BaseEntity {
      */
     @TableField("rule_status")
     private Integer ruleStatus;
-    
-    /**
-     * Rule group ID
-     */
-    private Long ruleGroupId;
-    
-    /**
-     * Rule description
-     */
-    private String description;
-
     
     /**
      * Convert to ContentTypeEnum enum

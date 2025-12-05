@@ -3,6 +3,7 @@ package lab.zhang.rule.rule_engine.controller
 import lab.zhang.rule.rule_engine.common.TypedValue
 import lab.zhang.rule.rule_engine.engine.ExecutionTrace
 import lab.zhang.rule.rule_engine.enums.ValueTypeEnum
+import lab.zhang.rule.rule_engine.model.EvalResult
 import lab.zhang.rule.rule_engine.pojo.dto.EvalDTO
 import lab.zhang.rule.rule_engine.pojo.qo.EvalQO
 import lab.zhang.rule.rule_engine.service.EvalService
@@ -45,17 +46,18 @@ class EvalControllerSpec extends Specification {
 
         and: "prepare execution result"
         def expectedResult = new TypedValue(true, ValueTypeEnum.BOOLEAN)
+        def trace = new ExecutionTrace()
+        def evalResult = new EvalResult(expectedResult, trace)
 
         when: "call eval interface"
         def response = controller.eval(request)
 
         then: "should return success response"
         1 * evalStructMapper.qoToDto(request) >> dto
-        1 * evalService.eval(dto, _ as ExecutionTrace) >> expectedResult
+        1 * evalService.eval(dto) >> evalResult
         response.statusCode == HttpStatus.OK
-        response.body.success == true
         response.body.result == expectedResult
-        response.body.trace != null
+        response.body.briefSteps == evalResult.getBriefSteps()
     }
 
     def "test eval interface - service throws exception"() {
@@ -78,7 +80,7 @@ class EvalControllerSpec extends Specification {
 
         then: "should throw exception"
         1 * evalStructMapper.qoToDto(request) >> dto
-        1 * evalService.eval(dto, _ as ExecutionTrace) >> {
+        1 * evalService.eval(dto) >> {
             throw new RuntimeException("Rule execution failed")
         }
         thrown(RuntimeException)
@@ -107,6 +109,8 @@ class EvalControllerSpec extends Specification {
 
         and: "prepare execution result"
         def expectedResult = new TypedValue(0.05, ValueTypeEnum.DECIMAL)
+        def trace = new ExecutionTrace()
+        def evalResult = new EvalResult(expectedResult, trace)
 
         when: "call eval interface"
         def response = controller.eval(request)
@@ -118,9 +122,9 @@ class EvalControllerSpec extends Specification {
             req.eventId == 1001L &&
             req.traceId == 999L &&
             req.arguments.size() == 2
-        }, _ as ExecutionTrace) >> expectedResult
+        }) >> evalResult
         response.body.result == expectedResult
-        response.body.trace != null
+        response.body.briefSteps == evalResult.getBriefSteps()
     }
 }
 

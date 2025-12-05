@@ -28,6 +28,6 @@ public class RuleGroupQO {
      */
     @NotEmpty(message = "Rules cannot be empty")
     @ValidRuleRatios(message = "Invalid rule ratios")
-    private Map<Long, Integer> rules;
+    private Map<Long, Integer> ruleRatios;
 }
 

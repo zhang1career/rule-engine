@@ -14,13 +14,11 @@ CREATE TABLE IF NOT EXISTS `rule` (
   `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT 'Rule ID, primary key',
   `name` VARCHAR(255) NOT NULL DEFAULT '' COMMENT 'Rule name',
   `content_type` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Rule content type ID: 0=EXPRESSION, 1=API_QUERY, 2=SQL_QUERY, 3=SCRIPT',
-  `rule_status` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Rule status ID: 0=OFFLINE, 1=TEST, 2=GRAY, 3=AB_TEST, 4=FULL',
-  `rule_group_id` BIGINT UNSIGNED DEFAULT 0 COMMENT 'Rule group ID, only valid when rule_status is AB_TEST',
+  `rule_status` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Rule status ID: 0=OFFLINE, 1=TEST, 2=GRAY, 3=ONLINE',
   `description` VARCHAR(500) DEFAULT '' COMMENT 'Rule description',
   `ct` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Create time, UNIX timestamp in seconds',
   `ut` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Update time, UNIX timestamp in seconds',
   PRIMARY KEY (`id`),
-  KEY `idx_rule_group` (`rule_group_id`),
   KEY `idx_rule_status` (`rule_status`),
   KEY `idx_ct` (`ct`)
 ) AUTO_INCREMENT=10000000 DEFAULT CHARSET=utf8mb4 COMMENT='Rule table';
@@ -42,27 +40,18 @@ CREATE TABLE IF NOT EXISTS `rule_group` (
   PRIMARY KEY (`id`)
 ) AUTO_INCREMENT=10000000 DEFAULT CHARSET=utf8mb4 COMMENT='Rule group table';
 
--- 4. Rule group and rule association table
-CREATE TABLE IF NOT EXISTS `rule_group_rule_rel` (
-  `group_id` BIGINT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Rule group ID',
-  `rule_id` BIGINT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Rule ID',
-  `ab_test_ratio` INT UNSIGNED DEFAULT 0 COMMENT 'A/B test ratio (0-100), only valid when rule status is AB_TEST',
-  `ct` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Create time, UNIX timestamp in seconds',
-  `ut` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Update time, UNIX timestamp in seconds',
-  PRIMARY KEY (`group_id`, `rule_id`)
-) DEFAULT CHARSET=utf8mb4 COMMENT='Rule group and rule association table';
-
--- 5. Execution event relation table
-CREATE TABLE IF NOT EXISTS `execution_event_rel` (
+-- 4. Execution event relation table (x)
+CREATE TABLE IF NOT EXISTS `x` (
   `event_id` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Event ID',
-  `item_type` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Item type ID: 0=RULE, 1=RULE_GROUP',
-  `item_id` BIGINT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Item ID (rule ID or rule group ID)',
-  `execution_order` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Execution order (starting from 1)',
+  `rule_id` BIGINT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Rule ID',
+  `group_id` BIGINT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Rule group ID: 0 means standalone rule, non-zero means rule belongs to group',
+  `exe_order` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Execution order (starting from 0)',
+  `ab_ratio` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'A/B test ratio (0-100), traffic control for rules in group',
   `ct` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Create time, UNIX timestamp in seconds',
   `ut` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Update time, UNIX timestamp in seconds',
-  PRIMARY KEY (`event_id`, `item_type`, `item_id`),
-  KEY `idx_item` (`item_type`, `item_id`)
-) DEFAULT CHARSET=utf8mb4 COMMENT='Execution event relation table';
+  PRIMARY KEY (`event_id`, `rule_id`),
+  KEY `idx_group` (`group_id`)
+) DEFAULT CHARSET=utf8mb4 COMMENT='Event-rule/group relation table';
 
 -- 6. Event table
 CREATE TABLE IF NOT EXISTS `event` (
@@ -74,3 +63,17 @@ CREATE TABLE IF NOT EXISTS `event` (
   PRIMARY KEY (`id`),
   KEY `idx_event_name` (`name`)
 ) DEFAULT CHARSET=utf8mb4 COMMENT='Event table';
+
+-- 7. Eval log table
+CREATE TABLE IF NOT EXISTS `eval_log` (
+  `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT 'Eval log ID, primary key',
+  `trace_id` BIGINT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Business request trace ID',
+  `event_id` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Event ID',
+  `user_id` BIGINT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'User ID',
+  `arguments` TEXT COMMENT 'Parameter dictionary for rule calculation, JSON encoded string',
+  `steps` TEXT COMMENT 'List of execution steps, JSON encoded string',
+  `ct` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Create time, UNIX timestamp in seconds',
+  `ut` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Update time, UNIX timestamp in seconds',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uni_trace_id` (`trace_id`)
+) ENGINE=MyISAM AUTO_INCREMENT=10000000 DEFAULT CHARSET=utf8mb4 COMMENT='Eval log table';

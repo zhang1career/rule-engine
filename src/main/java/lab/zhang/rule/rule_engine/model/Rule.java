@@ -16,7 +16,6 @@ import java.util.Objects;
  *   <li>Rule type (expression, script, API query, SQL query)</li>
  *   <li>Rule content (the actual rule logic)</li>
  *   <li>Status (offline, test, A/B test, full, gray)</li>
- *   <li>Optional A/B test configuration (ratio and group ID)</li>
  * </ul>
  *
  * <p>This class follows the builder pattern for object creation.
@@ -38,8 +37,7 @@ public class Rule extends BaseModel implements Serializable {
      * Rule ID (unique identifier).
      * Default value is 0, not required for rule calculation.
      */
-    @Builder.Default
-    private Long id = 0L;
+    private Long id;
     
     /**
      * Rule name for identification and display purposes.
@@ -74,20 +72,6 @@ public class Rule extends BaseModel implements Serializable {
      */
     private RuleStatusEnum ruleStatus;
 
-    /**
-     * Rule group ID, only valid when status is AB_TEST.
-     * Rules in the same group will compete for execution based on their ratios.
-     */
-    private Long ruleGroupId;
-    
-    /**
-     * Checks if this rule is valid for A/B testing.
-     * 
-     * @return true if the rule is in AB_TEST status and has a valid group ID
-     */
-    public boolean isAbTestRule() {
-        return ruleStatus == RuleStatusEnum.AB_TEST && ruleGroupId != null;
-    }
     
     @Override
     public boolean equals(Object o) {
@@ -109,7 +93,6 @@ public class Rule extends BaseModel implements Serializable {
                 ", ruleName='" + name + '\'' +
                 ", contentType=" + contentType +
                 ", ruleStatus=" + ruleStatus +
-                ", ruleGroupId=" + ruleGroupId +
                 '}';
     }
 }

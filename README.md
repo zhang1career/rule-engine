@@ -1,5 +1,8 @@
 # Rule Engine System
 
+[![CI](https://github.com/zhang1career/rule-engine/actions/workflows/ci.yml/badge.svg)](https://github.com/zhang1career/rule-engine/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/zhang1career/rule-engine/branch/main/graph/badge.svg)](https://codecov.io/gh/zhang1career/rule-engine)
+
 A rule calculation service based on SpringBoot, supporting multiple rule types and flexible rule execution flows.
 
 ## Technology Stack

@@ -16,6 +16,14 @@ spring:
 #    virtual-host: /
     # If RabbitMQ is not configured, you can comment out the above configuration, message sending will be skipped
 
+  # Kafka configuration (optional, if not configured, messages will not be sent)
+#  kafka:
+#    bootstrap-servers: localhost:9092
+#    producer:
+#      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+#      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+    # If Kafka is not configured, you can comment out the above configuration, message sending will be skipped
+
   # Database configuration
   datasource:
     url: jdbc:mysql://127.0.0.1:3306/rule_engine?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai&allowMultiQueries=true
@@ -60,6 +68,9 @@ rule:
     rabbitmq:
       exchange: rule.engine.exchange
       routing-key: rule.eval.result
+    # Kafka configuration
+    kafka:
+      topic: rule.eval.result
 
 # Logging configuration
 logging:

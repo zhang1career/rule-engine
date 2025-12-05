@@ -12,4 +12,3 @@ import org.apache.ibatis.annotations.Mapper;
 @Mapper
 public interface RuleContentMapper extends BaseMapper<RuleContentEntity> {
 }
-

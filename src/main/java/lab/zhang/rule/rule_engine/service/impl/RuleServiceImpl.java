@@ -1,30 +1,39 @@
 package lab.zhang.rule.rule_engine.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import lab.zhang.rule.rule_engine.engine.ExecutionItem;
-import lab.zhang.rule.rule_engine.entity.*;
+import lab.zhang.rule.rule_engine.entity.ExecutionArrangementEntity;
+import lab.zhang.rule.rule_engine.entity.RuleContentEntity;
+import lab.zhang.rule.rule_engine.entity.RuleEntity;
 import lab.zhang.rule.rule_engine.enums.ContentTypeEnum;
-import lab.zhang.rule.rule_engine.enums.ExecutionItemTypeEnum;
 import lab.zhang.rule.rule_engine.enums.RuleStatusEnum;
 import lab.zhang.rule.rule_engine.executor.RuleExecutor;
-import lab.zhang.rule.rule_engine.mapper.*;
+import lab.zhang.rule.rule_engine.mapper.ExecutionArrangementMapper;
+import lab.zhang.rule.rule_engine.mapper.RuleContentMapper;
+import lab.zhang.rule.rule_engine.mapper.RuleMapper;
+import lab.zhang.rule.rule_engine.model.ExecutionArrangement;
 import lab.zhang.rule.rule_engine.model.Rule;
+import lab.zhang.rule.rule_engine.model.RuleExecutionContext;
 import lab.zhang.rule.rule_engine.model.RuleGroup;
+import lab.zhang.rule.rule_engine.service.EventService;
 import lab.zhang.rule.rule_engine.service.RuleGroupService;
+import lab.zhang.rule.rule_engine.service.RuleSelectionCacheService;
 import lab.zhang.rule.rule_engine.service.RuleService;
-import lab.zhang.rule.rule_engine.struct_mapper.RuleGroupStructMapper;
 import lab.zhang.rule.rule_engine.struct_mapper.RuleStructMapper;
-import lab.zhang.rule.rule_engine.config.RuleStatusConfig;
+import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import org.apache.commons.lang3.tuple.Pair;
-
+import javax.validation.constraints.NotEmpty;
+import javax.validation.constraints.NotNull;
 import java.util.*;
 import java.util.stream.Collectors;
+
+import static lab.zhang.rule.rule_engine.constant.EvalArgumentConst.ARG_USER_HASH_INT;
 
 /**
  * Rule service implementation
@@ -43,16 +52,10 @@ public class RuleServiceImpl implements RuleService {
     private RuleContentMapper ruleContentMapper;
 
     @Autowired
-    private ExecutionEventRelationMapper executionEventRelationMapper;
+    private ExecutionArrangementMapper executionArrangementMapper;
 
     @Autowired
-    private RuleGroupMapper ruleGroupMapper;
-
-    @Autowired
-    private RuleGroupRuleRelationMapper ruleGroupRuleRelationMapper;
-
-    @Autowired
-    private RuleGroupStructMapper ruleGroupStructMapper;
+    private EventService eventService;
 
     @Autowired
     @Lazy
@@ -62,8 +65,8 @@ public class RuleServiceImpl implements RuleService {
     @Lazy
     private List<RuleExecutor> ruleExecutors;
 
-    @Autowired
-    private RuleStatusConfig ruleStatusConfig;
+    @Autowired(required = false)
+    private RuleSelectionCacheService ruleSelectionCacheService;
 
 
     @Override
@@ -110,10 +113,19 @@ public class RuleServiceImpl implements RuleService {
 
 
     @Override
-    public void createRule(Rule rule) {
-        rule.setRuleStatus(RuleStatusEnum.OFFLINE); // New rules are created as OFFLINE
+    public void doCreateRule(Rule rule, long currentTimeSeconds) {
+        // Set default status to OFFLINE if not provided
+        if (rule.getRuleStatus() == null) {
+            rule.setRuleStatus(RuleStatusEnum.OFFLINE);
+        }
+
         RuleEntity ruleEntity = ruleStructMapper.modelToEntity(rule);
-        ruleEntity.setTimeOnCreate();
+        if (currentTimeSeconds != 0) {
+            ruleEntity.setCt((int) currentTimeSeconds);
+            ruleEntity.setUt((int) currentTimeSeconds);
+        } else {
+            ruleEntity.setTimeOnCreate();
+        }
         ruleMapper.insert(ruleEntity);
 
         // Update rule.id with the generated ID from database
@@ -138,9 +150,14 @@ public class RuleServiceImpl implements RuleService {
     }
 
     @Override
+    public void createRule(Rule rule) {
+        doCreateRule(rule, 0);
+    }
+
+    @Override
     @Transactional
     public void updateRule(Long ruleId, Rule newRule) {
-        // Load existing rule from database to get latest ruleGroupId
+        // Load existing rule from database
         RuleEntity existingEntity = ruleMapper.selectById(ruleId);
         if (existingEntity == null) {
             throw new IllegalArgumentException("Rule not found: " + ruleId);
@@ -155,22 +172,15 @@ public class RuleServiceImpl implements RuleService {
             newRule.setRuleStatus(oldStatus);
             newStatus = oldStatus;
         }
-        if (oldStatus != newStatus && !oldStatus.canTransitionTo(newStatus)) {
+        if (oldStatus != newStatus && !oldStatus.canChangeTo(newStatus)) {
             throw new IllegalArgumentException(
                     String.format("Invalid status transition from %s to %s. Allowed transitions from %s: %s",
                             oldStatus, newStatus, oldStatus, oldStatus.getAllowedTargetStatuses()));
         }
 
-        // Handle rule status change and get ruleGroupId directly from the method return
-        // This avoids the need to re-query the database, solving concurrency consistency issues
-        Long ruleGroupId = null;
+        // Handle rule status change
         if (oldStatus != newStatus) {
-            ruleGroupId = handleRuleStatusChange(existingRule, newRule);
-            // Set ruleGroupId from handleRuleStatusChange return value
-            // Rule was removed from group (AB_TEST -> other status), set to null
-            if (ruleGroupId != null) {
-                newRule.setRuleGroupId(ruleGroupId);
-            }
+            changeRuleStatus(existingRule, newRule);
         }
 
         newRule.setId(existingRule.getId());
@@ -179,7 +189,6 @@ public class RuleServiceImpl implements RuleService {
         ContentTypeEnum originalContentType = newRule.getContentType();
         String originalContent = newRule.getContent();
         // Use a special marker object to distinguish between "user provided null" and "not called from updateRule"
-        final ContentTypeEnum MARKER_CONTENT_TYPE = ContentTypeEnum.EXPRESSION; // Use a sentinel value that won't conflict
         if (newRule.getName() == null || newRule.getName().trim().isEmpty()) {
             newRule.setName(existingRule.getName());
         }
@@ -219,21 +228,21 @@ public class RuleServiceImpl implements RuleService {
      * Internal method to update rule with original user-provided values.
      * This allows us to distinguish between user-provided values and values copied from existingRule.
      *
-     * @param existingRule the existing rule
-     * @param newRule the new rule data (may have been modified by copying from existingRule)
+     * @param existingRule        the existing rule
+     * @param newRule             the new rule data (may have been modified by copying from existingRule)
      * @param originalContentType the original contentType provided by user (null if not provided)
-     * @param originalContent the original content provided by user (null if not provided)
-     * @param fromUpdateRule true if called from updateRule, false if called directly
+     * @param originalContent     the original content provided by user (null if not provided)
+     * @param fromUpdateRule      true if called from updateRule, false if called directly
      */
     private void doUpdateRule(Rule existingRule, Rule newRule, ContentTypeEnum originalContentType, String originalContent, boolean fromUpdateRule) {
         // Validate contentType and content before updating
         // Only update contentType and content if both are provided and both are valid
         boolean shouldUpdateContent = false;
-        
+
         // Determine if user provided contentType and content
         boolean userProvidedContentType;
         boolean userProvidedContent;
-        
+
         if (fromUpdateRule) {
             // Called from updateRule
             // User provided contentType if originalContentType is not null
@@ -246,7 +255,7 @@ public class RuleServiceImpl implements RuleService {
             userProvidedContentType = newRule.getContentType() != null;
             userProvidedContent = newRule.getContent() != null && !newRule.getContent().trim().isEmpty();
         }
-        
+
         // If both contentType and content are provided by user, validate both
         if (userProvidedContentType && userProvidedContent) {
             // Validate contentType
@@ -312,10 +321,9 @@ public class RuleServiceImpl implements RuleService {
         ruleMapper.deleteById(ruleId);
 
         // Delete execution event relations for this rule
-        LambdaQueryWrapper<ExecutionEventRelationEntity> deleteWrapper = new LambdaQueryWrapper<>();
-        deleteWrapper.eq(ExecutionEventRelationEntity::getItemType, ExecutionItemTypeEnum.RULE.getId())
-                .eq(ExecutionEventRelationEntity::getItemId, ruleId);
-        executionEventRelationMapper.delete(deleteWrapper);
+        LambdaQueryWrapper<ExecutionArrangementEntity> deleteWrapper = new LambdaQueryWrapper<>();
+        deleteWrapper.eq(ExecutionArrangementEntity::getRuleId, ruleId);
+        executionArrangementMapper.delete(deleteWrapper);
 
         log.info("Rule deleted: ruleId={}, ruleName={}", ruleId, rule.getName());
     }
@@ -325,133 +333,129 @@ public class RuleServiceImpl implements RuleService {
      *
      * @param oldRule the old rule state
      * @param newRule the new rule state
-     * @return the ruleGroupId if rule is added to a group, null if removed from group or no group change
      */
-    private Long handleRuleStatusChange(Rule oldRule, Rule newRule) {
+    private void changeRuleStatus(Rule oldRule, Rule newRule) {
         RuleStatusEnum oldStatus = oldRule.getRuleStatus();
         RuleStatusEnum newStatus = newRule.getRuleStatus();
 
-        // Case 1: Rule changes from other status to AB_TEST
-        // Business Logic 1 is handled in RuleGroupService.createRuleGroup() and addRuleToGroup()
-        if (oldStatus != RuleStatusEnum.AB_TEST && newStatus == RuleStatusEnum.AB_TEST) {
-            return changeRuleStatusToABTest(newRule);
+        // Case 1: Rule changes from other status to ONLINE
+        // When a rule becomes ONLINE, create a rule group for each event associated with the rule
+        if (oldStatus != RuleStatusEnum.ONLINE && newStatus == RuleStatusEnum.ONLINE) {
+            changeRuleStatusToOnline(newRule);
+            return;
         }
 
-        // Case 2: Rule changes from AB_TEST to other status (OFFLINE, TEST, FULL)
-        // Business Logic 3 and 4 are handled in removeRuleFromGroup()
-        if (oldStatus == RuleStatusEnum.AB_TEST && newStatus != RuleStatusEnum.AB_TEST) {
-            return changeRuleStatusFromABTest(oldRule, newRule, newStatus);
-        }
-
-        // No status change or no group change, return null
-        return null;
-    }
-
-    private Long changeRuleStatusToABTest(Rule newRule) {
-        if (newRule.getRuleGroupId() != null && newRule.getRuleGroupId() != 0L) {
-            // Check if the group actually exists before trying to add to it
-            // If group doesn't exist (e.g., was deleted when rule changed from AB_TEST to FULL),
-            // create a new group instead
-            RuleGroupEntity groupEntity = ruleGroupMapper.selectById(newRule.getRuleGroupId());
-            if (groupEntity != null) {
-                // Add to existing group (Business Logic 2 is handled in addRuleToGroup)
-                ruleGroupService.addRuleToGroup(newRule, newRule.getRuleGroupId());
-                // Return the groupId directly from the parameter
-                return newRule.getRuleGroupId();
+        // Case 2: Rule changes from ONLINE to any other status (not ONLINE)
+        // When a rule leaves ONLINE status, remove it from rule groups
+        // For OFFLINE, also delete event associations
+        if (oldStatus == RuleStatusEnum.ONLINE && newStatus != RuleStatusEnum.ONLINE) {
+            if (newStatus == RuleStatusEnum.OFFLINE) {
+                changeRuleStatusFromOnlineToOffline(oldRule);
             } else {
-                // Group doesn't exist, clear ruleGroupId and create new group
-                newRule.setRuleGroupId(null);
-                RuleGroup createdGroup = ruleGroupService.createRuleGroup(newRule);
-                // Return the newly created group's ID
-                return createdGroup != null ? createdGroup.getId() : null;
+                // For other statuses (TEST, GRAY), just remove from groups but keep event associations
+                changeRuleStatusFromOnlineToOther(oldRule);
             }
-        } else {
-            // Create new group (Business Logic 1 is handled in createRuleGroup)
-            RuleGroup createdGroup = ruleGroupService.createRuleGroup(newRule);
-            // Return the newly created group's ID
-            return createdGroup != null ? createdGroup.getId() : null;
         }
     }
 
-    private Long changeRuleStatusFromABTest(Rule oldRule, Rule newRule, RuleStatusEnum newStatus) {
-        // Validate target status
-        if (newStatus != RuleStatusEnum.OFFLINE && newStatus != RuleStatusEnum.FULL) {
-            throw new IllegalArgumentException(String.format("Invalid status transition from AB_TEST to %s. Allowed target statuses: OFFLINE, FULL", newStatus));
+    private void changeRuleStatusToOnline(Rule newRule) {
+        // Get all event IDs associated with this rule (with group_id = 0, standalone rules)
+        LambdaQueryWrapper<ExecutionArrangementEntity> arrangementQueryWrapper = new LambdaQueryWrapper<>();
+        arrangementQueryWrapper.eq(ExecutionArrangementEntity::getGroupId, 0)
+                .eq(ExecutionArrangementEntity::getRuleId, newRule.getId());
+        List<ExecutionArrangementEntity> arrangementEntityList = executionArrangementMapper.selectList(arrangementQueryWrapper);
+
+        if (arrangementEntityList == null || arrangementEntityList.isEmpty()) {
+            throw new IllegalArgumentException("Rule must be associated with at least one event before transitioning to ONLINE status");
         }
-        // Set other rules in group to OFFLINE
-        if (newStatus == RuleStatusEnum.FULL) {
-            ruleGroupService.setOtherRulesOffline(oldRule);
+
+        // Create rule group for each event
+        for (ExecutionArrangementEntity arrangementEntity : arrangementEntityList) {
+            Integer eventId = arrangementEntity.getEventId();
+            if (eventId == null) {
+                log.warn("Skipping arrangement with null eventId for rule {}", newRule.getId());
+                continue;
+            }
+            // create rule group
+            RuleGroup ruleGroup = ruleGroupService.createRuleGroup(newRule, eventId);
+            // update execution arrangement
+            arrangementEntity.setGroupId(ruleGroup.getId());
+            arrangementEntity.setTimeOnUpdate();
+            executionArrangementMapper.updateByPrimaryKey(arrangementEntity);
         }
-        // Delete the rule group and all its associations
-        ruleGroupService.doDeleteRuleGroup(oldRule.getRuleGroupId());
-        // Return 0 to indicate rule was removed from group
-        return RuleGroup.DEFAULT_RULE_GROUP_ID;
     }
 
-    @Override
-    @Transactional
-    public void saveExecutionSequence(Long eventId, List<Long> ruleIds) {
-        if (eventId == null) {
-            throw new IllegalArgumentException("EventId cannot be null");
+    private void changeRuleStatusFromOnlineToOffline(Rule oldRule) {
+        // Get all records from table x associated with this rule (with non-zero group_id)
+        LambdaQueryWrapper<ExecutionArrangementEntity> groupQueryWrapper = new LambdaQueryWrapper<>();
+        groupQueryWrapper.eq(ExecutionArrangementEntity::getRuleId, oldRule.getId())
+                .ne(ExecutionArrangementEntity::getGroupId, 0);
+        List<ExecutionArrangementEntity> relations = executionArrangementMapper.selectList(groupQueryWrapper);
+
+        if (relations != null && !relations.isEmpty()) {
+            doChangeRuleStatusFromOnline(relations);
         }
 
-        // Get old relations from database
-        LambdaQueryWrapper<ExecutionEventRelationEntity> queryWrapper = new LambdaQueryWrapper<>();
-        queryWrapper.eq(ExecutionEventRelationEntity::getEventId, eventId)
-                .eq(ExecutionEventRelationEntity::getItemType, ExecutionItemTypeEnum.RULE.getId());
-        List<ExecutionEventRelationEntity> oldRelations = executionEventRelationMapper.selectList(queryWrapper);
-
-        Set<Long> oldRuleIds = oldRelations != null
-                ? oldRelations.stream().map(ExecutionEventRelationEntity::getItemId).collect(Collectors.toSet())
-                : Collections.emptySet();
-
-        Set<Long> newRuleIds = ruleIds != null ? new HashSet<>(ruleIds) : Collections.emptySet();
-
-        // Remove eventId associations for rules that are no longer in the sequence
-        for (Long ruleId : oldRuleIds) {
-            if (!newRuleIds.contains(ruleId)) {
-                Rule rule = getRuleById(ruleId);
-                if (rule != null && rule.getRuleStatus() == RuleStatusEnum.AB_TEST && rule.getRuleGroupId() != null) {
-                    // Remove group-eventId association
-                    ruleGroupService.removeGroupEventIdAssociation(rule.getRuleGroupId(), eventId);
-                }
-            }
-        }
-
-        // Delete old relations for this eventId
-        LambdaQueryWrapper<ExecutionEventRelationEntity> deleteWrapper = new LambdaQueryWrapper<>();
-        deleteWrapper.eq(ExecutionEventRelationEntity::getEventId, eventId);
-        executionEventRelationMapper.delete(deleteWrapper);
-
-        // Insert new relations
-        if (ruleIds != null && !ruleIds.isEmpty()) {
-            long currentTime = System.currentTimeMillis() / 1000;
-            for (int i = 0; i < ruleIds.size(); i++) {
-                ExecutionEventRelationEntity relationEntity = new ExecutionEventRelationEntity();
-                relationEntity.setEventId(eventId);
-                relationEntity.setItemType(ExecutionItemTypeEnum.RULE.getId());
-                relationEntity.setItemId(ruleIds.get(i));
-                relationEntity.setExecutionOrder(i + 1);
-                relationEntity.setCt((int) currentTime);
-                relationEntity.setUt((int) currentTime);
-                executionEventRelationMapper.insert(relationEntity);
-
-                // Add eventId associations for new rules
-                Long ruleId = ruleIds.get(i);
-                if (!oldRuleIds.contains(ruleId)) {
-                    Rule rule = getRuleById(ruleId);
-                    if (rule != null) {
-                        // If rule is in AB_TEST status and has a group, also associate the group
-                        if (rule.getRuleStatus() == RuleStatusEnum.AB_TEST && rule.getRuleGroupId() != null) {
-                            ruleGroupService.associateGroupWithEventId(rule.getRuleGroupId(), eventId);
-                        }
-                    }
-                }
-            }
-        }
-
-        log.info("Execution event relation saved: eventId={}, ruleIds={}", eventId, ruleIds);
+        // Delete all event-rule associations (with group_id = 0)
+        LambdaQueryWrapper<ExecutionArrangementEntity> eventDeleteWrapper = new LambdaQueryWrapper<>();
+        eventDeleteWrapper.eq(ExecutionArrangementEntity::getRuleId, oldRule.getId())
+                .eq(ExecutionArrangementEntity::getGroupId, 0);
+        executionArrangementMapper.delete(eventDeleteWrapper);
     }
+
+    /**
+     * Handle rule status change from ONLINE to other status (TEST, GRAY, etc.)
+     * Removes the rule from rule groups but keeps event associations
+     *
+     * @param oldRule the old rule state
+     */
+    private void changeRuleStatusFromOnlineToOther(Rule oldRule) {
+        log.info("Removing rule {} from groups (transitioning from ONLINE to other status)", oldRule.getId());
+        // Get all records from table x associated with this rule (with non-zero group_id)
+        LambdaQueryWrapper<ExecutionArrangementEntity> groupQueryWrapper = new LambdaQueryWrapper<>();
+        groupQueryWrapper.eq(ExecutionArrangementEntity::getRuleId, oldRule.getId())
+                .ne(ExecutionArrangementEntity::getGroupId, 0);
+        List<ExecutionArrangementEntity> relations = executionArrangementMapper.selectList(groupQueryWrapper);
+        log.info("Found {} relations with non-zero group_id for rule {}",
+                relations != null ? relations.size() : 0, oldRule.getId());
+
+        if (relations == null || relations.isEmpty()) {
+            return;
+        }
+        doChangeRuleStatusFromOnline(relations);
+    }
+
+    private void doChangeRuleStatusFromOnline(List<ExecutionArrangementEntity> arrangementEntityList) {
+        // Group by groupId to handle each group
+        Map<Long, List<ExecutionArrangementEntity>> arrangementEntityMap = arrangementEntityList.stream()
+                .collect(Collectors.groupingBy(ExecutionArrangementEntity::getGroupId));
+
+        for (Map.Entry<Long, List<ExecutionArrangementEntity>> entry : arrangementEntityMap.entrySet()) {
+            Long groupId = entry.getKey();
+            // Update records in table x: set group_id from groupId to 0 (standalone rules)
+            for (ExecutionArrangementEntity arrangementEntity : entry.getValue()) {
+                LambdaUpdateWrapper<ExecutionArrangementEntity> updateWrapper = new LambdaUpdateWrapper<>();
+                updateWrapper.eq(ExecutionArrangementEntity::getEventId, arrangementEntity.getEventId())
+                        .eq(ExecutionArrangementEntity::getRuleId, arrangementEntity.getRuleId())
+                        .set(ExecutionArrangementEntity::getGroupId, 0L)
+                        .set(ExecutionArrangementEntity::getAbRatio, 0)
+                        .set(ExecutionArrangementEntity::getUt, (int) System.currentTimeMillis() / 1000);
+                executionArrangementMapper.update(null, updateWrapper);
+            }
+
+            // Check if group is empty, if so, delete the group
+            RuleGroup group = ruleGroupService.getRuleGroup(groupId);
+            if (group == null) {
+                log.warn("Rule group not found when removing rule from group: groupId={}", groupId);
+                return;
+            }
+            if (group.getRules() != null && !group.getRules().isEmpty()) {
+                continue;
+            }
+            ruleGroupService.deleteRuleGroup(groupId);
+        }
+    }
+
 
     /**
      * Find RuleExecutor by ContentTypeEnum
@@ -470,159 +474,289 @@ public class RuleServiceImpl implements RuleService {
     }
 
     @Override
-    public List<ExecutionItem> getExecutionItemsByEventId(Long eventId) {
-        // Query execution event relations from database
-        LambdaQueryWrapper<ExecutionEventRelationEntity> queryWrapper = new LambdaQueryWrapper<>();
-        queryWrapper.eq(ExecutionEventRelationEntity::getEventId, eventId)
-                .orderByAsc(ExecutionEventRelationEntity::getExecutionOrder);
-        List<ExecutionEventRelationEntity> relationEntities = executionEventRelationMapper.selectList(queryWrapper);
-        if (relationEntities == null || relationEntities.isEmpty()) {
+    public List<ExecutionItem> getExecutionItemsByEventId(@NotNull Integer eventId, @NotNull RuleExecutionContext context) {
+        // Get arguments
+        Long userId = context.getUserId();
+        Integer userHashInt = (Integer) context.getArgument(ARG_USER_HASH_INT).getValue();
+        if (userId == null || userHashInt == null) {
+            log.warn("User ID is null in context: {}", context);
+            return Collections.emptyList();
+        }
+
+        // Step 1: Query all records from table x associated with event_id
+        List<ExecutionArrangement> arrangementList = eventService.getExecutionArrangements(eventId);
+        if (arrangementList == null || arrangementList.isEmpty()) {
             log.warn("No execution event relations found for eventId: {}", eventId);
             return Collections.emptyList();
         }
 
-        // Collect rule IDs and group IDs
-        Set<Long> ruleIds = new HashSet<>();
-        Set<Long> groupIds = new HashSet<>();
-        for (ExecutionEventRelationEntity relationEntity : relationEntities) {
-            ExecutionItemTypeEnum itemType = relationEntity.getItemTypeEnum();
-            Long itemId = relationEntity.getItemId();
-            if (itemType == ExecutionItemTypeEnum.RULE) {
-                ruleIds.add(itemId);
-            } else if (itemType == ExecutionItemTypeEnum.RULE_GROUP) {
-                groupIds.add(itemId);
-            }
+        // Step 2: Build ruleIds array using exe_order as array index
+        DraftResult draftResult = draftExecutionItemIds(eventId, arrangementList);
+        Long[] executionQueue = draftResult.getExecutionQueue();
+        Map<Long, List<ExecutionArrangement>> groupRulesMap = draftResult.getGroupRuleMap();
+        Map<Long, Long> ruleGroupMap = draftResult.getRuleGroupMap();
+
+        // Step 3: Select rule from each group based on userHashInt
+        selectRuleFromGroupByRatio(eventId, userId, userHashInt, groupRulesMap, executionQueue);
+
+        // Step 4: Collect all rule IDs from array (excluding nulls)
+        List<Long> finalRuleIds = Arrays.stream(executionQueue)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toList());
+        if (finalRuleIds.isEmpty()) {
+            log.warn("No rules to execute for eventId: {}", eventId);
+            return Collections.emptyList();
         }
 
-        // Get allowed rule statuses (used for both rules and rule groups)
-        Set<RuleStatusEnum> allowedStatuses = ruleStatusConfig.getAllowedRuleStatuses();
+        // Step 5: Batch query rules and rule contents
+        Map<Long, Rule> ruleMap = batchGetRuleWithContent(new HashSet<>(finalRuleIds));
 
-        // Batch load rules from database
-        Map<Long, Rule> ruleMap = new HashMap<>();
-        if (!ruleIds.isEmpty()) {
-            ruleMap = getRulesOnStatus(ruleIds, allowedStatuses);
-        }
-
-        // Batch load rule groups from database
-        Map<Long, RuleGroup> groupMap = new HashMap<>();
-        if (!groupIds.isEmpty()) {
-            groupMap = getRuleGroupsWithRules(groupIds, allowedStatuses);
-        }
-
-        // Process each relation entity and build execution items
+        // Step 6: Build execution items in order
         List<ExecutionItem> items = new ArrayList<>();
-        for (ExecutionEventRelationEntity relationEntity : relationEntities) {
-            ExecutionItemTypeEnum itemType = relationEntity.getItemTypeEnum();
-            Long itemId = relationEntity.getItemId();
-
-            if (itemType == ExecutionItemTypeEnum.RULE) {
-                Rule rule = ruleMap.get(itemId);
-                // Skip rules that are not in ruleMap (filtered out by status)
-                if (rule == null) {
-                    continue;
-                }
-                items.add(ExecutionItem.forRule(rule));
-            } else if (itemType == ExecutionItemTypeEnum.RULE_GROUP) {
-                // Direct rule group reference
-                RuleGroup group = groupMap.get(itemId);
-                if (group == null) {
-                    continue;
-                }
-                items.add(ExecutionItem.forRuleGroup(group));
+        for (Long ruleId : finalRuleIds) {
+            Rule rule = ruleMap.get(ruleId);
+            if (rule == null) {
+                throw new IllegalStateException("Rule not found or not in allowed status for ruleId: " + ruleId);
             }
+            Long groupId = null;
+            if (ruleGroupMap.containsKey(ruleId)) {
+                groupId = ruleGroupMap.get(ruleId);
+            }
+            items.add(ExecutionItem.forRule(rule, groupId));
         }
 
         return items;
     }
 
-    private Map<Long, Rule> getRulesOnStatus(Set<Long> ruleIds, Set<RuleStatusEnum> allowedStatuses) {
+    @Data
+    static class DraftResult {
+        private Long[] executionQueue;
+        private Map<Long, List<ExecutionArrangement>> groupRuleMap;
+        private Map<Long, Long> ruleGroupMap;
+
+        DraftResult(int queueSize) {
+            this.executionQueue = new Long[queueSize];
+            this.groupRuleMap = new HashMap<>();
+            this.ruleGroupMap = new HashMap<>();
+        }
+
+        void addArrangementInQueue(ExecutionArrangement arrangement) {
+            Integer exeOrder = arrangement.getExeOrder();
+            if (exeOrder == null || exeOrder < 0 || exeOrder >= executionQueue.length) {
+                throw new IllegalStateException("Invalid exe_order for arrangement: " + arrangement);
+            }
+            Long ruleId = arrangement.getRuleId();
+            if (ruleId == null) {
+                throw new IllegalStateException("Null ruleId for standalone rule: " + arrangement);
+            }
+            executionQueue[exeOrder] = ruleId;
+        }
+
+        void addArrangementInGroup(ExecutionArrangement arrangement) {
+            Long groupId = arrangement.getGroupId();
+            if (groupId == null) {
+                return;
+            }
+            groupRuleMap.computeIfAbsent(groupId, k -> new ArrayList<>()).add(arrangement);
+        }
+
+        void addRuleGroupMapping(ExecutionArrangement arrangement) {
+            ruleGroupMap.put(arrangement.getRuleId(), arrangement.getGroupId());
+        }
+    }
+
+    private DraftResult draftExecutionItemIds(Integer eventId,
+                                              List<ExecutionArrangement> arrangementList) {
+        int maxExeOrder = arrangementList.stream()
+                .mapToInt(entity -> entity.getExeOrder() != null ? entity.getExeOrder() : 0)
+                .max()
+                .orElse(-1);
+        if (maxExeOrder < 0 || maxExeOrder != (arrangementList.size() - 1)) {
+            throw new IllegalStateException("Invalid exe_order values for eventId: " + eventId);
+        }
+
+        DraftResult result = new DraftResult(maxExeOrder + 1);
+        // Separate records: group_id = 0 (standalone rules) and group_id != 0 (rules in groups)
+        for (ExecutionArrangement arrangement : arrangementList) {
+            Long groupId = arrangement.getGroupId();
+            if (groupId == null || groupId == 0) {
+                // Standalone rule, add to array directly
+                result.addArrangementInQueue(arrangement);
+            } else {
+                // Rule in group, group by group_id
+                result.addArrangementInGroup(arrangement);
+            }
+            result.addRuleGroupMapping(arrangement);
+        }
+        return result;
+    }
+
+    private void selectRuleFromGroupByRatio(Integer eventId,
+                                            Long userId,
+                                            Integer userHashInt,
+                                            Map<Long, List<ExecutionArrangement>> groupArrangmentMap,
+                                            Long[] executionItemIds) {
+        for (Map.Entry<Long, List<ExecutionArrangement>> entry : groupArrangmentMap.entrySet()) {
+            Long groupId = entry.getKey();
+            if (groupId == null) {
+                throw new IllegalStateException("Invalid groupId (null) in groupRulesMap");
+            }
+            List<ExecutionArrangement> arrangementListInGroup = entry.getValue();
+            if (arrangementListInGroup == null || arrangementListInGroup.isEmpty()) {
+                throw new IllegalStateException("Empty arrangement list for groupId: " + groupId);
+            }
+            // Build rule_id -> ab_ratio map for this group
+            Map<Long, Integer> ruleRatioMap = new HashMap<>();
+            for (ExecutionArrangement arrangement : arrangementListInGroup) {
+                Long ruleId = arrangement.getRuleId();
+                Integer abRatio = arrangement.getAbRatio() != null ? arrangement.getAbRatio() : 0;
+                ruleRatioMap.put(ruleId, abRatio);
+            }
+
+            Long selectedRuleId = getCachedRuleId(userId, userHashInt, eventId, groupId, ruleRatioMap);
+            if (selectedRuleId == null) {
+                // leave the queue blank if no rule selected
+                continue;
+            }
+            // Put selected rule_id into array at exe_order position
+            try {
+                setExecutionQueue(arrangementListInGroup, selectedRuleId, executionItemIds);
+            } catch (IllegalStateException e) {
+                throw new IllegalStateException(e.getMessage() + ", group=" + groupId);
+            }
+        }
+    }
+
+    private Long getCachedRuleId(Long userId,
+                                 Integer userHashInt,
+                                 Integer eventId,
+                                 Long groupId,
+                                 Map<Long, Integer> ruleRatioMap) {
+        // Check if caching is enabled
+        if (ruleSelectionCacheService == null) {
+            log.error("RuleSelectionCacheService is not configured, skipping cache for rule selection");
+            return null;
+        }
+        // If in cache, return cached value
+        Long selectedRuleId = ruleSelectionCacheService.get(userId, eventId, groupId);
+        if (selectedRuleId != null) {
+            if (log.isDebugEnabled()) {
+                log.debug("[drawRule] hit cache: userId={}, eventId={}, groupId={}, selectedRuleId={}",
+                        userId, eventId, groupId, selectedRuleId);
+            }
+            return selectedRuleId;
+        }
+        // If not in cache or invalid, select based on userHashInt
+        selectedRuleId = selectRuleFromGroupByRatio(ruleRatioMap, userHashInt);
+        if (selectedRuleId == null) {
+            // no-rule-selected will not be cached
+            if (log.isDebugEnabled()) {
+                log.debug("[drawRule] no rule selected: userId={}, eventId={}, groupId={}",
+                        userId, eventId, groupId);
+            }
+            return null;
+        }
+        // Cache the selection
+        ruleSelectionCacheService.put(userId, eventId, groupId, selectedRuleId);
+
+        return selectedRuleId;
+    }
+
+    /**
+     * Select rule from group based on probability distribution (ab_ratio)
+     *
+     * @param ruleRatioMap map of rule_id -> ab_ratio
+     * @param userHashInt  hash integer in range [1, 100]
+     * @return selected rule ID, or null if no rule should be executed
+     * todo: userHashInt做一次随机偏移（每一条规则有一个固定的偏移值），以均衡不同用户的分布
+     */
+    private Long selectRuleFromGroupByRatio(@NotEmpty Map<Long, Integer> ruleRatioMap, @NotNull Integer userHashInt) {
+        // Calculate total ratio
+        int totalRatio = ruleRatioMap.values().stream()
+                .mapToInt(ratio -> ratio != null ? ratio : 0)
+                .sum();
+        // Validate total ratio
+        if (totalRatio < 0) {
+            throw new IllegalArgumentException("Total ratio must be positive in rule group: " + ruleRatioMap);
+        }
+
+        // Select rule based on probability distribution
+        // Sort rule IDs to ensure consistent ordering
+        List<Long> sortedRuleIds = new ArrayList<>(ruleRatioMap.keySet());
+        sortedRuleIds.sort(Long::compareTo);
+
+        int cumulativeRatio = 0;
+        for (Long ruleId : sortedRuleIds) {
+            Integer ratio = ruleRatioMap.get(ruleId);
+            if (ratio == null) {
+                continue;
+            }
+            cumulativeRatio += ratio;
+            if (userHashInt <= cumulativeRatio) {
+                return ruleId;
+            }
+        }
+
+        if (log.isDebugEnabled()) {
+            log.debug("[drawRule] bypass due to unclosed totalRatio: userHashInt={}, totalRatio={}",
+                    userHashInt, totalRatio);
+        }
+        return null;
+    }
+
+    /**
+     * Set execution item into execution queue
+     * It is NOT thread safe, should be called in single-threaded context
+     *
+     * @param arrangementListInGroup arrangements in the group
+     * @param selectedItemId         the selected rule ID
+     * @param executionQueue         the execution queue
+     */
+    private void setExecutionQueue(List<ExecutionArrangement> arrangementListInGroup,
+                                   Long selectedItemId,
+                                   Long[] executionQueue) {
+        Integer index = arrangementListInGroup.get(0).getExeOrder();
+        if (index == null || index < 0 || index >= executionQueue.length) {
+            throw new IllegalStateException("[drawRule] invalid exe_order");
+        }
+        for (ExecutionArrangement arrangement : arrangementListInGroup) {
+            if (!arrangement.getRuleId().equals(selectedItemId)) {
+                continue;
+            }
+            Integer exeOrder = arrangement.getExeOrder();
+            if (exeOrder == null || !exeOrder.equals(index)) {
+                throw new IllegalStateException("[drawRule] exe_order mismatch for selected rule");
+            }
+            executionQueue[index] = selectedItemId;
+            break;
+        }
+        // validate that selected rule was placed
+        if (executionQueue[index] == null || !executionQueue[index].equals(selectedItemId)) {
+            throw new IllegalStateException("[drawRule] selected rule not placed in ruleIds array");
+        }
+    }
+
+
+    private Map<Long, Rule> batchGetRuleWithContent(Set<Long> ruleIds) {
         // Batch load rule entities
         List<RuleEntity> ruleEntities = ruleMapper.selectBatchIds(new ArrayList<>(ruleIds));
         if (ruleEntities == null || ruleEntities.isEmpty()) {
             log.warn("No rules found for IDs: {}", ruleIds);
             return new HashMap<>();
         }
-        // Filter rule entities by allowed statuses
-        List<RuleEntity> allowedRuleEntities = ruleEntities.stream()
-                .filter(entity -> allowedStatuses.contains(entity.getRuleStatusEnum()))
-                .collect(Collectors.toList());
-        if (allowedRuleEntities.isEmpty()) {
-            log.warn("No rules found with allowed statuses: {} for IDs: {}", allowedStatuses, ruleIds);
-            return new HashMap<>();
-        }
 
-        // Get allowed rule IDs
-        Set<Long> allowedRuleIds = allowedRuleEntities.stream()
+        // Get rule IDs
+        Set<Long> foundRuleIds = ruleEntities.stream()
                 .map(RuleEntity::getId)
+                .filter(Objects::nonNull)
                 .collect(Collectors.toSet());
 
         // Batch load rule contents
-        Map<Long, String> contentMap = batchGetContentMap(allowedRuleIds);
+        Map<Long, String> contentMap = batchGetContentMap(foundRuleIds);
 
-        return buildRuleMap(allowedRuleEntities, contentMap);
+        return buildRuleMap(ruleEntities, contentMap);
     }
 
-    private Map<Long, RuleGroup> getRuleGroupsWithRules(Set<Long> groupIds, Set<RuleStatusEnum> allowedStatuses) {
-        // Batch load rule group entities
-        List<RuleGroupEntity> groupEntities = ruleGroupMapper.selectBatchIds(new ArrayList<>(groupIds));
-        if (groupEntities == null || groupEntities.isEmpty()) {
-            log.warn("No rule groups found for IDs: {}", groupIds);
-            return new HashMap<>();
-        }
-        // Batch load rule group relations
-        LambdaQueryWrapper<RuleGroupRuleRelationEntity> relationQueryWrapper = new LambdaQueryWrapper<>();
-        relationQueryWrapper.in(RuleGroupRuleRelationEntity::getGroupId, groupIds);
-        List<RuleGroupRuleRelationEntity> allRelations = ruleGroupRuleRelationMapper.selectList(relationQueryWrapper);
-        // Build relations map: groupId -> List<RuleGroupRuleRelationEntity>
-        Map<Long, List<RuleGroupRuleRelationEntity>> relationsMap = allRelations != null
-                ? allRelations.stream()
-                .collect(Collectors.groupingBy(RuleGroupRuleRelationEntity::getGroupId))
-                : Collections.emptyMap();
-
-        // Collect all rule IDs from all groups
-        Set<Long> allRuleIds = allRelations != null
-                ? allRelations.stream()
-                .map(RuleGroupRuleRelationEntity::getRuleId)
-                .collect(Collectors.toSet())
-                : Collections.emptySet();
-
-        // Batch load rule entities and contents, filtered by allowed statuses
-        Map<Long, Rule> ruleMap = new HashMap<>();
-        if (!allRuleIds.isEmpty()) {
-            ruleMap = getRulesOnStatus(allRuleIds, allowedStatuses);
-        }
-
-        Map<Long, RuleGroup> groupMap = new HashMap<>();
-        // Convert entities to models and set rules map
-        for (RuleGroupEntity groupEntity : groupEntities) {
-            Map<Long, List<RuleGroupRuleRelationEntity>> groupRelationsMap = new HashMap<>();
-            List<RuleGroupRuleRelationEntity> groupRelations = relationsMap.getOrDefault(groupEntity.getId(), Collections.emptyList());
-            if (!groupRelations.isEmpty()) {
-                groupRelationsMap.put(groupEntity.getId(), groupRelations);
-            }
-            RuleGroup group = ruleGroupStructMapper.entityToModel(groupEntity, groupRelationsMap);
-            if (group == null) {
-                continue;
-            }
-            // Build rules map: ruleId -> Pair<Rule, Integer>
-            Map<Long, Pair<Rule, Integer>> rulesMap = new HashMap<>();
-            if (!groupRelations.isEmpty()) {
-                for (RuleGroupRuleRelationEntity relation : groupRelations) {
-                    Long ruleId = relation.getRuleId();
-                    Rule rule = ruleMap.get(ruleId);
-                    if (rule == null) {
-                        continue;
-                    }
-                    Integer ratio = relation.getAbTestRatio() != null ? relation.getAbTestRatio() : 0;
-                    rulesMap.put(ruleId, Pair.of(rule, ratio));
-                }
-            }
-            group.setRules(rulesMap);
-            groupMap.put(groupEntity.getId(), group);
-        }
-
-        return groupMap;
-    }
 
     private Map<Long, String> batchGetContentMap(Set<Long> allowedRuleIds) {
         List<RuleContentEntity> contentEntities = ruleContentMapper.selectBatchIds(new ArrayList<>(allowedRuleIds));

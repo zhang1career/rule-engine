@@ -12,9 +12,6 @@ spring:
     username: zhang
     password: 123456
     driver-class-name: com.mysql.cj.jdbc.Driver
-    hikari:
-      maximum-pool-size: 5
-      minimum-idle: 1
 
   # Option 2: Use H2 in-memory database (no MySQL required)
   # Uncomment below and comment out MySQL config above
@@ -34,13 +31,22 @@ mybatis-plus:
   configuration:
     map-underscore-to-camel-case: true
     log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+    log-prefix: "DAO."
   global-config:
     db-config:
       id-type: auto
+  # 开启 MyBatis-Plus 的 SQL 分析和性能监控
+  mapper-locations: classpath*:/mapper/**/*.xml
 
 logging:
   level:
     root: WARN
     lab.zhang.rule: DEBUG
     org.springframework.jdbc: DEBUG
+    # MyBatis-Plus SQL 日志
+    com.baomidou.mybatisplus: DEBUG
+    # MyBatis SQL 日志
+    org.apache.ibatis: DEBUG
+    # 更详细的 SQL 参数和结果日志
+    org.apache.ibatis.logging.stdout.StdOutImpl: DEBUG
 

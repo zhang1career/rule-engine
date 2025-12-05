@@ -1,14 +1,16 @@
 package lab.zhang.rule.rule_engine.controller
 
+
 import lab.zhang.rule.rule_engine.model.Event
-import lab.zhang.rule.rule_engine.entity.ExecutionEventRelationEntity
-import lab.zhang.rule.rule_engine.enums.ExecutionItemTypeEnum
+import lab.zhang.rule.rule_engine.entity.ExecutionArrangementEntity
+import lab.zhang.rule.rule_engine.model.ExecutionArrangement
 import lab.zhang.rule.rule_engine.pojo.dto.EventDTO
-import lab.zhang.rule.rule_engine.pojo.qo.BatchSetExecutionItemsQO
+import lab.zhang.rule.rule_engine.pojo.dto.ExecutionArrangementDTO
+import lab.zhang.rule.rule_engine.pojo.qo.ExecutionArrangementQO
 import lab.zhang.rule.rule_engine.pojo.qo.EventQO
-import lab.zhang.rule.rule_engine.pojo.qo.ExecutionItemQO
 import lab.zhang.rule.rule_engine.service.EventService
 import lab.zhang.rule.rule_engine.struct_mapper.EventStructMapper
+import lab.zhang.rule.rule_engine.struct_mapper.ExecutionArrangementStructMapper
 import org.springframework.http.HttpStatus
 import spock.lang.Specification
 import spock.lang.Unroll
@@ -20,11 +22,13 @@ class EventControllerSpec extends Specification {
 
     def eventService = Mock(EventService)
     def eventStructMapper = Mock(EventStructMapper)
+    def executionArrangementStructMapper = Mock(ExecutionArrangementStructMapper)
     def controller = new EventController()
 
     def setup() {
         controller.eventService = eventService
         controller.eventStructMapper = eventStructMapper
+        controller.executionArrangementStructMapper = executionArrangementStructMapper
     }
 
     @Unroll
@@ -279,21 +283,18 @@ class EventControllerSpec extends Specification {
         given: "prepare execution items"
         def executionItems = []
         itemCount.times { i ->
-            executionItems.add(ExecutionItemQO.builder()
-                    .itemType(ExecutionItemTypeEnum.RULE.getId())
-                    .itemId(10000001L + i)
-                    .build())
+            executionItems.add(10000001L + i)
         }
-        def request = new BatchSetExecutionItemsQO()
-        request.setExecutionItems(executionItems)
+        def request = new ExecutionArrangementQO()
+        request.setRules(executionItems)
 
         when: "batch set execution items"
-        def response = controller.batchSetExecutionItems(eventId, request)
+        def response = controller.setExecutionArrangements(eventId, request)
 
         then: "should set execution items successfully"
         // Note: Database existence validation is now handled by @ValidExecutionItemExists annotation
         // In unit tests, validation is skipped if Validator dependencies are not available
-        1 * eventService.batchSetExecutionItems(eventId, executionItems)
+        1 * eventService.setExecutionArrangements(eventId, executionItems)
         response.statusCode == HttpStatus.OK
         response.body.code == 0
         response.body.msg == "success"
@@ -309,14 +310,14 @@ class EventControllerSpec extends Specification {
     @Unroll
     def "test batchSetExecutionItems - empty list removes all items - eventId: #eventId"() {
         given: "prepare empty execution items"
-        def request = new BatchSetExecutionItemsQO()
-        request.setExecutionItems([])
+        def request = new ExecutionArrangementQO()
+        request.setRules([])
 
         when: "batch set empty execution items"
-        def response = controller.batchSetExecutionItems(eventId, request)
+        def response = controller.setExecutionArrangements(eventId, request)
 
         then: "should remove all execution items"
-        1 * eventService.batchSetExecutionItems(eventId, [])
+        1 * eventService.setExecutionArrangements(eventId, [])
         response.statusCode == HttpStatus.OK
         response.body.code == 0
 
@@ -351,31 +352,44 @@ class EventControllerSpec extends Specification {
 
     @Unroll
     def "test getExecutionItems - eventId: #eventId, relationCount: #relationCount"() {
-        given: "prepare execution event relations"
-        def relations = []
+        given: "prepare execution arrangements"
+        def arrangements = []
+        def dtos = []
         relationCount.times { i ->
-            def relation = new ExecutionEventRelationEntity()
-            relation.setEventId(eventId)
-            relation.setItemType(ExecutionItemTypeEnum.RULE.getId())
-            relation.setItemId(10000001L + i)
-            relation.setExecutionOrder(i + 1)
-            relations.add(relation)
+            def arrangement = new ExecutionArrangement()
+            arrangement.setEventId(eventId)
+            arrangement.setRuleId(10000001L + i)
+            arrangement.setGroupId(0L)
+            arrangement.setExeOrder(i)
+            arrangement.setAbRatio(0)
+            arrangements.add(arrangement)
+            
+            def dto = new ExecutionArrangementDTO()
+            dto.setEventId(eventId)
+            dto.setRuleId(10000001L + i)
+            dto.setGroupId(0L)
+            dto.setExeOrder(i)
+            dto.setAbRatio(0)
+            dtos.add(dto)
         }
 
         when: "get execution items"
-        def response = controller.getExecutionItems(eventId)
+        def response = controller.getExecutionArrangements(eventId)
 
         then: "should return execution items"
-        1 * eventService.getExecutionEventRelations(eventId) >> relations
+        1 * eventService.getExecutionArrangements(eventId) >> arrangements
+        relationCount * executionArrangementStructMapper.modelToDTO(_ as ExecutionArrangement) >> { ExecutionArrangement model ->
+            dtos.find { it.ruleId == model.ruleId }
+        }
         response.statusCode == HttpStatus.OK
         response.body.code == 0
         response.body.data.size() == relationCount
 
         where:
         eventId     | relationCount
-        10000001L   | 0
-        10000001L   | 1
-        10000001L   | 3
+        10000001    | 0
+        10000001    | 1
+        10000001    | 3
     }
 }
 

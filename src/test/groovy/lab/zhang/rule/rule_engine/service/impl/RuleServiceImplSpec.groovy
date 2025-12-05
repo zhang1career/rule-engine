@@ -1,10 +1,13 @@
 package lab.zhang.rule.rule_engine.service.impl
 
 
-import lab.zhang.rule.rule_engine.config.RuleStatusConfig
 import lab.zhang.rule.rule_engine.entity.*
 import lab.zhang.rule.rule_engine.enums.ContentTypeEnum
-import lab.zhang.rule.rule_engine.enums.ExecutionItemTypeEnum
+import lab.zhang.rule.rule_engine.model.ExecutionArrangement
+import lab.zhang.rule.rule_engine.model.RuleExecutionContext
+import lab.zhang.rule.rule_engine.constant.EvalArgumentConst
+import lab.zhang.rule.rule_engine.common.TypedValue
+import lab.zhang.rule.rule_engine.enums.ValueTypeEnum
 import lab.zhang.rule.rule_engine.enums.RuleStatusEnum
 import lab.zhang.rule.rule_engine.executor.impl.ApiQueryRuleExecutor
 import lab.zhang.rule.rule_engine.executor.impl.ExpressionRuleExecutor
@@ -13,17 +16,11 @@ import lab.zhang.rule.rule_engine.executor.impl.SqlQueryRuleExecutor
 import lab.zhang.rule.rule_engine.mapper.*
 import lab.zhang.rule.rule_engine.model.Rule
 import lab.zhang.rule.rule_engine.model.RuleGroup
-import lab.zhang.rule.rule_engine.pojo.dto.RuleGroupDTO
 import lab.zhang.rule.rule_engine.service.RuleGroupService
-import lab.zhang.rule.rule_engine.struct_mapper.RuleGroupStructMapper
 import lab.zhang.rule.rule_engine.struct_mapper.RuleStructMapper
 import spock.lang.Specification
 import spock.lang.Unroll
 
-import java.util.Collections
-import java.util.HashSet
-
-import static lab.zhang.rule.rule_engine.util.RatioUtil.buildRatioKey
 
 /**
  * RuleService unit test
@@ -34,28 +31,21 @@ class RuleServiceImplSpec extends Specification {
 
     def ruleMapper = Mock(RuleMapper)
     def ruleContentMapper = Mock(RuleContentMapper)
-    def executionEventRelationMapper = Mock(ExecutionEventRelationMapper)
-    def ruleGroupMapper = Mock(RuleGroupMapper)
-    def ruleGroupRuleRelationMapper = Mock(RuleGroupRuleRelationMapper)
+    def executionEventRelationMapper = Mock(ExecutionArrangementMapper)
     def ruleStructMapper = Mock(RuleStructMapper)
-    def ruleGroupStructMapper = Mock(RuleGroupStructMapper)
-    def ruleStatusConfig = Mock(RuleStatusConfig)
     def ruleService = new RuleServiceImpl()
     def ruleGroupService = Mock(RuleGroupService)
+    def ruleSelectionCacheService = Mock(lab.zhang.rule.rule_engine.service.RuleSelectionCacheService)
+    def eventService = Mock(lab.zhang.rule.rule_engine.service.EventService)
 
     def setup() {
         ruleService.ruleMapper = ruleMapper
         ruleService.ruleContentMapper = ruleContentMapper
-        ruleService.executionEventRelationMapper = executionEventRelationMapper
+        ruleService.executionArrangementMapper = executionEventRelationMapper
         ruleService.ruleStructMapper = ruleStructMapper
         ruleService.ruleGroupService = ruleGroupService
-        ruleService.ruleStatusConfig = ruleStatusConfig
-        ruleService.ruleGroupMapper = ruleGroupMapper
-        ruleService.ruleGroupRuleRelationMapper = ruleGroupRuleRelationMapper
-        ruleService.ruleGroupStructMapper = ruleGroupStructMapper
-
-        // Setup default mock for RuleStatusConfig (TEST environment)
-        _ * ruleStatusConfig.getAllowedRuleStatuses() >> Collections.singleton(RuleStatusEnum.TEST)
+        ruleService.ruleSelectionCacheService = ruleSelectionCacheService
+        ruleService.eventService = eventService
 
         // Setup RuleExecutor instances for content validation
         def expressionExecutor = new ExpressionRuleExecutor()
@@ -74,39 +64,12 @@ class RuleServiceImplSpec extends Specification {
                     .name(entity.name != null ? entity.name : "")
                     .contentType(ContentTypeEnum.fromId(entity.contentType))
                     .ruleStatus(RuleStatusEnum.fromId(entity.ruleStatus))
-                    .ruleGroupId(entity.ruleGroupId != null && entity.ruleGroupId != 0L ? entity.ruleGroupId : null)
                     .description(entity.description != null ? entity.description : "")
                     .content("")
                     .build()
         }
 
-        // Setup default mock for ruleGroupStructMapper.entityToModel
-        _ * ruleGroupStructMapper.entityToModel(_ as RuleGroupEntity, _) >> { RuleGroupEntity entity, Map relationsMap ->
-            if (entity == null) {
-                return null
-            }
-            def ruleGroup = new RuleGroup(entity.id != null ? entity.id : 0L)
-            ruleGroup.setRules([:])
-            return ruleGroup
-        }
 
-        // Setup default mock for ruleGroupStructMapper.modelToDTOWithRules to handle null ratiosMap
-        _ * ruleGroupStructMapper.modelToDTOWithRules(_ as RuleGroup, _) >> { RuleGroup group, Map ratiosMap ->
-            def dto = new RuleGroupDTO()
-            dto.id = group != null ? group.id : null
-            dto.rules = [:]
-            if (group != null && group.getRuleIds() != null && !group.getRuleIds().isEmpty() && ratiosMap != null) {
-                Map<Long, Integer> rules = [:]
-                Long groupId = group.getId()
-                for (Long ruleId : group.getRuleIds()) {
-                    String key = buildRatioKey(groupId, ruleId)
-                    Integer ratio = (ratiosMap != null && ratiosMap.containsKey(key) && ratiosMap.get(key) != null) ? ratiosMap.get(key) : 0;
-                    rules.put(ruleId, ratio);
-                }
-                dto.rules = rules
-            }
-            return dto
-        }
     }
 
     // ========== getAllRules() tests ==========
@@ -124,7 +87,7 @@ class RuleServiceImplSpec extends Specification {
     def "test getAllRules - should return all rules"() {
         given: "multiple rules exist"
         def ruleEntity1 = createRuleEntity(1L, RuleStatusEnum.TEST)
-        def ruleEntity2 = createRuleEntity(2L, RuleStatusEnum.FULL)
+        def ruleEntity2 = createRuleEntity(2L, RuleStatusEnum.ONLINE)
         def ruleEntity3 = createRuleEntity(3L, RuleStatusEnum.OFFLINE)
 
         when: "get all rules"
@@ -333,16 +296,40 @@ class RuleServiceImplSpec extends Specification {
         }
         if (fromStatus != toStatus) {
             // Status change handling
-            if (fromStatus != RuleStatusEnum.AB_TEST && toStatus == RuleStatusEnum.AB_TEST) {
-                // Transition to AB_TEST
-                1 * ruleGroupService.createRuleGroup(_) >> {
+            if (fromStatus != RuleStatusEnum.ONLINE && toStatus == RuleStatusEnum.ONLINE) {
+                // Transition to ONLINE - create rule group for each event
+                // Mock executionEventRelationMapper to return event relations
+                1 * executionEventRelationMapper.selectList(_) >> {
+                    def relation = new ExecutionArrangementEntity()
+                    relation.setEventId(1001)
+                    relation.setRuleId(ruleId)
+                    relation.setGroupId(0L)
+                    relation.setExeOrder(0)
+                    relation.setAbRatio(0)
+                    return [relation]
+                }
+                // createRuleGroup now requires eventId parameter
+                1 * ruleGroupService.createRuleGroup(_, 1001) >> {
                     def group = new RuleGroup(10000001L)
                     return group
                 }
-            } else if (fromStatus == RuleStatusEnum.AB_TEST && toStatus != RuleStatusEnum.AB_TEST) {
-                // Transition from AB_TEST
-                1 * ruleGroupService.setOtherRulesOffline(_)
-                1 * ruleGroupService.doDeleteRuleGroup(_)
+            } else if (fromStatus == RuleStatusEnum.ONLINE && toStatus == RuleStatusEnum.OFFLINE) {
+                // Transition from ONLINE to OFFLINE
+                // First, query table x to find all groups this rule belongs to
+                1 * executionEventRelationMapper.selectList(_) >> {
+                    // Return a relation entity to simulate the rule being in a group
+                    def relation = new ExecutionArrangementEntity()
+                    relation.setGroupId(10000001L)
+                    relation.setRuleId(ruleId)
+                    relation.setEventId(1001)
+                    relation.setExeOrder(0)
+                    relation.setAbRatio(50)
+                    return [relation]
+                }
+                // Delete the rule group
+                1 * ruleGroupService.deleteRuleGroup(10000001L)
+                // Delete event-rule relations
+                1 * executionEventRelationMapper.delete(_) >> 1
             }
         }
         1 * ruleStructMapper.modelToEntity(_) >> { Rule r ->
@@ -367,9 +354,8 @@ class RuleServiceImplSpec extends Specification {
         ruleId | fromStatus             | toStatus
         1L     | RuleStatusEnum.TEST    | RuleStatusEnum.TEST
         2L     | RuleStatusEnum.TEST    | RuleStatusEnum.GRAY
-        3L     | RuleStatusEnum.GRAY    | RuleStatusEnum.AB_TEST
-        4L     | RuleStatusEnum.AB_TEST | RuleStatusEnum.FULL
-        5L     | RuleStatusEnum.FULL    | RuleStatusEnum.OFFLINE
+        3L     | RuleStatusEnum.GRAY    | RuleStatusEnum.ONLINE
+        4L     | RuleStatusEnum.ONLINE  | RuleStatusEnum.OFFLINE
     }
 
     def "test updateRule - should throw exception when rule not found"() {
@@ -423,15 +409,11 @@ class RuleServiceImplSpec extends Specification {
         where:
         fromStatus             | toStatus
         RuleStatusEnum.OFFLINE | RuleStatusEnum.GRAY
-        RuleStatusEnum.OFFLINE | RuleStatusEnum.AB_TEST
-        RuleStatusEnum.TEST    | RuleStatusEnum.AB_TEST
-        RuleStatusEnum.TEST    | RuleStatusEnum.FULL
+        RuleStatusEnum.OFFLINE | RuleStatusEnum.ONLINE
+        RuleStatusEnum.TEST    | RuleStatusEnum.ONLINE
         RuleStatusEnum.GRAY    | RuleStatusEnum.TEST
-        RuleStatusEnum.GRAY    | RuleStatusEnum.FULL
-        RuleStatusEnum.AB_TEST | RuleStatusEnum.TEST
-        RuleStatusEnum.AB_TEST | RuleStatusEnum.GRAY
-        RuleStatusEnum.FULL    | RuleStatusEnum.TEST
-        RuleStatusEnum.FULL    | RuleStatusEnum.GRAY
+        RuleStatusEnum.ONLINE  | RuleStatusEnum.TEST
+        RuleStatusEnum.ONLINE  | RuleStatusEnum.GRAY
     }
 
     def "test updateRule - should preserve existing values when new values are null"() {
@@ -635,7 +617,7 @@ class RuleServiceImplSpec extends Specification {
         e.message.contains("can only be deleted when status is OFFLINE")
 
         where:
-        status << [RuleStatusEnum.TEST, RuleStatusEnum.GRAY, RuleStatusEnum.AB_TEST, RuleStatusEnum.FULL]
+        status << [RuleStatusEnum.TEST, RuleStatusEnum.GRAY, RuleStatusEnum.ONLINE]
     }
 
     def "test deleteRule - should throw exception when rule does not exist"() {
@@ -650,122 +632,52 @@ class RuleServiceImplSpec extends Specification {
         thrown(IllegalArgumentException)
     }
 
-    // ========== saveExecutionSequence() tests ==========
-
-    @Unroll
-    def "test saveExecutionSequence - should save execution sequence successfully - eventId: #eventId, ruleIds: #ruleIds"() {
-        given: "rules exist"
-        ruleIds.each { ruleId ->
-            def ruleEntity = createRuleEntity(ruleId, RuleStatusEnum.TEST)
-            1 * ruleMapper.selectById(ruleId) >> ruleEntity
-        }
-
-        when: "save execution sequence"
-        ruleService.saveExecutionSequence(eventId, ruleIds)
-
-        then: "should save execution sequence"
-        1 * executionEventRelationMapper.selectList(_) >> []
-        1 * executionEventRelationMapper.delete(_) >> 1
-        ruleIds.size() * executionEventRelationMapper.insert(_) >> 1
-
-        where:
-        eventId | ruleIds
-        1001L   | [1L, 2L]
-        1002L   | [1L, 2L, 3L]
-        1003L   | [1L]
-    }
-
-    def "test saveExecutionSequence - should throw exception when eventId is null"() {
-        when: "save execution sequence with null eventId"
-        ruleService.saveExecutionSequence(null, [1L])
-
-        then: "should throw IllegalArgumentException"
-        thrown(IllegalArgumentException)
-    }
-
-    def "test saveExecutionSequence - should handle empty ruleIds list"() {
-        given: "eventId"
-        def eventId = 1001L
-
-        when: "save execution sequence with empty ruleIds"
-        ruleService.saveExecutionSequence(eventId, [])
-
-        then: "should delete old relations but not insert new ones"
-        1 * executionEventRelationMapper.selectList(_) >> []
-        1 * executionEventRelationMapper.delete(_) >> 1
-        0 * executionEventRelationMapper.insert(_)
-    }
-
-    def "test saveExecutionSequence - should remove old relations and add new ones"() {
-        given: "old and new ruleIds"
-        def eventId = 1001L
-        def oldRuleIds = [1L, 2L]
-        def newRuleIds = [2L, 3L]
-
-        def oldRelations = []
-        oldRuleIds.eachWithIndex { ruleId, index ->
-            def entity = new ExecutionEventRelationEntity()
-            entity.eventId = eventId
-            entity.itemId = ruleId
-            entity.itemType = ExecutionItemTypeEnum.RULE.getId()
-            entity.executionOrder = index + 1
-            oldRelations.add(entity)
-        }
-
-        // Only ruleId=1L is removed (in oldRuleIds but not in newRuleIds), so getRuleById(1L) will be called
-        def rule1Entity = createRuleEntity(1L, RuleStatusEnum.TEST)
-        def rule1ContentEntity = createContentEntity(1L)
-
-        when: "save execution sequence"
-        ruleService.saveExecutionSequence(eventId, newRuleIds)
-
-        then: "should remove old relations and add new ones"
-        1 * executionEventRelationMapper.selectList(_) >> oldRelations
-        1 * ruleMapper.selectById(1L) >> rule1Entity
-        1 * ruleContentMapper.selectById(1L) >> rule1ContentEntity
-        1 * executionEventRelationMapper.delete(_) >> 1
-        2 * executionEventRelationMapper.insert(_) >> 1
-    }
 
     // ========== getExecutionItemsByEventId() tests ==========
 
     def "test getExecutionItemsByEventId - should return empty list when no relations exist"() {
         given: "eventId with no relations"
-        def eventId = 1001L
+        def eventId = 1001
+        def context = createExecutionContext(12345L, eventId, 50)
 
         when: "get execution items"
-        def items = ruleService.getExecutionItemsByEventId(eventId)
+        def items = ruleService.getExecutionItemsByEventId(eventId, context)
 
         then: "should return empty list"
-        1 * executionEventRelationMapper.selectList(_) >> []
+        // Note: Now uses eventService.getExecutionArrangements instead of executionEventRelationMapper.selectList
+        1 * eventService.getExecutionArrangements(eventId) >> []
         items != null
         items.isEmpty()
     }
 
     def "test getExecutionItemsByEventId - should return rules filtered by allowed statuses"() {
-        given: "rules with different statuses"
-        def eventId = 1001L
-        def rule1Id = 1L  // TEST - allowed
-        def rule2Id = 2L  // OFFLINE - not allowed
-        def rule3Id = 3L  // FULL - not allowed in TEST environment
+        given: "rules with different statuses (already filtered by eventService)"
+        def eventId = 1001
+        def rule1Id = 1L  // TEST - allowed (returned by eventService)
+        def rule2Id = 2L  // OFFLINE - not allowed (filtered out by eventService)
+        def rule3Id = 3L  // FULL - not allowed (filtered out by eventService)
 
-        def relationEntities = [
-                createRelationEntity(eventId, rule1Id, 1),
-                createRelationEntity(eventId, rule2Id, 2),
-                createRelationEntity(eventId, rule3Id, 3)
+        // eventService.getExecutionArrangements already filters by allowed statuses
+        def arrangements = [
+                ExecutionArrangement.builder()
+                        .eventId(eventId)
+                        .ruleId(rule1Id)
+                        .groupId(0L)
+                        .exeOrder(0)
+                        .abRatio(0)
+                        .build()
         ]
 
         def rule1Entity = createRuleEntity(rule1Id, RuleStatusEnum.TEST)
-        def rule2Entity = createRuleEntity(rule2Id, RuleStatusEnum.OFFLINE)
-        def rule3Entity = createRuleEntity(rule3Id, RuleStatusEnum.FULL)
+
+        def context = createExecutionContext(12345L, eventId, 50)
 
         when: "get execution items"
-        def items = ruleService.getExecutionItemsByEventId(eventId)
+        def items = ruleService.getExecutionItemsByEventId(eventId, context)
 
-        then: "should filter by allowed statuses"
-        1 * executionEventRelationMapper.selectList(_) >> relationEntities
-        1 * ruleStatusConfig.getAllowedRuleStatuses() >> Collections.singleton(RuleStatusEnum.TEST)
-        1 * ruleMapper.selectBatchIds([rule1Id, rule2Id, rule3Id]) >> [rule1Entity, rule2Entity, rule3Entity]
+        then: "should return only allowed rules"
+        1 * eventService.getExecutionArrangements(eventId) >> arrangements
+        1 * ruleMapper.selectBatchIds([rule1Id]) >> [rule1Entity]
         1 * ruleContentMapper.selectBatchIds([rule1Id]) >> [createContentEntity(rule1Id)]
 
         items.size() == 1
@@ -773,79 +685,100 @@ class RuleServiceImplSpec extends Specification {
         items[0].rule.ruleStatus == RuleStatusEnum.TEST
     }
 
-    def "test getExecutionItemsByEventId - should return rule groups"() {
+    def "test getExecutionItemsByEventId - should return rules from groups"() {
         given: "execution sequence with rule group"
-        def eventId = 1001L
-        def groupId = 100L
+        def eventId = 1001
+        def groupId = 10000001L
         def rule1Id = 1L
         def rule2Id = 2L
 
-        def relationEntities = [
-                createRelationEntityForGroup(eventId, groupId, 1)
+        // Create arrangements: rule1 and rule2 in the same group
+        // Note: exeOrder must be consecutive starting from 0 (0, 1, 2, ...)
+        def arrangements = [
+                ExecutionArrangement.builder()
+                        .eventId(eventId)
+                        .ruleId(rule1Id)
+                        .groupId(groupId)
+                        .exeOrder(0)
+                        .abRatio(50)
+                        .build(),
+                ExecutionArrangement.builder()
+                        .eventId(eventId)
+                        .ruleId(rule2Id)
+                        .groupId(groupId)
+                        .exeOrder(1)
+                        .abRatio(50)
+                        .build()
         ]
 
-        def ruleGroupEntity = new RuleGroupEntity()
-        ruleGroupEntity.id = groupId
+        def rule1Entity = createRuleEntity(rule1Id, RuleStatusEnum.ONLINE)
+        def rule2Entity = createRuleEntity(rule2Id, RuleStatusEnum.ONLINE)
 
-        def ruleGroupRule1 = new RuleGroupRuleRelationEntity()
-        ruleGroupRule1.groupId = groupId
-        ruleGroupRule1.ruleId = rule1Id
-        ruleGroupRule1.abTestRatio = 50
-
-        def ruleGroupRule2 = new RuleGroupRuleRelationEntity()
-        ruleGroupRule2.groupId = groupId
-        ruleGroupRule2.ruleId = rule2Id
-        ruleGroupRule2.abTestRatio = 50
-
-        def rule1Entity = createRuleEntity(rule1Id, RuleStatusEnum.AB_TEST)
-        def rule2Entity = createRuleEntity(rule2Id, RuleStatusEnum.AB_TEST)
-
-        def ruleGroup = new RuleGroup(groupId)
-        ruleGroup.addRule(rule1Id, Rule.builder().id(rule1Id).ruleStatus(RuleStatusEnum.AB_TEST).build(), 50)
-        ruleGroup.addRule(rule2Id, Rule.builder().id(rule2Id).ruleStatus(RuleStatusEnum.AB_TEST).build(), 50)
+        def context = createExecutionContext(12345L, eventId, 30) // userHashInt = 30, should select rule1 (0-50)
 
         when: "get execution items"
-        def items = ruleService.getExecutionItemsByEventId(eventId)
+        def items = ruleService.getExecutionItemsByEventId(eventId, context)
 
-        then: "should return rule group"
-        1 * executionEventRelationMapper.selectList(_) >> relationEntities
-        1 * ruleStatusConfig.getAllowedRuleStatuses() >> new HashSet<>([RuleStatusEnum.AB_TEST, RuleStatusEnum.FULL])
-        1 * ruleGroupMapper.selectBatchIds([groupId]) >> [ruleGroupEntity]
-        1 * ruleGroupRuleRelationMapper.selectList(_) >> [ruleGroupRule1, ruleGroupRule2]
-        1 * ruleGroupStructMapper.entityToModel(ruleGroupEntity, _) >> ruleGroup
-        1 * ruleMapper.selectBatchIds([rule1Id, rule2Id]) >> [rule1Entity, rule2Entity]
-        1 * ruleContentMapper.selectBatchIds([rule1Id, rule2Id]) >> [
-                createContentEntity(rule1Id),
-                createContentEntity(rule2Id)
-        ]
+        then: "should return selected rule from group"
+        1 * eventService.getExecutionArrangements(eventId) >> arrangements
+        // Mock cache service (no cached value, will select based on userHashInt)
+        1 * ruleSelectionCacheService.get(12345L, eventId, groupId) >> null
+        1 * ruleSelectionCacheService.put(12345L, eventId, groupId, rule1Id)
+        // Mock ruleMapper - should be called with [rule1Id] (only selected rule)
+        // Note: finalRuleIds only contains rule1Id because rule2Id is not selected
+        1 * ruleMapper.selectBatchIds(_) >> [rule1Entity]
+        // Mock ruleContentMapper - should be called with [rule1Id] (foundRuleIds from ruleMapper result)
+        1 * ruleContentMapper.selectBatchIds(_) >> [createContentEntity(rule1Id)]
+        // Mock ruleStructMapper - ensure it converts rule1Entity correctly
+        // The setup() method already has a default mock using _ * ruleStructMapper.entityToModel(_ as RuleEntity)
+        // The setup() mock should handle the conversion
 
         items.size() == 1
-        items[0].type == ExecutionItemTypeEnum.RULE_GROUP
-        items[0].ruleGroup.id == groupId
+        items[0].rule.id == rule1Id // userHashInt=30 falls in rule1's range (0-50)
     }
 
     def "test getExecutionItemsByEventId - should maintain execution order"() {
         given: "execution sequence with specific order"
-        def eventId = 1001L
+        def eventId = 1001
         def rule1Id = 1L
         def rule2Id = 2L
         def rule3Id = 3L
 
-        def relationEntities = [
-                createRelationEntity(eventId, rule1Id, 1),
-                createRelationEntity(eventId, rule2Id, 2),
-                createRelationEntity(eventId, rule3Id, 3)
+        def arrangements = [
+                ExecutionArrangement.builder()
+                        .eventId(eventId)
+                        .ruleId(rule1Id)
+                        .groupId(0L)
+                        .exeOrder(0)
+                        .abRatio(0)
+                        .build(),
+                ExecutionArrangement.builder()
+                        .eventId(eventId)
+                        .ruleId(rule2Id)
+                        .groupId(0L)
+                        .exeOrder(1)
+                        .abRatio(0)
+                        .build(),
+                ExecutionArrangement.builder()
+                        .eventId(eventId)
+                        .ruleId(rule3Id)
+                        .groupId(0L)
+                        .exeOrder(2)
+                        .abRatio(0)
+                        .build()
         ]
 
         def rule1Entity = createRuleEntity(rule1Id, RuleStatusEnum.TEST)
         def rule2Entity = createRuleEntity(rule2Id, RuleStatusEnum.TEST)
         def rule3Entity = createRuleEntity(rule3Id, RuleStatusEnum.TEST)
 
+        def context = createExecutionContext(12345L, eventId, 50)
+
         when: "get execution items"
-        def items = ruleService.getExecutionItemsByEventId(eventId)
+        def items = ruleService.getExecutionItemsByEventId(eventId, context)
 
         then: "should maintain execution order"
-        1 * executionEventRelationMapper.selectList(_) >> relationEntities
+        1 * eventService.getExecutionArrangements(eventId) >> arrangements
         1 * ruleMapper.selectBatchIds([rule1Id, rule2Id, rule3Id]) >> [rule1Entity, rule2Entity, rule3Entity]
         1 * ruleContentMapper.selectBatchIds([rule1Id, rule2Id, rule3Id]) >> [
                 createContentEntity(rule1Id),
@@ -859,43 +792,54 @@ class RuleServiceImplSpec extends Specification {
         items[2].rule.id == rule3Id
     }
 
-    def "test getExecutionItemsByEventId - should skip null rule groups"() {
-        given: "execution sequence with non-existent rule group"
-        def eventId = 1001L
+    def "test getExecutionItemsByEventId - should handle empty groups"() {
+        given: "execution sequence with rule in group where userHashInt exceeds total ratio"
+        def eventId = 1001
         def groupId = 999L
+        def ruleId = 1L
 
-        def relationEntities = [
-                createRelationEntityForGroup(eventId, groupId, 1)
+        def arrangements = [
+                ExecutionArrangement.builder()
+                        .eventId(eventId)
+                        .ruleId(ruleId)
+                        .groupId(groupId)
+                        .exeOrder(0)
+                        .abRatio(50)
+                        .build()
         ]
 
+        // userHashInt = 100, which exceeds totalRatio (50), so no rule will be selected
+        def context = createExecutionContext(12345L, eventId, 100)
+
         when: "get execution items"
-        def items = ruleService.getExecutionItemsByEventId(eventId)
+        def items = ruleService.getExecutionItemsByEventId(eventId, context)
 
-        then: "should skip null rule group"
-        1 * executionEventRelationMapper.selectList(_) >> relationEntities
-        1 * ruleGroupMapper.selectBatchIds([groupId]) >> []
-
-        items.isEmpty()
+        then: "should throw exception when rule selection fails (userHashInt > totalRatio)"
+        1 * eventService.getExecutionArrangements(eventId) >> arrangements
+        1 * ruleSelectionCacheService.get(12345L, eventId, groupId) >> null
+        // selectRuleFromGroupByRatio will return null because userHashInt (100) > totalRatio (50)
+        // This will cause IllegalStateException: "Failed to select rule from group"
+        thrown(IllegalStateException)
     }
 
     // ========== Helper methods ==========
 
-    private static ExecutionEventRelationEntity createRelationEntity(Long eventId, Long itemId, Integer order) {
-        def entity = new ExecutionEventRelationEntity()
-        entity.eventId = eventId
-        entity.itemId = itemId
-        entity.itemType = ExecutionItemTypeEnum.RULE.getId()
-        entity.executionOrder = order
+    private static ExecutionArrangementEntity createRelationEntity(Long eventId, Long ruleId, Long groupId, Integer exeOrder, Integer abRatio) {
+        def entity = new ExecutionArrangementEntity()
+        entity.eventId = eventId != null ? eventId.intValue() : null
+        entity.ruleId = ruleId
+        entity.groupId = groupId != null ? groupId : 0L
+        entity.exeOrder = exeOrder != null ? exeOrder : 0
+        entity.abRatio = abRatio != null ? abRatio : 0
         return entity
     }
 
-    private static ExecutionEventRelationEntity createRelationEntityForGroup(Long eventId, Long groupId, Integer order) {
-        def entity = new ExecutionEventRelationEntity()
-        entity.eventId = eventId
-        entity.itemId = groupId
-        entity.itemType = ExecutionItemTypeEnum.RULE_GROUP.getId()
-        entity.executionOrder = order
-        return entity
+    private static RuleExecutionContext createExecutionContext(Long userId, Integer eventId, Integer userHashInt) {
+        def context = new RuleExecutionContext(userId, eventId, null, [:])
+        if (userHashInt != null) {
+            context.putArgument(EvalArgumentConst.ARG_USER_HASH_INT, new TypedValue(userHashInt, ValueTypeEnum.INTEGER))
+        }
+        return context
     }
 
     private static RuleEntity createRuleEntity(Long ruleId, RuleStatusEnum status) {

@@ -1,9 +1,9 @@
 package lab.zhang.rule.rule_engine.enums;
 
+import lab.zhang.rule.rule_engine.config.RuleStatusConfig;
 import lombok.Getter;
 
-import java.util.EnumSet;
-import java.util.Set;
+import java.util.*;
 
 /**
  * Rule status enumeration
@@ -35,15 +35,10 @@ public enum RuleStatusEnum {
     GRAY(2, "Gray"),
     
     /**
-     * A/B Test - Only production environment requests can trigger execution for eventId,
-     * distributed evenly based on userId
+     * Online - Only production environment requests can trigger execution for eventId.
+     * Traffic control (A/B test) is applied to ONLINE rules through rule groups.
      */
-    AB_TEST(3, "A/B Test"),
-    
-    /**
-     * Full - Only production environment requests can trigger execution for eventId
-     */
-    FULL(4, "Full");
+    ONLINE(3, "Online");
     
     /**
      * Enumeration ID (stored in database)
@@ -58,7 +53,7 @@ public enum RuleStatusEnum {
      *  Get description
      */
     private final String description;
-    
+
     /**
      * Constructor
      * 
@@ -91,17 +86,16 @@ public enum RuleStatusEnum {
     /**
      * Check if a status transition from this status to the target status is allowed.
      * 
-     * State transition rules:
+     * State transition rules are defined in RULE_STATUS_CHANGE_MAP:
      * 1. OFFLINE -> only TEST
      * 2. TEST -> GRAY, OFFLINE
-     * 3. GRAY -> OFFLINE, AB_TEST
-     * 4. AB_TEST -> OFFLINE, FULL
-     * 5. FULL -> OFFLINE, AB_TEST
+     * 3. GRAY -> OFFLINE, ONLINE
+     * 4. ONLINE -> OFFLINE
      * 
      * @param targetStatus the target status to transition to
      * @return true if the transition is allowed, false otherwise
      */
-    public boolean canTransitionTo(RuleStatusEnum targetStatus) {
+    public boolean canChangeTo(RuleStatusEnum targetStatus) {
         if (targetStatus == null) {
             return false;
         }
@@ -111,30 +105,13 @@ public enum RuleStatusEnum {
             return true;
         }
         
-        switch (this) {
-            case OFFLINE:
-                // OFFLINE can only transition to TEST
-                return targetStatus == TEST;
-                
-            case TEST:
-                // TEST can transition to GRAY or OFFLINE
-                return targetStatus == GRAY || targetStatus == OFFLINE;
-                
-            case GRAY:
-                // GRAY can transition to OFFLINE or AB_TEST
-                return targetStatus == OFFLINE || targetStatus == AB_TEST;
-                
-            case AB_TEST:
-                // AB_TEST can transition to OFFLINE or FULL
-                return targetStatus == OFFLINE || targetStatus == FULL;
-                
-            case FULL:
-                // FULL can transition to OFFLINE or AB_TEST
-                return targetStatus == OFFLINE || targetStatus == AB_TEST;
-                
-            default:
-                return false;
+        // Get allowed target statuses from configuration map
+        Set<RuleStatusEnum> allowedTargetStatuses = RuleStatusConfig.RULE_STATUS_CHANGE_MAP.get(this);
+        if (allowedTargetStatuses == null || allowedTargetStatuses.isEmpty()) {
+            return false;
         }
+        
+        return allowedTargetStatuses.contains(targetStatus);
     }
     
     /**
@@ -143,25 +120,11 @@ public enum RuleStatusEnum {
      * @return set of allowed target statuses
      */
     public Set<RuleStatusEnum> getAllowedTargetStatuses() {
-        switch (this) {
-            case OFFLINE:
-                return EnumSet.of(TEST);
-                
-            case TEST:
-                return EnumSet.of(GRAY, OFFLINE);
-                
-            case GRAY:
-                return EnumSet.of(OFFLINE, AB_TEST);
-                
-            case AB_TEST:
-                return EnumSet.of(OFFLINE, FULL);
-                
-            case FULL:
-                return EnumSet.of(OFFLINE, AB_TEST);
-                
-            default:
-                return EnumSet.noneOf(RuleStatusEnum.class);
+        Set<RuleStatusEnum> allowedTargetStatuses = RuleStatusConfig.RULE_STATUS_CHANGE_MAP.get(this);
+        if (allowedTargetStatuses == null || allowedTargetStatuses.isEmpty()) {
+            return EnumSet.noneOf(RuleStatusEnum.class);
         }
+        return EnumSet.copyOf(allowedTargetStatuses);
     }
 }
 

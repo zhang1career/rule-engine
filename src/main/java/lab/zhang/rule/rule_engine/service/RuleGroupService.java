@@ -3,6 +3,7 @@ package lab.zhang.rule.rule_engine.service;
 import lab.zhang.rule.rule_engine.model.Rule;
 import lab.zhang.rule.rule_engine.model.RuleExecutionContext;
 import lab.zhang.rule.rule_engine.model.RuleGroup;
+import lab.zhang.rule.rule_engine.pojo.dto.RuleDTO;
 
 import java.util.List;
 import java.util.Map;
@@ -28,17 +29,25 @@ public interface RuleGroupService {
     RuleGroup getRuleGroup(Long groupId);
 
     /**
-     * Create a new rule group and add the rule to it
-     * Called when a rule changes from other status to AB_TEST status
+     * Create a new rule group and add the rule to it.
+     * Called when a rule changes from other status to ONLINE status.
+     * 
+     * Business Logic:
+     * 1. Check if this rule+event combination already exists in another rule group, if so, exit
+     * 2. Create new rule group
+     * 3. Create record in gre_rel table (rule group-rule-event relation)
+     * 4. Create record in execution_event_rel table (event-rule group relation)
+     * 5. Delete record in execution_event_rel table (event-rule relation)
      *
-     * @param rule the rule to add to the new group
+     * @param rule the rule to add to the new group (must be in ONLINE status)
+     * @param eventId the event ID to associate with the rule group
      * @return the created rule group
+     * @throws IllegalArgumentException if rule is not in ONLINE status, or rule+event combination already exists in another group
      */
-    RuleGroup createRuleGroup(Rule rule);
+    RuleGroup createRuleGroup(Rule rule, Integer eventId);
 
     /**
      * Delete a rule group
-     * Sets all rules in the group to OFFLINE, removes them from group, then deletes the group
      *
      * @param groupId rule group ID
      * @throws IllegalArgumentException if group not found
@@ -46,49 +55,31 @@ public interface RuleGroupService {
     void deleteRuleGroup(Long groupId);
 
     /**
-     * Delete a rule group and all its associations
+     * Update rule group traffic control ratios.
+     * Only receives ratios parameter for editing.
+     * 
+     * Validation:
+     * - Key must be Long positive integer (rule ID)
+     * - Value must be non-negative integer (abTestRatio, 0-100)
+     * - Sum of all values must not exceed 100
      *
      * @param groupId rule group ID
+     * @param ratios map of rule ID to A/B test ratio (0-100)
+     * @throws IllegalArgumentException if group not found, validation fails, or rule not in group
      */
-    void doDeleteRuleGroup(Long groupId);
+    void updateRuleGroupRatios(Long groupId, Map<Long, Integer> ratios);
 
     /**
-     * Create a new rule group with rules
-     * Validates that rules can transition to AB_TEST status, then creates group and updates rules
+     * Copy a rule within a rule group.
+     * Creates a new rule with the same content, event association, and rule group association as the original.
+     * The copied rule's abTestRatio is set to 0.
      *
-     * @param rules map of rule ID to A/B test ratio (0-100)
-     * @return the created rule group
-     * @throws IllegalArgumentException if any rule cannot transition to AB_TEST status
+     * @param ruleId the rule ID to copy
+     * @param ruleDTO the new rule object to create (name, description, contentType, content)
+     * @return the copied rule
+     * @throws IllegalArgumentException if rule not found or rule not in any group
      */
-    RuleGroup createRuleGroupWithRules(Map<Long, Integer> rules);
-
-    /**
-     * Update a rule group with rules
-     * Validates that rules can transition to AB_TEST status (or are already AB_TEST), then updates group
-     * Rules not in the input map will be set to OFFLINE and removed from group
-     *
-     * @param groupId rule group ID
-     * @param rules   map of rule ID to A/B test ratio (0-100)
-     * @throws IllegalArgumentException if group not found or any rule cannot transition to AB_TEST status
-     */
-    void updateRuleGroupWithRules(Long groupId, Map<Long, Integer> rules);
-
-    /**
-     * Add rule to existing rule group
-     * Called when a rule changes from other status to AB_TEST status with existing groupId
-     *
-     * @param rule    the rule to add
-     * @param groupId the existing group ID
-     */
-    void addRuleToGroup(Rule rule, Long groupId);
-
-    /**
-     * Set all other rules in the group to OFFLINE status
-     * Called when a rule changes from AB_TEST status to FULL status
-     *
-     * @param rule the rule that changed to FULL status
-     */
-    void setOtherRulesOffline(Rule rule);
+    Rule copyRuleInGroup(Long ruleId, RuleDTO ruleDTO);
 
     /**
      * Delete rule group if it's empty
@@ -107,27 +98,5 @@ public interface RuleGroupService {
      */
     Rule selectRuleFromGroup(RuleGroup group, RuleExecutionContext context);
 
-    /**
-     * Associate a rule group with an eventId
-     *
-     * @param groupId rule group ID
-     * @param eventId event ID
-     */
-    void associateGroupWithEventId(Long groupId, Long eventId);
-
-    /**
-     * Remove association between a rule group and an eventId
-     *
-     * @param groupId rule group ID
-     * @param eventId event ID
-     */
-    void removeGroupEventIdAssociation(Long groupId, Long eventId);
-
-    /**
-     * Validate and clean invalid cache entries
-     * This method should be called by scheduled tasks to clean invalid cache entries
-     * It validates cached rules and removes invalid entries from cache
-     */
-    void validateAndCleanInvalidCache();
 }
 

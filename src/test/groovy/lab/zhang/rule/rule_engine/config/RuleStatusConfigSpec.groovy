@@ -21,9 +21,9 @@ class RuleStatusConfigSpec extends Specification {
     }
 
     @Unroll
-    def "test getAllowedRuleStatuses - should return correct statuses for environment - environment: #environment, expectedStatuses: #expectedStatuses"() {
+    def "test getEvalAvailableRuleStatuses - should return correct statuses for environment - environment: #environment, expectedStatuses: #expectedStatuses"() {
         when: "get allowed rule statuses"
-        def result = ruleStatusConfig.getAllowedRuleStatuses()
+        def result = ruleStatusConfig.getEvalAvailableRuleStatuses()
 
         then: "should return correct statuses for the environment"
         1 * envUtil.getEnvEnum() >> environment
@@ -35,13 +35,13 @@ class RuleStatusConfigSpec extends Specification {
         where:
         environment              | expectedStatuses
         EnvironmentEnum.TEST    | [RuleStatusEnum.TEST]
-        EnvironmentEnum.GRAY    | [RuleStatusEnum.GRAY, RuleStatusEnum.AB_TEST, RuleStatusEnum.FULL]
-        EnvironmentEnum.PRODUCTION | [RuleStatusEnum.AB_TEST, RuleStatusEnum.FULL]
+        EnvironmentEnum.GRAY    | [RuleStatusEnum.GRAY, RuleStatusEnum.ONLINE]
+        EnvironmentEnum.PRODUCTION | [RuleStatusEnum.ONLINE]
     }
 
-    def "test getAllowedRuleStatuses - should return default statuses for UNDEFINED environment"() {
+    def "test getEvalAvailableRuleStatuses - should return default statuses for UNDEFINED environment"() {
         when: "get allowed rule statuses for UNDEFINED environment"
-        def result = ruleStatusConfig.getAllowedRuleStatuses()
+        def result = ruleStatusConfig.getEvalAvailableRuleStatuses()
 
         then: "should return default OFFLINE status"
         1 * envUtil.getEnvEnum() >> EnvironmentEnum.UNDEFINED
@@ -50,9 +50,9 @@ class RuleStatusConfigSpec extends Specification {
         result.contains(RuleStatusEnum.OFFLINE)
     }
 
-    def "test getAllowedRuleStatuses - should return default statuses when environment is null"() {
+    def "test getEvalAvailableRuleStatuses - should return default statuses when environment is null"() {
         when: "get allowed rule statuses when environment is null"
-        def result = ruleStatusConfig.getAllowedRuleStatuses()
+        def result = ruleStatusConfig.getEvalAvailableRuleStatuses()
 
         then: "should return default OFFLINE status"
         1 * envUtil.getEnvEnum() >> null
@@ -61,9 +61,9 @@ class RuleStatusConfigSpec extends Specification {
         result.contains(RuleStatusEnum.OFFLINE)
     }
 
-    def "test getAllowedRuleStatuses - should return immutable set"() {
+    def "test getEvalAvailableRuleStatuses - should return immutable set"() {
         when: "get allowed rule statuses"
-        def result = ruleStatusConfig.getAllowedRuleStatuses()
+        def result = ruleStatusConfig.getEvalAvailableRuleStatuses()
 
         then: "should return a set"
         1 * envUtil.getEnvEnum() >> EnvironmentEnum.TEST
@@ -72,57 +72,56 @@ class RuleStatusConfigSpec extends Specification {
 
         and: "should be able to check contains"
         result.contains(RuleStatusEnum.TEST)
-        !result.contains(RuleStatusEnum.FULL)
+        !result.contains(RuleStatusEnum.ONLINE)
+        !result.contains(RuleStatusEnum.GRAY)
+        !result.contains(RuleStatusEnum.OFFLINE)
     }
 
-    def "test getAllowedRuleStatuses - TEST environment should only allow TEST status"() {
+    def "test getEvalAvailableRuleStatuses - TEST environment should only allow TEST status"() {
         when: "get allowed rule statuses for TEST environment"
-        def result = ruleStatusConfig.getAllowedRuleStatuses()
+        def result = ruleStatusConfig.getEvalAvailableRuleStatuses()
 
         then: "should only return TEST status"
         1 * envUtil.getEnvEnum() >> EnvironmentEnum.TEST
         result.size() == 1
         result.contains(RuleStatusEnum.TEST)
-        !result.contains(RuleStatusEnum.FULL)
-        !result.contains(RuleStatusEnum.AB_TEST)
+        !result.contains(RuleStatusEnum.ONLINE)
         !result.contains(RuleStatusEnum.GRAY)
         !result.contains(RuleStatusEnum.OFFLINE)
     }
 
-    def "test getAllowedRuleStatuses - GRAY environment should allow GRAY, AB_TEST, and FULL statuses"() {
+    def "test getEvalAvailableRuleStatuses - GRAY environment should allow GRAY and ONLINE statuses"() {
         when: "get allowed rule statuses for GRAY environment"
-        def result = ruleStatusConfig.getAllowedRuleStatuses()
+        def result = ruleStatusConfig.getEvalAvailableRuleStatuses()
 
-        then: "should return GRAY, AB_TEST, and FULL statuses"
+        then: "should return GRAY and ONLINE statuses"
         1 * envUtil.getEnvEnum() >> EnvironmentEnum.GRAY
-        result.size() == 3
+        result.size() == 2
         result.contains(RuleStatusEnum.GRAY)
-        result.contains(RuleStatusEnum.AB_TEST)
-        result.contains(RuleStatusEnum.FULL)
+        result.contains(RuleStatusEnum.ONLINE)
         !result.contains(RuleStatusEnum.TEST)
         !result.contains(RuleStatusEnum.OFFLINE)
     }
 
-    def "test getAllowedRuleStatuses - PRODUCTION environment should allow AB_TEST and FULL statuses"() {
+    def "test getEvalAvailableRuleStatuses - PRODUCTION environment should allow ONLINE status"() {
         when: "get allowed rule statuses for PRODUCTION environment"
-        def result = ruleStatusConfig.getAllowedRuleStatuses()
+        def result = ruleStatusConfig.getEvalAvailableRuleStatuses()
 
-        then: "should return AB_TEST and FULL statuses"
+        then: "should return ONLINE status"
         1 * envUtil.getEnvEnum() >> EnvironmentEnum.PRODUCTION
-        result.size() == 2
-        result.contains(RuleStatusEnum.AB_TEST)
-        result.contains(RuleStatusEnum.FULL)
+        result.size() == 1
+        result.contains(RuleStatusEnum.ONLINE)
         !result.contains(RuleStatusEnum.TEST)
         !result.contains(RuleStatusEnum.GRAY)
         !result.contains(RuleStatusEnum.OFFLINE)
     }
 
     @Unroll
-    def "test getAllowedRuleStatuses - multiple calls should return same result - environment: #environment"() {
+    def "test getEvalAvailableRuleStatuses - multiple calls should return same result - environment: #environment"() {
         when: "get allowed rule statuses multiple times"
-        def result1 = ruleStatusConfig.getAllowedRuleStatuses()
-        def result2 = ruleStatusConfig.getAllowedRuleStatuses()
-        def result3 = ruleStatusConfig.getAllowedRuleStatuses()
+        def result1 = ruleStatusConfig.getEvalAvailableRuleStatuses()
+        def result2 = ruleStatusConfig.getEvalAvailableRuleStatuses()
+        def result3 = ruleStatusConfig.getEvalAvailableRuleStatuses()
 
         then: "should return consistent results"
         3 * envUtil.getEnvEnum() >> environment
@@ -135,22 +134,22 @@ class RuleStatusConfigSpec extends Specification {
         environment << [EnvironmentEnum.TEST, EnvironmentEnum.GRAY, EnvironmentEnum.PRODUCTION]
     }
 
-    def "test getAllowedRuleStatuses - should handle all environment types"() {
+    def "test getEvalAvailableRuleStatuses - should handle all environment types"() {
         when: "get allowed rule statuses for each environment"
-        def testResult = ruleStatusConfig.getAllowedRuleStatuses()
-        def grayResult = ruleStatusConfig.getAllowedRuleStatuses()
-        def productionResult = ruleStatusConfig.getAllowedRuleStatuses()
-        def undefinedResult = ruleStatusConfig.getAllowedRuleStatuses()
+        def testResult = ruleStatusConfig.getEvalAvailableRuleStatuses()
+        def grayResult = ruleStatusConfig.getEvalAvailableRuleStatuses()
+        def productionResult = ruleStatusConfig.getEvalAvailableRuleStatuses()
+        def undefinedResult = ruleStatusConfig.getEvalAvailableRuleStatuses()
 
         then: "should return correct statuses for each environment"
         1 * envUtil.getEnvEnum() >> EnvironmentEnum.TEST
         testResult.contains(RuleStatusEnum.TEST)
 
         1 * envUtil.getEnvEnum() >> EnvironmentEnum.GRAY
-        grayResult.containsAll([RuleStatusEnum.GRAY, RuleStatusEnum.AB_TEST, RuleStatusEnum.FULL])
+        grayResult.containsAll([RuleStatusEnum.GRAY, RuleStatusEnum.ONLINE])
 
         1 * envUtil.getEnvEnum() >> EnvironmentEnum.PRODUCTION
-        productionResult.containsAll([RuleStatusEnum.AB_TEST, RuleStatusEnum.FULL])
+        productionResult.containsAll([RuleStatusEnum.ONLINE])
 
         1 * envUtil.getEnvEnum() >> EnvironmentEnum.UNDEFINED
         undefinedResult.contains(RuleStatusEnum.OFFLINE)

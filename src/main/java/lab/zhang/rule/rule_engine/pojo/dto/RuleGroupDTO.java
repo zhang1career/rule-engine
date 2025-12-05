@@ -22,10 +22,20 @@ public class RuleGroupDTO {
      * Rule group ID
      */
     private Long id;
-    
+
+    /**
+     * Rule name
+     */
+    private String name;
+
+    /**
+     * Rule description
+     */
+    private String description;
+
     /**
      * Map of rule ID to A/B test ratio (0-100)
      */
-    private Map<Long, Integer> rules;
+    private Map<Long, Integer> ruleRatios;
 }
 

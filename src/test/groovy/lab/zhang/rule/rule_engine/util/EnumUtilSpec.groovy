@@ -27,8 +27,7 @@ class EnumUtilSpec extends Specification {
         RuleStatusEnum.class | 0  | RuleStatusEnum.OFFLINE
         RuleStatusEnum.class | 1  | RuleStatusEnum.TEST
         RuleStatusEnum.class | 2  | RuleStatusEnum.GRAY
-        RuleStatusEnum.class | 3  | RuleStatusEnum.AB_TEST
-        RuleStatusEnum.class | 4  | RuleStatusEnum.FULL
+        RuleStatusEnum.class | 3  | RuleStatusEnum.ONLINE
         ContentTypeEnum.class | 0 | ContentTypeEnum.EXPRESSION
         ContentTypeEnum.class | 1 | ContentTypeEnum.API_QUERY
         ContentTypeEnum.class | 2 | ContentTypeEnum.SQL_QUERY
@@ -82,8 +81,7 @@ class EnumUtilSpec extends Specification {
         RuleStatusEnum.OFFLINE      | 0
         RuleStatusEnum.TEST         | 1
         RuleStatusEnum.GRAY         | 2
-        RuleStatusEnum.AB_TEST      | 3
-        RuleStatusEnum.FULL         | 4
+        RuleStatusEnum.ONLINE       | 3
         ContentTypeEnum.EXPRESSION  | 0
         ContentTypeEnum.API_QUERY   | 1
         ContentTypeEnum.SQL_QUERY   | 2
@@ -106,17 +104,15 @@ class EnumUtilSpec extends Specification {
 
         then: "should return list with all enum values"
         result != null
-        result.size() == 5
+        result.size() == 4
         result[0].name == "OFFLINE"
         result[0].value == 0
         result[1].name == "TEST"
         result[1].value == 1
         result[2].name == "GRAY"
         result[2].value == 2
-        result[3].name == "AB_TEST"
+        result[3].name == "ONLINE"
         result[3].value == 3
-        result[4].name == "FULL"
-        result[4].value == 4
 
         and: "each item should have name and value"
         result.every { it.containsKey("name") && it.containsKey("value") }
@@ -179,7 +175,7 @@ class EnumUtilSpec extends Specification {
         result != null
         result.size() == 1
         result.containsKey("RuleStatusEnum")
-        result["RuleStatusEnum"].size() == 5
+        result["RuleStatusEnum"].size() == 4
         result["RuleStatusEnum"][0].name == "OFFLINE"
         result["RuleStatusEnum"][0].value == 0
     }
@@ -193,7 +189,7 @@ class EnumUtilSpec extends Specification {
         result.size() == 2
         result.containsKey("RuleStatusEnum")
         result.containsKey("ContentTypeEnum")
-        result["RuleStatusEnum"].size() == 5
+        result["RuleStatusEnum"].size() == 4
         result["ContentTypeEnum"].size() == 4
     }
 
@@ -280,13 +276,13 @@ class EnumUtilSpec extends Specification {
 
     def "test getEnumInfoMap - should handle backward compatibility aliases"() {
         when: "get enum info map with backward compatibility aliases"
-        def result = EnumUtil.getEnumInfoMap("RuleStatus,ItemType")
+        def result = EnumUtil.getEnumInfoMap("RuleStatus,Environment")
 
         then: "should resolve aliases correctly"
         result != null
         result.size() == 2
         result.containsKey("RuleStatus")
-        result.containsKey("ItemType")
+        result.containsKey("Environment")
     }
 
     // ========== Integration tests ==========
@@ -301,7 +297,7 @@ class EnumUtilSpec extends Specification {
         result == enumValue
 
         where:
-        enumValue << [RuleStatusEnum.OFFLINE, RuleStatusEnum.TEST, RuleStatusEnum.GRAY, RuleStatusEnum.AB_TEST, RuleStatusEnum.FULL]
+        enumValue << [RuleStatusEnum.OFFLINE, RuleStatusEnum.TEST, RuleStatusEnum.GRAY, RuleStatusEnum.ONLINE]
     }
 
     def "test getEnumInfo and fromId - should be consistent"() {
@@ -323,7 +319,7 @@ class EnumUtilSpec extends Specification {
 
         then: "should have same content"
         mapResult["RuleStatusEnum"].size() == listResult.size()
-        mapResult["RuleStatusEnum"].size() == 5
+        mapResult["RuleStatusEnum"].size() == 4
         mapResult["RuleStatusEnum"][0].name == listResult[0].name
         mapResult["RuleStatusEnum"][0].value == listResult[0].value
         mapResult["RuleStatusEnum"][1].name == listResult[1].name
@@ -332,8 +328,6 @@ class EnumUtilSpec extends Specification {
         mapResult["RuleStatusEnum"][2].value == listResult[2].value
         mapResult["RuleStatusEnum"][3].name == listResult[3].name
         mapResult["RuleStatusEnum"][3].value == listResult[3].value
-        mapResult["RuleStatusEnum"][4].name == listResult[4].name
-        mapResult["RuleStatusEnum"][4].value == listResult[4].value
     }
 }
 

@@ -2,11 +2,11 @@ package lab.zhang.rule.rule_engine.struct_mapper;
 
 import lab.zhang.rule.rule_engine.entity.RuleContentEntity;
 import lab.zhang.rule.rule_engine.entity.RuleEntity;
-import lab.zhang.rule.rule_engine.enums.ContentTypeEnum;
 import lab.zhang.rule.rule_engine.enums.RuleStatusEnum;
 import lab.zhang.rule.rule_engine.pojo.dto.RuleDTO;
 import lab.zhang.rule.rule_engine.pojo.qo.RuleQO;
 import lab.zhang.rule.rule_engine.model.Rule;
+import lab.zhang.rule.rule_engine.util.TimeUtil;
 import org.mapstruct.AfterMapping;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
@@ -44,7 +44,6 @@ public interface RuleStructMapper {
                 .contentType(entity.getContentTypeEnum())
                 .content("")
                 .ruleStatus(entity.getRuleStatusEnum())
-                .ruleGroupId(entity.getRuleGroupId() != null && entity.getRuleGroupId() != 0L ? entity.getRuleGroupId() : null)
                 .build();
         
         // Convert ct (UNIX timestamp in seconds) to createTime (Date)
@@ -71,8 +70,15 @@ public interface RuleStructMapper {
     @Mapping(target = "contentType", expression = "java(qo.getContentTypeEnum())")
     @Mapping(target = "content", source = "content")
     @Mapping(target = "ruleStatus", expression = "java(qo.getRuleStatusEnum())")
-    @Mapping(target = "ruleGroupId", ignore = true)
     Rule qoToModel(RuleQO qo);
+
+    /**
+     * Convert RuleQO to RuleDTO
+     * @param qo RuleQO
+     * @return RuleDTO
+     */
+    @Mapping(target = "id", ignore = true)
+    RuleDTO qoToDto(RuleQO qo);
 
     /**
      * Convert Rule model to RuleEntity
@@ -82,8 +88,7 @@ public interface RuleStructMapper {
     @Mapping(target = "name", source = "name")
     @Mapping(target = "description", source = "description")
     @Mapping(target = "contentType", expression = "java(rule.getContentType().getId())")
-    @Mapping(target = "ruleStatus", expression = "java(rule.getRuleStatus().getId())")
-    @Mapping(target = "ruleGroupId", source = "ruleGroupId")
+    @Mapping(target = "ruleStatus", expression = "java(rule.getRuleStatus() != null ? rule.getRuleStatus().getId() : null)")
     @Mapping(target = "ct", expression = "java(rule.getCreateTime() != null ? rule.getCreateTimeInTimestamp() : 0)")
     @Mapping(target = "ut", expression = "java(rule.getUpdateTime() != null ? rule.getUpdateTimeInTimestamp() : 0)")
     @Mapping(target = "contentTypeEnum", ignore = true)
@@ -116,10 +121,15 @@ public interface RuleStructMapper {
 
         // Set enum fields using entity's setter methods
         entity.setContentTypeEnum(rule.getContentType());
-        entity.setRuleStatusEnum(rule.getRuleStatus());
+        // Set default status to OFFLINE if not provided
+        if (rule.getRuleStatus() == null) {
+            entity.setRuleStatusEnum(RuleStatusEnum.OFFLINE);
+        } else {
+            entity.setRuleStatusEnum(rule.getRuleStatus());
+        }
 
         // Set time fields (UNIX timestamp in seconds)
-        long currentTime = System.currentTimeMillis() / 1000;
+        long currentTime = TimeUtil.getCurrentTime();
         if (entity.getId() == null) {
             // New entity, set create time
             entity.setCt((int) currentTime);

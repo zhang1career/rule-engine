@@ -49,10 +49,5 @@ public class RuleDTO {
      * This field is only used for PUT /api/rules/{ruleId} (update).
      */
     private Integer ruleStatus;
-
-    /**
-     * Rule group ID, only valid when status is AB_TEST
-     */
-    private Long ruleGroupId;
 }
 

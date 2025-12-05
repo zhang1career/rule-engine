@@ -32,7 +32,7 @@ import java.util.stream.Collectors;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class RuleGroup implements Serializable {
+public class RuleGroup extends BaseModel implements Serializable {
 
     public static final long DEFAULT_RULE_GROUP_ID = 0L;
 
@@ -42,8 +42,17 @@ public class RuleGroup implements Serializable {
     /**
      * Rule group ID (unique identifier).
      */
-    @NonNull
     private Long id;
+
+    /**
+     * Rule name for identification and display purposes.
+     */
+    private String name;
+
+    /**
+     * Human-readable description of the rule's purpose and behavior.
+     */
+    private String description;
 
     /**
      * Rules in this group (all rules must be in AB_TEST status).

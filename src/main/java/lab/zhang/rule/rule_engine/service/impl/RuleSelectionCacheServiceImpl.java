@@ -33,7 +33,7 @@ public class RuleSelectionCacheServiceImpl implements RuleSelectionCacheService 
     private RedisTemplate<String, Long> redisTemplate;
 
     @Override
-    public Long get(Long userId, Long eventId, Long groupId) {
+    public Long get(Long userId, Integer eventId, Long groupId) {
         if (userId == null || eventId == null || groupId == null) {
             return null;
         }
@@ -51,7 +51,7 @@ public class RuleSelectionCacheServiceImpl implements RuleSelectionCacheService 
     }
 
     @Override
-    public void put(Long userId, Long eventId, Long groupId, Long ruleId) {
+    public void put(Long userId, Integer eventId, Long groupId, Long ruleId) {
         if (userId == null || eventId == null || groupId == null || ruleId == null) {
             return;
         }
@@ -65,7 +65,7 @@ public class RuleSelectionCacheServiceImpl implements RuleSelectionCacheService 
     }
 
     @Override
-    public void remove(Long userId, Long eventId, Long groupId) {
+    public void remove(Long userId, Integer eventId, Long groupId) {
         if (userId == null || eventId == null || groupId == null) {
             return;
         }
@@ -97,7 +97,7 @@ public class RuleSelectionCacheServiceImpl implements RuleSelectionCacheService 
      * @param groupId rule group ID
      * @return cache key
      */
-    private String buildCacheKey(Long userId, Long eventId, Long groupId) {
+    private String buildCacheKey(Long userId, Integer eventId, Long groupId) {
         return CACHE_KEY_PREFIX + userId + ":" + eventId + ":" + groupId;
     }
 }

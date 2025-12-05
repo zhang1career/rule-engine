@@ -27,14 +27,14 @@ class ValidRuleRatiosValidatorSpec extends Specification {
     def "test ValidRuleRatios validation - valid ratios: #ratios"() {
         given: "create RuleGroupQO with valid ratios"
         def qo = RuleGroupQO.builder()
-                .rules(ratios)
+                .ruleRatios(ratios)
                 .build()
 
         when: "validate"
         Set<ConstraintViolation<RuleGroupQO>> violations = validator.validate(qo)
 
         then: "validation should pass"
-        def rulesViolations = violations.findAll { it.propertyPath.toString() == "rules" }
+        def rulesViolations = violations.findAll { it.propertyPath.toString() == "ruleRatios" }
         rulesViolations.isEmpty()
 
         where:
@@ -52,14 +52,14 @@ class ValidRuleRatiosValidatorSpec extends Specification {
     def "test ValidRuleRatios validation - invalid ratios (sum > 100): #ratios"() {
         given: "create RuleGroupQO with invalid ratios (sum > 100)"
         def qo = RuleGroupQO.builder()
-                .rules(ratios)
+                .ruleRatios(ratios)
                 .build()
 
         when: "validate"
         Set<ConstraintViolation<RuleGroupQO>> violations = validator.validate(qo)
 
         then: "validation should fail with sum exceeds 100 error"
-        def rulesViolations = violations.findAll { it.propertyPath.toString() == "rules" }
+        def rulesViolations = violations.findAll { it.propertyPath.toString() == "ruleRatios" }
         rulesViolations.size() > 0
         rulesViolations.any { it.message.contains("Sum of A/B test ratios cannot exceed 100") }
 
@@ -76,14 +76,14 @@ class ValidRuleRatiosValidatorSpec extends Specification {
     def "test ValidRuleRatios validation - invalid ratios (ratio < 0): #ratios"() {
         given: "create RuleGroupQO with invalid ratios (ratio < 0)"
         def qo = RuleGroupQO.builder()
-                .rules(ratios)
+                .ruleRatios(ratios)
                 .build()
 
         when: "validate"
         Set<ConstraintViolation<RuleGroupQO>> violations = validator.validate(qo)
 
         then: "validation should fail with ratio < 0 error"
-        def rulesViolations = violations.findAll { it.propertyPath.toString() == "rules" }
+        def rulesViolations = violations.findAll { it.propertyPath.toString() == "ruleRatios" }
         rulesViolations.size() > 0
         rulesViolations.any { it.message.contains("ratio must be between 0 and 100") }
 
@@ -100,14 +100,14 @@ class ValidRuleRatiosValidatorSpec extends Specification {
     def "test ValidRuleRatios validation - invalid ratios (ratio > 100): #ratios"() {
         given: "create RuleGroupQO with invalid ratios (ratio > 100)"
         def qo = RuleGroupQO.builder()
-                .rules(ratios)
+                .ruleRatios(ratios)
                 .build()
 
         when: "validate"
         Set<ConstraintViolation<RuleGroupQO>> violations = validator.validate(qo)
 
         then: "validation should fail with ratio > 100 error"
-        def rulesViolations = violations.findAll { it.propertyPath.toString() == "rules" }
+        def rulesViolations = violations.findAll { it.propertyPath.toString() == "ruleRatios" }
         rulesViolations.size() > 0
         rulesViolations.any { it.message.contains("ratio must be between 0 and 100") }
 
@@ -124,14 +124,14 @@ class ValidRuleRatiosValidatorSpec extends Specification {
     def "test ValidRuleRatios validation - null ratio: #ratios"() {
         given: "create RuleGroupQO with null ratio"
         def qo = RuleGroupQO.builder()
-                .rules(ratios)
+                .ruleRatios(ratios)
                 .build()
 
         when: "validate"
         Set<ConstraintViolation<RuleGroupQO>> violations = validator.validate(qo)
 
         then: "validation should fail with null ratio error"
-        def rulesViolations = violations.findAll { it.propertyPath.toString() == "rules" }
+        def rulesViolations = violations.findAll { it.propertyPath.toString() == "ruleRatios" }
         rulesViolations.size() > 0
         rulesViolations.any { it.message.contains("ratio cannot be null") }
 
@@ -157,18 +157,18 @@ class ValidRuleRatiosValidatorSpec extends Specification {
         ratios3.put(null, 50)
 
         when: "validate"
-        def qo1 = RuleGroupQO.builder().rules(ratios1).build()
-        def qo2 = RuleGroupQO.builder().rules(ratios2).build()
-        def qo3 = RuleGroupQO.builder().rules(ratios3).build()
+        def qo1 = RuleGroupQO.builder().ruleRatios(ratios1).build()
+        def qo2 = RuleGroupQO.builder().ruleRatios(ratios2).build()
+        def qo3 = RuleGroupQO.builder().ruleRatios(ratios3).build()
         
         Set<ConstraintViolation<RuleGroupQO>> violations1 = validator.validate(qo1)
         Set<ConstraintViolation<RuleGroupQO>> violations2 = validator.validate(qo2)
         Set<ConstraintViolation<RuleGroupQO>> violations3 = validator.validate(qo3)
 
         then: "validation should fail with null ruleId error"
-        def rulesViolations1 = violations1.findAll { it.propertyPath.toString() == "rules" }
-        def rulesViolations2 = violations2.findAll { it.propertyPath.toString() == "rules" }
-        def rulesViolations3 = violations3.findAll { it.propertyPath.toString() == "rules" }
+        def rulesViolations1 = violations1.findAll { it.propertyPath.toString() == "ruleRatios" }
+        def rulesViolations2 = violations2.findAll { it.propertyPath.toString() == "ruleRatios" }
+        def rulesViolations3 = violations3.findAll { it.propertyPath.toString() == "ruleRatios" }
         
         rulesViolations1.size() > 0
         rulesViolations1.any { it.message.contains("Rule ID cannot be null") }
@@ -183,31 +183,31 @@ class ValidRuleRatiosValidatorSpec extends Specification {
     def "test ValidRuleRatios validation - null map"() {
         given: "create RuleGroupQO with null rules"
         def qo = RuleGroupQO.builder()
-                .rules(null)
+                .ruleRatios(null)
                 .build()
 
         when: "validate"
         Set<ConstraintViolation<RuleGroupQO>> violations = validator.validate(qo)
 
-        then: "validation should pass (null handled by @NotEmpty)"
-        def rulesViolations = violations.findAll { it.propertyPath.toString() == "rules" }
+        then: "validation should fail (null handled by @NotEmpty)"
+        def rulesViolations = violations.findAll { it.propertyPath.toString() == "ruleRatios" }
         rulesViolations.size() > 0
-        rulesViolations.any { it.message.contains("cannot be empty") }
+        rulesViolations.any { it.message.contains("cannot be empty") || it.message.contains("Rules cannot be empty") }
     }
 
     def "test ValidRuleRatios validation - empty map"() {
         given: "create RuleGroupQO with empty rules"
         def qo = RuleGroupQO.builder()
-                .rules([:])
+                .ruleRatios([:])
                 .build()
 
         when: "validate"
         Set<ConstraintViolation<RuleGroupQO>> violations = validator.validate(qo)
 
-        then: "validation should pass (empty handled by @NotEmpty)"
-        def rulesViolations = violations.findAll { it.propertyPath.toString() == "rules" }
+        then: "validation should fail (empty handled by @NotEmpty)"
+        def rulesViolations = violations.findAll { it.propertyPath.toString() == "ruleRatios" }
         rulesViolations.size() > 0
-        rulesViolations.any { it.message.contains("cannot be empty") }
+        rulesViolations.any { it.message.contains("cannot be empty") || it.message.contains("Rules cannot be empty") }
     }
 
 }

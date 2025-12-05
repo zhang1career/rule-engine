@@ -3,7 +3,6 @@ package lab.zhang.rule.rule_engine.controller
 import lab.zhang.rule.rule_engine.enums.ContentTypeEnum
 import lab.zhang.rule.rule_engine.enums.RuleStatusEnum
 import lab.zhang.rule.rule_engine.model.Rule
-import lab.zhang.rule.rule_engine.pojo.dto.ApiResponseDTO
 import lab.zhang.rule.rule_engine.pojo.dto.RuleDTO
 import lab.zhang.rule.rule_engine.pojo.qo.RuleQO
 import lab.zhang.rule.rule_engine.service.RuleService
@@ -42,7 +41,7 @@ class RuleControllerSpec extends Specification {
                 .id(2L)
                 .name("Rule 2")
                 .contentType(ContentTypeEnum.SCRIPT)
-                .ruleStatus(RuleStatusEnum.FULL)
+                .ruleStatus(RuleStatusEnum.ONLINE)
                 .build()
         def rules = [rule1, rule2]
 
@@ -56,7 +55,7 @@ class RuleControllerSpec extends Specification {
                 .id(2L)
                 .name("Rule 2")
                 .contentType(ContentTypeEnum.SCRIPT.getId())
-                .ruleStatus(RuleStatusEnum.FULL.getId())
+                .ruleStatus(RuleStatusEnum.ONLINE.getId())
                 .build()
 
         when: "get all rules"
@@ -187,7 +186,7 @@ class RuleControllerSpec extends Specification {
                 .name("New Rule")
                 .contentType(ContentTypeEnum.EXPRESSION.getId())
                 .content("1 + 1")
-                .ruleStatus(RuleStatusEnum.FULL.getId()) // This should be ignored
+                .ruleStatus(RuleStatusEnum.ONLINE.getId()) // This should be ignored
                 .build()
 
         def rule = Rule.builder()
@@ -336,7 +335,7 @@ class RuleControllerSpec extends Specification {
                 .name("Updated Rule")
                 .contentType(ContentTypeEnum.EXPRESSION.getId())
                 .content("1 + 1")
-                .ruleStatus(RuleStatusEnum.FULL.getId())
+                .ruleStatus(RuleStatusEnum.ONLINE.getId())
                 .build()
 
         def rule = Rule.builder()
@@ -344,7 +343,7 @@ class RuleControllerSpec extends Specification {
                 .name("Updated Rule")
                 .contentType(ContentTypeEnum.EXPRESSION)
                 .content("1 + 1")
-                .ruleStatus(RuleStatusEnum.FULL)
+                .ruleStatus(RuleStatusEnum.ONLINE)
                 .build()
 
         when: "update rule with invalid status transition"
@@ -404,7 +403,7 @@ class RuleControllerSpec extends Specification {
         given: "prepare multiple rules"
         def rules = [
                 Rule.builder().id(1L).name("Rule 1").contentType(ContentTypeEnum.EXPRESSION).ruleStatus(RuleStatusEnum.TEST).build(),
-                Rule.builder().id(2L).name("Rule 2").contentType(ContentTypeEnum.SCRIPT).ruleStatus(RuleStatusEnum.FULL).build(),
+                Rule.builder().id(2L).name("Rule 2").contentType(ContentTypeEnum.SCRIPT).ruleStatus(RuleStatusEnum.ONLINE).build(),
                 Rule.builder().id(3L).name("Rule 3").contentType(ContentTypeEnum.API_QUERY).ruleStatus(RuleStatusEnum.GRAY).build()
         ]
 
@@ -434,7 +433,6 @@ class RuleControllerSpec extends Specification {
                 .ruleStatus(RuleStatusEnum.TEST)
                 .content("1 + 1")
                 .description("Test description")
-                .ruleGroupId(null)
                 .build()
 
         def dto = RuleDTO.builder()
@@ -444,7 +442,6 @@ class RuleControllerSpec extends Specification {
                 .ruleStatus(RuleStatusEnum.TEST.getId())
                 .content("1 + 1")
                 .description("Test description")
-                .ruleGroupId(null)
                 .build()
 
         when: "get rule"

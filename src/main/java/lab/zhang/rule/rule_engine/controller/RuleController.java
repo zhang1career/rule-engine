@@ -1,5 +1,6 @@
 package lab.zhang.rule.rule_engine.controller;
 
+import lab.zhang.rule.rule_engine.enums.RuleStatusEnum;
 import lab.zhang.rule.rule_engine.model.Rule;
 import lab.zhang.rule.rule_engine.pojo.dto.ApiResponseDTO;
 import lab.zhang.rule.rule_engine.pojo.dto.RuleDTO;
@@ -74,6 +75,7 @@ public class RuleController {
     public ResponseEntity<ApiResponseDTO<RuleDTO>> createRule(
             @RequestBody @Validated(RuleQO.Create.class) RuleQO ruleQO) {
         Rule rule = ruleStructMapper.qoToModel(ruleQO);
+        rule.setRuleStatus(RuleStatusEnum.OFFLINE); // New rules are created as OFFLINE
         ruleService.createRule(rule);
         return ResponseEntity.ok(ApiResponseDTO.success(null));
     }

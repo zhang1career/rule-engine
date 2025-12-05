@@ -155,8 +155,6 @@ public class EnumUtil {
         enumClassMap.put("RuleTypeEnum", "lab.zhang.rule.rule_engine.enums.RuleTypeEnum");
         enumClassMap.put("Environment", "lab.zhang.rule.rule_engine.enums.EnvironmentEnum");
         enumClassMap.put("EnvironmentEnum", "lab.zhang.rule.rule_engine.enums.EnvironmentEnum");
-        enumClassMap.put("ExecutionItemTypeEnum", "lab.zhang.rule.rule_engine.enums.ExecutionItemTypeEnum");
-        enumClassMap.put("ItemType", "lab.zhang.rule.rule_engine.enums.ExecutionItemTypeEnum"); // Alias for backward compatibility
         
         // If already full class name, return as is
         if (className.contains(".")) {

@@ -27,6 +27,13 @@ public class TypedValue implements Serializable {
         return new TypedValue(null, ValueTypeEnum.OBJECT);
     }
 
+    public static TypedValue trueValue() {
+        return new TypedValue(true, ValueTypeEnum.BOOLEAN);
+    }
+
+    public static TypedValue falseValue() {
+        return new TypedValue(false, ValueTypeEnum.BOOLEAN);
+    }
 
     /**
      * Actual value

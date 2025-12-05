@@ -1,16 +1,15 @@
 package lab.zhang.rule.rule_engine.controller;
 
-import lab.zhang.rule.rule_engine.entity.ExecutionEventRelationEntity;
-import lab.zhang.rule.rule_engine.enums.ExecutionItemTypeEnum;
 import lab.zhang.rule.rule_engine.model.Event;
+import lab.zhang.rule.rule_engine.model.ExecutionArrangement;
 import lab.zhang.rule.rule_engine.pojo.dto.ApiResponseDTO;
 import lab.zhang.rule.rule_engine.pojo.dto.EventDTO;
-import lab.zhang.rule.rule_engine.pojo.dto.ExecutionItemDTO;
-import lab.zhang.rule.rule_engine.pojo.qo.BatchSetExecutionItemsQO;
+import lab.zhang.rule.rule_engine.pojo.dto.ExecutionArrangementDTO;
 import lab.zhang.rule.rule_engine.pojo.qo.EventQO;
-import lab.zhang.rule.rule_engine.pojo.qo.ExecutionItemQO;
+import lab.zhang.rule.rule_engine.pojo.qo.ExecutionArrangementQO;
 import lab.zhang.rule.rule_engine.service.EventService;
 import lab.zhang.rule.rule_engine.struct_mapper.EventStructMapper;
+import lab.zhang.rule.rule_engine.struct_mapper.ExecutionArrangementStructMapper;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
@@ -41,6 +40,8 @@ public class EventController {
     @Autowired
     private EventStructMapper eventStructMapper;
 
+    @Autowired
+    private ExecutionArrangementStructMapper executionArrangementStructMapper;
 
     /**
      * Get all events
@@ -112,45 +113,42 @@ public class EventController {
     }
 
     /**
-     * Batch set execution items (rules and rule groups) for an event
-     * The order of items in the list represents the execution order
-     * PUT /api/events/{eventId}/execution-items
+     * Set execution arrangements for an event
+     * The order of rules in the list represents the execution order
+     * PUT /api/events/{eventId}/execution-arrangements
      */
-    @PutMapping("/{eventId}/execution-items")
-    public ResponseEntity<ApiResponseDTO<Void>> batchSetExecutionItems(
+    @PutMapping("/{eventId}/execution-arrangements")
+    public ResponseEntity<ApiResponseDTO<Void>> setExecutionArrangements(
             @PathVariable @NotNull Long eventId,
-            @RequestBody @Valid BatchSetExecutionItemsQO request) {
-        // Build ExecutionItemDTO list from request (order represents execution order)
-        List<ExecutionItemQO> executionItems = request.getExecutionItems();
-        if (executionItems == null || executionItems.isEmpty()) {
-            // Empty list means remove all execution items
-            executionItems = Collections.emptyList();
+            @RequestBody @Valid ExecutionArrangementQO qo) {
+        Integer eventIdInt = eventId != null ? eventId.intValue() : null;
+        if (eventIdInt == null) {
+            throw new IllegalArgumentException("Event ID cannot be null");
         }
-
-        eventService.batchSetExecutionItems(eventId, executionItems);
+        List<Long> ruleIdList = qo.getRules();
+        eventService.setExecutionArrangements(eventIdInt, ruleIdList);
         return ResponseEntity.ok(ApiResponseDTO.success(null));
     }
 
     /**
-     * Get execution items for event
-     * GET /api/events/{eventId}/execution-items
+     * Get execution arrangements for event
+     * GET /api/events/{eventId}/execution-arrangements
      */
-    @GetMapping("/{eventId}/execution-items")
-    public ResponseEntity<ApiResponseDTO<List<ExecutionItemDTO>>> getExecutionItems(
+    @GetMapping("/{eventId}/execution-arrangements")
+    public ResponseEntity<ApiResponseDTO<List<ExecutionArrangementDTO>>> getExecutionArrangements(
             @PathVariable @NotNull Long eventId) {
-        List<ExecutionEventRelationEntity> relations =
-                eventService.getExecutionEventRelations(eventId);
-        List<ExecutionItemDTO> dtos = relations.stream()
-                .map(relation -> {
-                    ExecutionItemTypeEnum executionItemTypeEnum = relation.getItemTypeEnum();
-                    return ExecutionItemDTO.builder()
-                            .itemType(executionItemTypeEnum != null ? executionItemTypeEnum.getId() : null)
-                            .itemId(relation.getItemId())
-                            .executionOrder(relation.getExecutionOrder())
-                            .build();
-                })
+        Integer eventIdInt = eventId != null ? eventId.intValue() : null;
+        if (eventIdInt == null) {
+            throw new IllegalArgumentException("Event ID cannot be null");
+        }
+        List<ExecutionArrangement> modelList = eventService.getExecutionArrangements(eventIdInt);
+        if (modelList == null || modelList.isEmpty()) {
+            return ResponseEntity.ok(ApiResponseDTO.success(Collections.emptyList()));
+        }
+        List<ExecutionArrangementDTO> dtoList = modelList.stream()
+                .map(executionArrangementStructMapper::modelToDTO)
                 .collect(Collectors.toList());
-        return ResponseEntity.ok(ApiResponseDTO.success(dtos));
+        return ResponseEntity.ok(ApiResponseDTO.success(dtoList));
     }
 
 }

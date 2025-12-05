@@ -73,6 +73,11 @@ public class RuleQO {
     public interface Update {
     }
 
+    /**
+     * Validation group for update operation
+     */
+    public interface Copy {
+    }
 
     /**
      * Convert to ContentTypeEnum enum

@@ -2,12 +2,12 @@ package lab.zhang.rule.rule_engine.engine
 
 import lab.zhang.rule.rule_engine.common.TypedValue
 import lab.zhang.rule.rule_engine.constant.EvalArgumentConst
-import lab.zhang.rule.rule_engine.entity.RuleGroupRuleRelationEntity
+import lab.zhang.rule.rule_engine.entity.ExecutionArrangementEntity
 import lab.zhang.rule.rule_engine.enums.ContentTypeEnum
 import lab.zhang.rule.rule_engine.enums.RuleStatusEnum
 import lab.zhang.rule.rule_engine.enums.ValueTypeEnum
 import lab.zhang.rule.rule_engine.executor.RuleExecutor
-import lab.zhang.rule.rule_engine.mapper.RuleGroupRuleRelationMapper
+import lab.zhang.rule.rule_engine.mapper.ExecutionArrangementMapper
 import lab.zhang.rule.rule_engine.model.Rule
 import lab.zhang.rule.rule_engine.model.RuleExecutionContext
 import lab.zhang.rule.rule_engine.model.RuleGroup
@@ -32,12 +32,12 @@ class RuleExecutionEngineSpec extends Specification {
     def ruleService = Mock(RuleService)
     def ruleGroupService = Mock(RuleGroupService)
     def ruleExecutor = Mock(RuleExecutor)
+    def executionArrangementMapper = Mock(ExecutionArrangementMapper)
     def engine = new RuleExecutionEngine()
 
     def setup() {
         engine.ruleService = ruleService
         engine.ruleGroupService = ruleGroupService
-        setPrivateField(engine, "environment", "TEST")
         // Mock getSupportedRuleType for executor registration (use _ * for default behavior)
         _ * ruleExecutor.getSupportedRuleType() >> ContentTypeEnum.EXPRESSION
         engine.registerExecutor(ruleExecutor)
@@ -69,14 +69,14 @@ class RuleExecutionEngineSpec extends Specification {
         context.eventId = eventId
         context.traceId = 999L
 
-        def executionItems = rules.collect { ExecutionItem.forRule(it as Rule) }
+        def executionItems = rules.collect { ExecutionItem.forRule(it as Rule, null) }
 
         when: "execute rule sequence"
         def trace = new ExecutionTrace()
         def result = engine.execute(eventId, context, trace)
 
         then: "should execute rules in order"
-        1 * ruleService.getExecutionItemsByEventId(eventId) >> executionItems
+        1 * ruleService.getExecutionItemsByEventId(eventId, context) >> executionItems
         ruleCount.times { i ->
             1 * ruleExecutor.execute(rules[i], context) >> results[i]
         }
@@ -101,7 +101,7 @@ class RuleExecutionEngineSpec extends Specification {
         def result = engine.execute(eventId, context, trace)
 
         then: "should return null TypedValue"
-        1 * ruleService.getExecutionItemsByEventId(eventId) >> []
+        1 * ruleService.getExecutionItemsByEventId(eventId, context) >> []
         result != null
         result.getType() == ValueTypeEnum.OBJECT
         result.getValue() == null
@@ -137,14 +137,14 @@ class RuleExecutionEngineSpec extends Specification {
         context.eventId = 1001
 
         def result = new TypedValue(true, ValueTypeEnum.BOOLEAN)
-        def executionItems = activeRules.collect { ExecutionItem.forRule(it as Rule) }
+        def executionItems = activeRules.collect { ExecutionItem.forRule(it as Rule, null) }
 
         when: "execute rule sequence"
         def trace = new ExecutionTrace()
         def executionResult = engine.execute(1001, context, trace)
 
         then: "should skip offline status rules"
-        1 * ruleService.getExecutionItemsByEventId(1001) >> executionItems
+        1 * ruleService.getExecutionItemsByEventId(1001, _) >> executionItems
         offlineRuleCount.times { i ->
             0 * ruleExecutor.execute(rules[i], _)
         }
@@ -162,11 +162,8 @@ class RuleExecutionEngineSpec extends Specification {
     }
 
     @Unroll
-    def "test execute rule sequence - environment and rule status matching - environment: #environment, ruleStatus: #ruleStatus, shouldExecute: #shouldExecute"() {
-        given: "set environment"
-        setPrivateField(engine, "environment", environment)
-
-        and: "prepare rules and execution context"
+    def "test execute rule sequence - should execute rules returned by service - ruleStatus: #ruleStatus"() {
+        given: "prepare rules and execution context"
         def rule = new Rule(
                 id: 1L,
                 contentType: ContentTypeEnum.EXPRESSION,
@@ -178,49 +175,34 @@ class RuleExecutionEngineSpec extends Specification {
         context.eventId = 1001
 
         def result = new TypedValue(true, ValueTypeEnum.BOOLEAN)
-        def executionItems = [ExecutionItem.forRule(rule)]
+        def executionItems = [ExecutionItem.forRule(rule, null)]
 
         when: "execute rule sequence"
         def trace = new ExecutionTrace()
         def executionResult = engine.execute(1001, context, trace)
 
-        then: "should execute or skip based on environment and status"
-        1 * ruleService.getExecutionItemsByEventId(1001) >> executionItems
-        (shouldExecute ? 1 : 0) * ruleExecutor.execute(rule, context) >> result
-        if (shouldExecute) {
-            executionResult == result
-        } else {
-            executionResult == null || executionResult.getType() == ValueTypeEnum.OBJECT
-        }
+        then: "should execute rules returned by service"
+        // Note: Environment filtering is now handled in EventServiceImpl.getExecutionArrangements
+        // RuleExecutionEngine just executes whatever rules are returned by the service
+        1 * ruleService.getExecutionItemsByEventId(1001, _) >> executionItems
+        1 * ruleExecutor.execute(rule, context) >> result
+        executionResult == result
 
         where:
-        environment  | ruleStatus             | shouldExecute
-        "TEST"       | RuleStatusEnum.TEST    | true
-        "TEST"       | RuleStatusEnum.FULL    | false
-        "TEST"       | RuleStatusEnum.AB_TEST | false
-        "TEST"       | RuleStatusEnum.GRAY    | false
-        "GRAY"       | RuleStatusEnum.GRAY    | true
-        "GRAY"       | RuleStatusEnum.AB_TEST | true
-        "GRAY"       | RuleStatusEnum.FULL    | true
-        "GRAY"       | RuleStatusEnum.TEST    | false
-        "PRODUCTION" | RuleStatusEnum.FULL    | true
-        "PRODUCTION" | RuleStatusEnum.TEST    | false
-        "PRODUCTION" | RuleStatusEnum.AB_TEST | true
-        "PRODUCTION" | RuleStatusEnum.GRAY    | false
+        ruleStatus << [RuleStatusEnum.TEST, RuleStatusEnum.ONLINE, RuleStatusEnum.GRAY]
     }
 
     @Unroll
     def "test execute rule sequence - A/B test rule group probability distribution - rule1Ratio: #rule1Ratio, rule2Ratio: #rule2Ratio"() {
-        given: "set environment to PRODUCTION"
-        setPrivateField(engine, "environment", "PRODUCTION")
+        given: "prepare execution items"
 
         and: "prepare A/B test rule group with real RuleGroupServiceImpl"
         def realRuleService = Mock(RuleService)
-        def realRuleGroupRuleMapper = Mock(RuleGroupRuleRelationMapper)
+        // Note: GreRelationMapper is no longer used
         def realRuleSelectionCacheService = Mock(RuleSelectionCacheService)
         def realRuleGroupService = new RuleGroupServiceImpl()
         realRuleGroupService.ruleService = realRuleService
-        realRuleGroupService.ruleGroupRuleRelationMapper = realRuleGroupRuleMapper
+        // Note: GreRelationMapper is no longer used
         realRuleGroupService.ruleSelectionCacheService = realRuleSelectionCacheService
 
         engine.ruleGroupService = realRuleGroupService
@@ -228,14 +210,12 @@ class RuleExecutionEngineSpec extends Specification {
         def rule1 = Rule.builder()
                 .id(1L)
                 .contentType(ContentTypeEnum.EXPRESSION)
-                .ruleStatus(RuleStatusEnum.AB_TEST)
-                .ruleGroupId(100L)
+                .ruleStatus(RuleStatusEnum.ONLINE)
                 .build()
         def rule2 = Rule.builder()
                 .id(2L)
                 .contentType(ContentTypeEnum.EXPRESSION)
-                .ruleStatus(RuleStatusEnum.AB_TEST)
-                .ruleGroupId(100L)
+                .ruleStatus(RuleStatusEnum.ONLINE)
                 .build()
 
         def ruleGroup = RuleGroup.builder()
@@ -247,24 +227,24 @@ class RuleExecutionEngineSpec extends Specification {
         // Mock ruleService to return rules
         _ * realRuleService.getRuleById(1L) >> rule1
         _ * realRuleService.getRuleById(2L) >> rule2
-        _ * realRuleService.getExecutionItemsByEventId(1001) >> [ExecutionItem.forRuleGroup(ruleGroup)]
+        _ * realRuleService.getExecutionItemsByEventId(1001, _) >> [ExecutionItem.forRule(ruleGroup.getRules().values().first().left, null)]
 
         // Mock ruleGroupRuleMapper to return relation entities with ab_test_ratio
-        def relation1 = new RuleGroupRuleRelationEntity()
+        def relation1 = new ExecutionArrangementEntity ()
         relation1.setGroupId(100L)
         relation1.setRuleId(1L)
-        relation1.setAbTestRatio(rule1Ratio)
+        relation1.setAbRatio(rule1Ratio)
 
-        def relation2 = new RuleGroupRuleRelationEntity()
+        def relation2 = new ExecutionArrangementEntity()
         relation2.setGroupId(100L)
         relation2.setRuleId(2L)
-        relation2.setAbTestRatio(rule2Ratio)
+        relation2.setAbRatio(rule2Ratio)
 
         // Mock selectOne: return relation based on ruleId being queried
         // Since selectRuleFromGroup queries rules in the order of group.getRuleIds() ([1L, 2L]),
         // we use a simple counter that resets every 2 calls (one for each rule)
         def selectOneCallCount = 0
-        _ * realRuleGroupRuleMapper.selectOne(_) >> {
+        _ * executionArrangementMapper.selectOne(_) >> {
             selectOneCallCount++
             // Each selectRuleFromGroup call queries both rules, so we alternate
             if (selectOneCallCount % 2 == 1) {
@@ -374,14 +354,14 @@ class RuleExecutionEngineSpec extends Specification {
 
         def result1 = new TypedValue(resultValue, resultType)
         def result2 = new TypedValue(100, ValueTypeEnum.INTEGER)
-        def executionItems = [ExecutionItem.forRule(rule1), ExecutionItem.forRule(rule2)]
+        def executionItems = [ExecutionItem.forRule(rule1, null), ExecutionItem.forRule(rule2, null)]
 
         when: "execute rule sequence"
         def trace = new ExecutionTrace()
         def result = engine.execute(1001, context, trace)
 
         then: "should break early when returning false boolean"
-        1 * ruleService.getExecutionItemsByEventId(1001) >> executionItems
+        1 * ruleService.getExecutionItemsByEventId(1001, _) >> executionItems
         1 * ruleExecutor.execute(rule1, context) >> result1
         (shouldBreak ? 0 : 1) * ruleExecutor.execute(rule2, context) >> result2
         result == (shouldBreak ? result1 : result2)
@@ -406,14 +386,14 @@ class RuleExecutionEngineSpec extends Specification {
         def context = new RuleExecutionContext()
         context.userId = 123L
         context.eventId = 1001
-        def executionItems = [ExecutionItem.forRule(rule)]
+        def executionItems = [ExecutionItem.forRule(rule, null)]
 
         when: "execute rule sequence"
         def trace = new ExecutionTrace()
         engine.execute(1001, context, trace)
 
         then: "should throw exception"
-        1 * ruleService.getExecutionItemsByEventId(1001) >> executionItems
+        1 * ruleService.getExecutionItemsByEventId(1001, _) >> executionItems
         1 * ruleExecutor.execute(rule, context) >> {
             throw new RuntimeException(errorMessage)
         }
@@ -438,14 +418,14 @@ class RuleExecutionEngineSpec extends Specification {
         def context = new RuleExecutionContext()
         context.userId = 123L
         context.eventId = 1001
-        def executionItems = [ExecutionItem.forRule(rule)]
+        def executionItems = [ExecutionItem.forRule(rule, null)]
 
         when: "execute rule sequence"
         def trace = new ExecutionTrace()
         engine.execute(1001, context, trace)
 
         then: "should throw exception"
-        1 * ruleService.getExecutionItemsByEventId(1001) >> executionItems
+        1 * ruleService.getExecutionItemsByEventId(1001, _) >> executionItems
         thrown(RuntimeException)
 
         where:
@@ -454,31 +434,28 @@ class RuleExecutionEngineSpec extends Specification {
 
     @Unroll
     def "test execute rule sequence - mixed rules and rule groups - selectedRuleId: #selectedRuleId, expectedResult: #expectedResult"() {
-        given: "set environment to PRODUCTION"
-        setPrivateField(engine, "environment", "PRODUCTION")
+        given: "prepare execution items"
 
         and: "prepare mixed execution items: rule, rule group, rule"
         def rule1 = new Rule(
                 id: 1L,
                 contentType: ContentTypeEnum.EXPRESSION,
-                ruleStatus: RuleStatusEnum.FULL
+                ruleStatus: RuleStatusEnum.ONLINE
         )
         def rule2 = new Rule(
                 id: 2L,
                 contentType: ContentTypeEnum.EXPRESSION,
-                ruleStatus: RuleStatusEnum.AB_TEST,
-                ruleGroupId: 100L
+                ruleStatus: RuleStatusEnum.ONLINE,
         )
         def rule3 = new Rule(
                 id: 3L,
                 contentType: ContentTypeEnum.EXPRESSION,
-                ruleStatus: RuleStatusEnum.AB_TEST,
-                ruleGroupId: 100L
+                ruleStatus: RuleStatusEnum.ONLINE,
         )
         def rule4 = new Rule(
                 id: 4L,
                 contentType: ContentTypeEnum.EXPRESSION,
-                ruleStatus: RuleStatusEnum.FULL
+                ruleStatus: RuleStatusEnum.ONLINE
         )
 
         def ruleGroup = new RuleGroup(100L)
@@ -496,26 +473,31 @@ class RuleExecutionEngineSpec extends Specification {
         def result3 = new TypedValue(30, ValueTypeEnum.INTEGER)
         def result4 = new TypedValue(40, ValueTypeEnum.INTEGER)
 
-        // Create execution items: rule1, ruleGroup, rule4
-        def executionItems = [
-                ExecutionItem.forRule(rule1),
-                ExecutionItem.forRuleGroup(ruleGroup),
-                ExecutionItem.forRule(rule4)
-        ]
-
+        // Note: Rule group selection is now handled in RuleServiceImpl.getExecutionItemsByEventId
+        // The selected rule is already in the execution items list
         // Determine selectedRule based on selectedRuleId
         def selectedRule = selectedRuleId == 2L ? rule2 : (selectedRuleId == 3L ? rule3 : null)
+        
+        // Create execution items: rule1, selectedRule (from group, or null if not selected), rule4
+        def executionItems = []
+        executionItems.add(ExecutionItem.forRule(rule1, null))
+        if (selectedRule != null) {
+            executionItems.add(ExecutionItem.forRule(selectedRule, null))
+        } else {
+            executionItems.add(ExecutionItem.forRule(null, null)) // null rule will be skipped
+        }
+        executionItems.add(ExecutionItem.forRule(rule4, null))
 
         when: "execute rule sequence"
         def trace = new ExecutionTrace()
         def executionResult = engine.execute(1001, context, trace)
 
-        then: "should execute rules and rule group in order"
-        1 * ruleService.getExecutionItemsByEventId(1001) >> executionItems
+        then: "should execute rules in order"
+        1 * ruleService.getExecutionItemsByEventId(1001, _) >> executionItems
         // Execute rule1
         1 * ruleExecutor.execute(rule1, context) >> result1
-        // Select and execute a rule from rule group
-        1 * ruleGroupService.selectRuleFromGroup(ruleGroup, context) >> selectedRule
+        // Rule group selection is handled in RuleServiceImpl, not here
+        0 * ruleGroupService.selectRuleFromGroup(_, _)
 
         // Conditionally mock based on selectedRule
         (selectedRule != null && selectedRule.getId() == 2L ? 1 : 0) * ruleExecutor.execute(rule2, context) >> result2
@@ -534,8 +516,8 @@ class RuleExecutionEngineSpec extends Specification {
         null           | new TypedValue(40, ValueTypeEnum.INTEGER)
     }
 
-    def "test execute - rule group is null should throw exception"() {
-        given: "prepare execution items with null rule group"
+    def "test execute - should skip null rules in execution items"() {
+        given: "prepare execution items with null rule"
         def rule1 = new Rule(
                 id: 1L,
                 contentType: ContentTypeEnum.EXPRESSION,
@@ -548,26 +530,28 @@ class RuleExecutionEngineSpec extends Specification {
 
         def result1 = new TypedValue(10, ValueTypeEnum.INTEGER)
 
-        // Create execution item with null rule group
-        def nullRuleGroupItem = ExecutionItem.forRuleGroup(null)
+        // Create execution item with null rule (will be skipped)
+        def nullRuleItem = ExecutionItem.forRule(null, null)
         def executionItems = [
-                ExecutionItem.forRule(rule1),
-                nullRuleGroupItem
+                ExecutionItem.forRule(rule1, null),
+                nullRuleItem
         ]
 
         when: "execute rule sequence"
         def trace = new ExecutionTrace()
-        engine.execute(1001, context, trace)
+        def result = engine.execute(1001, context, trace)
 
-        then: "should throw IllegalArgumentException when rule group is null"
-        1 * ruleService.getExecutionItemsByEventId(1001) >> executionItems
+        then: "should skip null rule and continue (no exception thrown)"
+        // Note: Rule group selection is now handled in RuleServiceImpl.getExecutionItemsByEventId
+        // RuleExecutionEngine just skips null rules and continues
+        1 * ruleService.getExecutionItemsByEventId(1001, _) >> executionItems
         1 * ruleExecutor.execute(rule1, context) >> result1
         0 * ruleGroupService.selectRuleFromGroup(_, _)
-        thrown(IllegalArgumentException)
+        result == result1
     }
 
-    def "test execute - rule group with empty ruleIds should skip"() {
-        given: "prepare execution items with empty rule group"
+    def "test execute - should skip null rules and continue with next rule"() {
+        given: "prepare execution items with null rule in the middle (simulating empty rule group scenario)"
         def rule1 = new Rule(
                 id: 1L,
                 contentType: ContentTypeEnum.EXPRESSION,
@@ -586,19 +570,21 @@ class RuleExecutionEngineSpec extends Specification {
         def result1 = new TypedValue(10, ValueTypeEnum.INTEGER)
         def result2 = new TypedValue(20, ValueTypeEnum.INTEGER)
 
-        def emptyRuleGroup = new RuleGroup(100L)
+        // Note: Rule group selection is now handled in RuleServiceImpl.getExecutionItemsByEventId
+        // If a rule group is empty or no rule is selected, it won't appear in the execution items
+        // This test simulates the case where a null rule might appear (should be skipped)
         def executionItems = [
-                ExecutionItem.forRule(rule1),
-                ExecutionItem.forRuleGroup(emptyRuleGroup),
-                ExecutionItem.forRule(rule2)
+                ExecutionItem.forRule(rule1, null),
+                ExecutionItem.forRule(null, null), // null rule (simulating empty group scenario)
+                ExecutionItem.forRule(rule2, null)
         ]
 
         when: "execute rule sequence"
         def trace = new ExecutionTrace()
         def result = engine.execute(1001, context, trace)
 
-        then: "should skip empty rule group and continue"
-        1 * ruleService.getExecutionItemsByEventId(1001) >> executionItems
+        then: "should skip null rule and continue with next rule"
+        1 * ruleService.getExecutionItemsByEventId(1001, _) >> executionItems
         1 * ruleExecutor.execute(rule1, context) >> result1
         0 * ruleGroupService.selectRuleFromGroup(_, _)
         1 * ruleExecutor.execute(rule2, context) >> result2
@@ -615,8 +601,7 @@ class RuleExecutionEngineSpec extends Specification {
         def rule2 = new Rule(
                 id: 2L,
                 contentType: ContentTypeEnum.EXPRESSION,
-                ruleStatus: RuleStatusEnum.AB_TEST,
-                ruleGroupId: 100L
+                ruleStatus: RuleStatusEnum.ONLINE,
         )
 
         def ruleGroup = new RuleGroup(100L)
@@ -628,8 +613,8 @@ class RuleExecutionEngineSpec extends Specification {
 
         def result1 = new TypedValue(10, ValueTypeEnum.INTEGER)
         def executionItems = [
-                ExecutionItem.forRule(rule1),
-                ExecutionItem.forRuleGroup(ruleGroup)
+                ExecutionItem.forRule(rule1, null),
+                ExecutionItem.forRule(null, null) // Note: Rule group selection is now handled in RuleServiceImpl
         ]
 
         when: "execute rule sequence"
@@ -637,7 +622,7 @@ class RuleExecutionEngineSpec extends Specification {
         def result = engine.execute(1001, context, trace)
 
         then: "should skip rule group selection when userId is missing"
-        1 * ruleService.getExecutionItemsByEventId(1001) >> executionItems
+        1 * ruleService.getExecutionItemsByEventId(1001, _) >> executionItems
         1 * ruleExecutor.execute(rule1, context) >> result1
         0 * ruleGroupService.selectRuleFromGroup(_, _)
         result == result1
@@ -653,8 +638,7 @@ class RuleExecutionEngineSpec extends Specification {
         def rule2 = new Rule(
                 id: 2L,
                 contentType: ContentTypeEnum.EXPRESSION,
-                ruleStatus: RuleStatusEnum.AB_TEST,
-                ruleGroupId: 100L
+                ruleStatus: RuleStatusEnum.ONLINE,
         )
 
         def ruleGroup = new RuleGroup(100L)
@@ -667,8 +651,8 @@ class RuleExecutionEngineSpec extends Specification {
 
         def result1 = new TypedValue(10, ValueTypeEnum.INTEGER)
         def executionItems = [
-                ExecutionItem.forRule(rule1),
-                ExecutionItem.forRuleGroup(ruleGroup)
+                ExecutionItem.forRule(rule1, null),
+                ExecutionItem.forRule(null, null) // Note: Rule group selection is now handled in RuleServiceImpl
         ]
 
         when: "execute rule sequence"
@@ -676,7 +660,7 @@ class RuleExecutionEngineSpec extends Specification {
         def result = engine.execute(1001, context, trace)
 
         then: "should skip rule group selection when eventId is missing"
-        1 * ruleService.getExecutionItemsByEventId(1001) >> executionItems
+        1 * ruleService.getExecutionItemsByEventId(1001, _) >> executionItems
         1 * ruleExecutor.execute(rule1, context) >> result1
         0 * ruleGroupService.selectRuleFromGroup(_, _)
         result == result1
@@ -692,8 +676,7 @@ class RuleExecutionEngineSpec extends Specification {
         def rule2 = new Rule(
                 id: 2L,
                 contentType: ContentTypeEnum.EXPRESSION,
-                ruleStatus: RuleStatusEnum.AB_TEST,
-                ruleGroupId: 100L
+                ruleStatus: RuleStatusEnum.ONLINE,
         )
 
         def ruleGroup = new RuleGroup(100L)
@@ -706,8 +689,8 @@ class RuleExecutionEngineSpec extends Specification {
 
         def result1 = new TypedValue(10, ValueTypeEnum.INTEGER)
         def executionItems = [
-                ExecutionItem.forRule(rule1),
-                ExecutionItem.forRuleGroup(ruleGroup)
+                ExecutionItem.forRule(rule1, null),
+                ExecutionItem.forRule(null, null) // Note: Rule group selection is now handled in RuleServiceImpl
         ]
 
         when: "execute rule sequence"
@@ -715,51 +698,14 @@ class RuleExecutionEngineSpec extends Specification {
         def result = engine.execute(1001, context, trace)
 
         then: "should skip rule group selection when userHash is missing"
-        1 * ruleService.getExecutionItemsByEventId(1001) >> executionItems
+        1 * ruleService.getExecutionItemsByEventId(1001, _) >> executionItems
         1 * ruleExecutor.execute(rule1, context) >> result1
         0 * ruleGroupService.selectRuleFromGroup(_, _)
         result == result1
     }
 
-    def "test execute - rule group selection returns null should skip"() {
-        given: "prepare execution items with rule group"
-        def rule1 = new Rule(
-                id: 1L,
-                contentType: ContentTypeEnum.EXPRESSION,
-                ruleStatus: RuleStatusEnum.TEST
-        )
-        def rule2 = new Rule(
-                id: 2L,
-                contentType: ContentTypeEnum.EXPRESSION,
-                ruleStatus: RuleStatusEnum.AB_TEST,
-                ruleGroupId: 100L
-        )
-
-        def ruleGroup = new RuleGroup(100L)
-        ruleGroup.addRule(2L, rule2, 50)
-
-        def context = new RuleExecutionContext()
-        context.userId = 123L
-        context.eventId = 1001
-        context.putArgument(ARG_USER_HASH, new TypedValue("hash123", ValueTypeEnum.STRING))
-
-        def result1 = new TypedValue(10, ValueTypeEnum.INTEGER)
-        def executionItems = [
-                ExecutionItem.forRule(rule1),
-                ExecutionItem.forRuleGroup(ruleGroup)
-        ]
-
-        when: "execute rule sequence"
-        def trace = new ExecutionTrace()
-        def result = engine.execute(1001, context, trace)
-
-        then: "should skip when rule group selection returns null"
-        1 * ruleService.getExecutionItemsByEventId(1001) >> executionItems
-        1 * ruleExecutor.execute(rule1, context) >> result1
-        1 * ruleGroupService.selectRuleFromGroup(ruleGroup, context) >> null
-        0 * ruleExecutor.execute(rule2, _)
-        result == result1
-    }
+    // Note: Rule group selection is now handled in RuleServiceImpl.getExecutionItemsByEventId
+    // This test is no longer applicable to RuleExecutionEngine
 
     def "test execute - should store rule execution results in context variables"() {
         given: "prepare rules and execution context"
@@ -780,14 +726,14 @@ class RuleExecutionEngineSpec extends Specification {
 
         def result1 = new TypedValue(10, ValueTypeEnum.INTEGER)
         def result2 = new TypedValue(20, ValueTypeEnum.INTEGER)
-        def executionItems = [ExecutionItem.forRule(rule1), ExecutionItem.forRule(rule2)]
+        def executionItems = [ExecutionItem.forRule(rule1, null), ExecutionItem.forRule(rule2, null)]
 
         when: "execute rule sequence"
         def trace = new ExecutionTrace()
         def result = engine.execute(1001, context, trace)
 
         then: "should store results in context variables"
-        1 * ruleService.getExecutionItemsByEventId(1001) >> executionItems
+        1 * ruleService.getExecutionItemsByEventId(1001, _) >> executionItems
         2 * ruleExecutor.execute(_, { RuleExecutionContext ctx ->
             // Verify that lastResult is set after first rule execution
             true
@@ -814,8 +760,7 @@ class RuleExecutionEngineSpec extends Specification {
         def rule1 = new Rule(
                 id: 1L,
                 contentType: ContentTypeEnum.EXPRESSION,
-                ruleStatus: RuleStatusEnum.AB_TEST,
-                ruleGroupId: 100L
+                ruleStatus: RuleStatusEnum.ONLINE,
         )
 
         def ruleGroup = new RuleGroup(100L)
@@ -826,15 +771,17 @@ class RuleExecutionEngineSpec extends Specification {
         context.eventId = 1001
         context.putArgument(ARG_USER_HASH, new TypedValue("hash123", ValueTypeEnum.STRING))
 
-        def executionItems = [ExecutionItem.forRuleGroup(ruleGroup)]
+        // Note: Rule group selection is now handled in RuleServiceImpl.getExecutionItemsByEventId
+        // If no rule is selected, the execution items list will be empty
+        def executionItems = []
 
         when: "execute rule sequence"
         def trace = new ExecutionTrace()
         def result = engine.execute(1001, context, trace)
 
         then: "should return null TypedValue when no rule executed"
-        1 * ruleService.getExecutionItemsByEventId(1001) >> executionItems
-        1 * ruleGroupService.selectRuleFromGroup(ruleGroup, context) >> null
+        1 * ruleService.getExecutionItemsByEventId(1001, _) >> executionItems
+        0 * ruleGroupService.selectRuleFromGroup(_, _)
         0 * ruleExecutor.execute(_, _)
         result != null
         result.getType() == ValueTypeEnum.OBJECT
@@ -861,14 +808,14 @@ class RuleExecutionEngineSpec extends Specification {
 
         def result1 = resultValue != null ? new TypedValue(resultValue, resultType) : null
         def result2 = new TypedValue(100, ValueTypeEnum.INTEGER)
-        def executionItems = [ExecutionItem.forRule(rule1), ExecutionItem.forRule(rule2)]
+        def executionItems = [ExecutionItem.forRule(rule1, null), ExecutionItem.forRule(rule2, null)]
 
         when: "execute rule sequence"
         def trace = new ExecutionTrace()
         def result = engine.execute(1001, context, trace)
 
         then: "should break or continue based on result"
-        1 * ruleService.getExecutionItemsByEventId(1001) >> executionItems
+        1 * ruleService.getExecutionItemsByEventId(1001, _) >> executionItems
         1 * ruleExecutor.execute(rule1, context) >> result1
         (shouldBreak ? 0 : 1) * ruleExecutor.execute(rule2, context) >> result2
         if (shouldBreak) {
@@ -907,14 +854,14 @@ class RuleExecutionEngineSpec extends Specification {
         // Create TypedValue with boolean type but null value
         def result1 = new TypedValue(null, ValueTypeEnum.BOOLEAN)
         def result2 = new TypedValue(100, ValueTypeEnum.INTEGER)
-        def executionItems = [ExecutionItem.forRule(rule1), ExecutionItem.forRule(rule2)]
+        def executionItems = [ExecutionItem.forRule(rule1, null), ExecutionItem.forRule(rule2, null)]
 
         when: "execute rule sequence"
         def trace = new ExecutionTrace()
         def result = engine.execute(1001, context, trace)
 
         then: "should not break when boolean value is null"
-        1 * ruleService.getExecutionItemsByEventId(1001) >> executionItems
+        1 * ruleService.getExecutionItemsByEventId(1001, _) >> executionItems
         1 * ruleExecutor.execute(rule1, context) >> result1
         1 * ruleExecutor.execute(rule2, context) >> result2
         result == result2
@@ -930,8 +877,7 @@ class RuleExecutionEngineSpec extends Specification {
         def rule2 = new Rule(
                 id: 2L,
                 contentType: ContentTypeEnum.EXPRESSION,
-                ruleStatus: RuleStatusEnum.AB_TEST,
-                ruleGroupId: 100L
+                ruleStatus: RuleStatusEnum.ONLINE,
         )
 
         def ruleGroup = new RuleGroup(100L)
@@ -945,8 +891,8 @@ class RuleExecutionEngineSpec extends Specification {
 
         def result1 = new TypedValue(10, ValueTypeEnum.INTEGER)
         def executionItems = [
-                ExecutionItem.forRule(rule1),
-                ExecutionItem.forRuleGroup(ruleGroup)
+                ExecutionItem.forRule(rule1, null),
+                ExecutionItem.forRule(null, null) // Note: Rule group selection is now handled in RuleServiceImpl
         ]
 
         when: "execute rule sequence"
@@ -954,292 +900,15 @@ class RuleExecutionEngineSpec extends Specification {
         def result = engine.execute(1001, context, trace)
 
         then: "should skip rule group selection when userHash value is null"
-        1 * ruleService.getExecutionItemsByEventId(1001) >> executionItems
+        1 * ruleService.getExecutionItemsByEventId(1001, _) >> executionItems
         1 * ruleExecutor.execute(rule1, context) >> result1
         0 * ruleGroupService.selectRuleFromGroup(_, _)
         result == result1
     }
 
-    def "test execute - selectRuleToExecuteFromGroup - should return rule when all conditions are met"() {
-        given: "set environment to GRAY to allow AB_TEST rules"
-        setPrivateField(engine, "environment", "GRAY")
+    // Note: Rule group selection is now handled in RuleServiceImpl.getExecutionItemsByEventId
+    // This test is no longer applicable to RuleExecutionEngine
 
-        and: "prepare execution items with valid rule group"
-        def rule1 = new Rule(
-                id: 1L,
-                contentType: ContentTypeEnum.EXPRESSION,
-                ruleStatus: RuleStatusEnum.GRAY
-        )
-        def rule2 = new Rule(
-                id: 2L,
-                contentType: ContentTypeEnum.EXPRESSION,
-                ruleStatus: RuleStatusEnum.AB_TEST,
-                ruleGroupId: 100L
-        )
-
-        def ruleGroup = new RuleGroup(100L)
-        ruleGroup.addRule(2L, rule2, 50)
-
-        def context = new RuleExecutionContext()
-        context.userId = 123L
-        context.eventId = 1001L
-        context.putArgument(ARG_USER_HASH, new TypedValue("hash123", ValueTypeEnum.STRING))
-
-        def result1 = new TypedValue(10, ValueTypeEnum.INTEGER)
-        def result2 = new TypedValue(20, ValueTypeEnum.INTEGER)
-        def executionItems = [
-                ExecutionItem.forRule(rule1),
-                ExecutionItem.forRuleGroup(ruleGroup)
-        ]
-
-        when: "execute rule sequence"
-        def trace = new ExecutionTrace()
-        def result = engine.execute(1001, context, trace)
-
-        then: "should select and execute rule from group"
-        1 * ruleService.getExecutionItemsByEventId(1001) >> executionItems
-        1 * ruleExecutor.execute(rule1, context) >> result1
-        1 * ruleGroupService.selectRuleFromGroup(ruleGroup, context) >> rule2
-        1 * ruleExecutor.execute(rule2, context) >> result2
-        result == result2
-    }
-
-    def "test execute - selectRuleToExecuteFromGroup - should handle rule group with null rules"() {
-        given: "prepare execution items with rule group that has null rules (which causes getRuleIds() to return empty list)"
-        def rule1 = new Rule(
-                id: 1L,
-                contentType: ContentTypeEnum.EXPRESSION,
-                ruleStatus: RuleStatusEnum.TEST
-        )
-        def rule2 = new Rule(
-                id: 2L,
-                contentType: ContentTypeEnum.EXPRESSION,
-                ruleStatus: RuleStatusEnum.TEST
-        )
-
-        def context = new RuleExecutionContext()
-        context.userId = 123L
-        context.eventId = 1001
-
-        def result1 = new TypedValue(10, ValueTypeEnum.INTEGER)
-        def result2 = new TypedValue(20, ValueTypeEnum.INTEGER)
-
-        // Create rule group with null rules using reflection
-        // This will cause getRuleIds() to return an empty list
-        def ruleGroup = new RuleGroup(100L)
-        def rulesField = RuleGroup.class.getDeclaredField("rules")
-        rulesField.setAccessible(true)
-        rulesField.set(ruleGroup, null)
-
-        def executionItems = [
-                ExecutionItem.forRule(rule1),
-                ExecutionItem.forRuleGroup(ruleGroup),
-                ExecutionItem.forRule(rule2)
-        ]
-
-        when: "execute rule sequence"
-        def trace = new ExecutionTrace()
-        def result = engine.execute(1001, context, trace)
-
-        then: "should skip rule group with null rules"
-        1 * ruleService.getExecutionItemsByEventId(1001) >> executionItems
-        1 * ruleExecutor.execute(rule1, context) >> result1
-        0 * ruleGroupService.selectRuleFromGroup(_, _)
-        1 * ruleExecutor.execute(rule2, context) >> result2
-        result == result2
-    }
-
-    def "test execute - selectRuleToExecuteFromGroup - should verify context parameters passed to selectRuleFromGroup"() {
-        given: "set environment to GRAY to allow AB_TEST rules"
-        setPrivateField(engine, "environment", "GRAY")
-
-        and: "prepare execution items with rule group"
-        def rule1 = new Rule(
-                id: 1L,
-                contentType: ContentTypeEnum.EXPRESSION,
-                ruleStatus: RuleStatusEnum.GRAY
-        )
-        def rule2 = new Rule(
-                id: 2L,
-                contentType: ContentTypeEnum.EXPRESSION,
-                ruleStatus: RuleStatusEnum.AB_TEST,
-                ruleGroupId: 100L
-        )
-
-        def ruleGroup = new RuleGroup(100L)
-        ruleGroup.addRule(2L, rule2, 50)
-
-        def userId = 12345L
-        def eventId = 2000L
-        def userHash = "testHash123"
-
-        def context = new RuleExecutionContext()
-        context.userId = userId
-        context.eventId = eventId
-        context.putArgument(ARG_USER_HASH, new TypedValue(userHash, ValueTypeEnum.STRING))
-
-        def result1 = new TypedValue(10, ValueTypeEnum.INTEGER)
-        def result2 = new TypedValue(20, ValueTypeEnum.INTEGER)
-        def executionItems = [
-                ExecutionItem.forRule(rule1),
-                ExecutionItem.forRuleGroup(ruleGroup)
-        ]
-
-        when: "execute rule sequence"
-        def trace = new ExecutionTrace()
-        def result = engine.execute(eventId, context, trace)
-
-        then: "should pass correct context to selectRuleFromGroup"
-        1 * ruleService.getExecutionItemsByEventId(eventId) >> executionItems
-        1 * ruleExecutor.execute(rule1, context) >> result1
-        1 * ruleGroupService.selectRuleFromGroup({ RuleGroup group ->
-            group.getId() == 100L
-        }, { RuleExecutionContext ctx ->
-            ctx.getUserId() == userId &&
-            ctx.getEventId() == eventId &&
-            ctx.getArgument(ARG_USER_HASH).getValue() == userHash
-        }) >> rule2
-        1 * ruleExecutor.execute(rule2, context) >> result2
-        result == result2
-    }
-
-    @Unroll
-    def "test execute - selectRuleToExecuteFromGroup - should handle missing context parameters - missingParam: #missingParam"() {
-        given: "prepare execution items with rule group"
-        def rule1 = new Rule(
-                id: 1L,
-                contentType: ContentTypeEnum.EXPRESSION,
-                ruleStatus: RuleStatusEnum.TEST
-        )
-        def rule2 = new Rule(
-                id: 2L,
-                contentType: ContentTypeEnum.EXPRESSION,
-                ruleStatus: RuleStatusEnum.AB_TEST,
-                ruleGroupId: 100L
-        )
-
-        def ruleGroup = new RuleGroup(100L)
-        ruleGroup.addRule(2L, rule2, 50)
-
-        def context = new RuleExecutionContext()
-        if (missingParam != "userId") {
-            context.userId = 123L
-        }
-        if (missingParam != "eventId") {
-            context.eventId = 1001L
-        }
-        if (missingParam != "userHash") {
-            context.putArgument(ARG_USER_HASH, new TypedValue("hash123", ValueTypeEnum.STRING))
-        }
-
-        def result1 = new TypedValue(10, ValueTypeEnum.INTEGER)
-        def executionItems = [
-                ExecutionItem.forRule(rule1),
-                ExecutionItem.forRuleGroup(ruleGroup)
-        ]
-
-        when: "execute rule sequence"
-        def trace = new ExecutionTrace()
-        def result = engine.execute(1001, context, trace)
-
-        then: "should skip rule group selection when context parameter is missing"
-        1 * ruleService.getExecutionItemsByEventId(1001) >> executionItems
-        1 * ruleExecutor.execute(rule1, context) >> result1
-        0 * ruleGroupService.selectRuleFromGroup(_, _)
-        result == result1
-
-        where:
-        missingParam << ["userId", "eventId", "userHash"]
-    }
-
-    def "test execute - selectRuleToExecuteFromGroup - should handle rule group with valid rules and return selected rule"() {
-        given: "set environment to GRAY to allow AB_TEST rules"
-        setPrivateField(engine, "environment", "GRAY")
-
-        and: "prepare execution items with rule group containing multiple rules"
-        def rule1 = new Rule(
-                id: 1L,
-                contentType: ContentTypeEnum.EXPRESSION,
-                ruleStatus: RuleStatusEnum.GRAY
-        )
-        def rule2 = new Rule(
-                id: 2L,
-                contentType: ContentTypeEnum.EXPRESSION,
-                ruleStatus: RuleStatusEnum.AB_TEST,
-                ruleGroupId: 100L
-        )
-        def rule3 = new Rule(
-                id: 3L,
-                contentType: ContentTypeEnum.EXPRESSION,
-                ruleStatus: RuleStatusEnum.AB_TEST,
-                ruleGroupId: 100L
-        )
-
-        def ruleGroup = new RuleGroup(100L)
-        ruleGroup.addRule(2L, rule2, 30)
-        ruleGroup.addRule(3L, rule3, 40)
-
-        def context = new RuleExecutionContext()
-        context.userId = 123L
-        context.eventId = 1001L
-        context.putArgument(ARG_USER_HASH, new TypedValue("hash123", ValueTypeEnum.STRING))
-
-        def result1 = new TypedValue(10, ValueTypeEnum.INTEGER)
-        def result2 = new TypedValue(20, ValueTypeEnum.INTEGER)
-        def executionItems = [
-                ExecutionItem.forRule(rule1),
-                ExecutionItem.forRuleGroup(ruleGroup)
-        ]
-
-        when: "execute rule sequence"
-        def trace = new ExecutionTrace()
-        def result = engine.execute(1001, context, trace)
-
-        then: "should select rule3 from group and execute it"
-        1 * ruleService.getExecutionItemsByEventId(1001) >> executionItems
-        1 * ruleExecutor.execute(rule1, context) >> result1
-        1 * ruleGroupService.selectRuleFromGroup(ruleGroup, context) >> rule3
-        1 * ruleExecutor.execute(rule3, context) >> result2
-        result == result2
-    }
-
-    def "test execute - selectRuleToExecuteFromGroup - should skip when selectRuleFromGroup returns null"() {
-        given: "prepare execution items with rule group"
-        def rule1 = new Rule(
-                id: 1L,
-                contentType: ContentTypeEnum.EXPRESSION,
-                ruleStatus: RuleStatusEnum.TEST
-        )
-        def rule2 = new Rule(
-                id: 2L,
-                contentType: ContentTypeEnum.EXPRESSION,
-                ruleStatus: RuleStatusEnum.AB_TEST,
-                ruleGroupId: 100L
-        )
-
-        def ruleGroup = new RuleGroup(100L)
-        ruleGroup.addRule(2L, rule2, 50)
-
-        def context = new RuleExecutionContext()
-        context.userId = 123L
-        context.eventId = 1001L
-        context.putArgument(ARG_USER_HASH, new TypedValue("hash123", ValueTypeEnum.STRING))
-
-        def result1 = new TypedValue(10, ValueTypeEnum.INTEGER)
-        def executionItems = [
-                ExecutionItem.forRule(rule1),
-                ExecutionItem.forRuleGroup(ruleGroup)
-        ]
-
-        when: "execute rule sequence"
-        def trace = new ExecutionTrace()
-        def result = engine.execute(1001, context, trace)
-
-        then: "should skip when selectRuleFromGroup returns null"
-        1 * ruleService.getExecutionItemsByEventId(1001) >> executionItems
-        1 * ruleExecutor.execute(rule1, context) >> result1
-        1 * ruleGroupService.selectRuleFromGroup(ruleGroup, context) >> null
-        0 * ruleExecutor.execute(rule2, _)
-        result == result1
-    }
+    // Note: Rule group selection is now handled in RuleServiceImpl.getExecutionItemsByEventId
+    // Tests for rule group selection should be in RuleServiceImplSpec
 }

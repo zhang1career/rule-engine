@@ -140,7 +140,7 @@ paths:
         '500':
           $ref: '#/components/responses/InternalServerError'
 
-  /events/{eventId}/execution-items:
+  /events/{eventId}/rules:
     get:
       tags:
         - Events
@@ -160,7 +160,7 @@ paths:
           $ref: '#/components/responses/BadRequest'
         '500':
           $ref: '#/components/responses/InternalServerError'
-    
+
     put:
       tags:
         - Events

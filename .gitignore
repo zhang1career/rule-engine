@@ -15,6 +15,7 @@ buildNumber.properties
 *.iml
 *.iws
 *.ipr
+.run/
 .vscode/
 .classpath
 .project

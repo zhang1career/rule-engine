@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="lab.zhang.rule.rule_engine.mapper.ExecutionArrangementMapper">
+
+    <!-- Query execution arrangements by event ID with rule status filter -->
+    <!-- Joins x table with rule table on x.rule_id = rule.id -->
+    <select id="selectByEventIdOnRuleStatus" resultType="lab.zhang.rule.rule_engine.entity.ExecutionArrangementEntity">
+        SELECT x.event_id, x.rule_id, x.group_id, x.exe_order, x.ab_ratio, x.ct, x.ut
+        FROM x
+        INNER JOIN rule ON x.rule_id = rule.id
+        WHERE x.event_id = #{eventId}
+        <if test="ruleStatus != null and ruleStatus.size() > 0">
+            AND rule.rule_status IN
+            <foreach collection="ruleStatus" item="statusId" open="(" separator="," close=")">
+                #{statusId}
+            </foreach>
+        </if>
+        ORDER BY x.exe_order ASC
+    </select>
+
+    <!-- Update entity by primary key, updating non-null fields except primary key -->
+    <update id="updateByPrimaryKey">
+        UPDATE x
+        <set>
+            <if test="entity.groupId != null">
+                group_id = #{entity.groupId},
+            </if>
+            <if test="entity.exeOrder != null">
+                exe_order = #{entity.exeOrder},
+            </if>
+            <if test="entity.abRatio != null">
+                ab_ratio = #{entity.abRatio},
+            </if>
+            <if test="entity.ct != null">
+                ct = #{entity.ct},
+            </if>
+            <if test="entity.ut != null">
+                ut = #{entity.ut},
+            </if>
+        </set>
+        WHERE event_id = #{entity.eventId}
+        <if test="entity.ruleId != null">
+            AND rule_id = #{entity.ruleId}
+        </if>
+    </update>
+
+</mapper>
+

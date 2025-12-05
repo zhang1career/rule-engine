@@ -25,10 +25,21 @@ public class RuleStatusConfig {
     /**
      * Mapping from environment enum to allowed rule statuses
      */
-    private static final Map<EnvironmentEnum, Set<RuleStatusEnum>> ENV_RULE_STATUS_MAP = new HashMap<EnvironmentEnum, Set<RuleStatusEnum>>() {{
+    private static final Map<EnvironmentEnum, Set<RuleStatusEnum>> EVAL_RULE_STATUS_MAP = new HashMap<EnvironmentEnum, Set<RuleStatusEnum>>() {{
         put(EnvironmentEnum.TEST, new HashSet<>(Arrays.asList(RuleStatusEnum.TEST)));
-        put(EnvironmentEnum.GRAY, new HashSet<>(Arrays.asList(RuleStatusEnum.GRAY, RuleStatusEnum.AB_TEST, RuleStatusEnum.FULL)));
-        put(EnvironmentEnum.PRODUCTION, new HashSet<>(Arrays.asList(RuleStatusEnum.AB_TEST, RuleStatusEnum.FULL)));
+        put(EnvironmentEnum.GRAY, new HashSet<>(Arrays.asList(RuleStatusEnum.GRAY, RuleStatusEnum.ONLINE)));
+        put(EnvironmentEnum.PRODUCTION, new HashSet<>(Arrays.asList(RuleStatusEnum.ONLINE)));
+    }};
+
+    /**
+     * State transition configuration map
+     * Maps each status to the set of allowed target statuses for transition
+     */
+    public static final Map<RuleStatusEnum, Set<RuleStatusEnum>> RULE_STATUS_CHANGE_MAP = new HashMap<RuleStatusEnum, Set<RuleStatusEnum>>() {{
+        put(RuleStatusEnum.OFFLINE, new HashSet<>(Arrays.asList(RuleStatusEnum.TEST)));
+        put(RuleStatusEnum.TEST, new HashSet<>(Arrays.asList(RuleStatusEnum.OFFLINE, RuleStatusEnum.GRAY)));
+        put(RuleStatusEnum.GRAY, new HashSet<>(Arrays.asList(RuleStatusEnum.OFFLINE, RuleStatusEnum.ONLINE)));
+        put(RuleStatusEnum.ONLINE, new HashSet<>(Arrays.asList(RuleStatusEnum.OFFLINE)));
     }};
 
     /**
@@ -36,12 +47,12 @@ public class RuleStatusConfig {
      *
      * @return set of allowed rule statuses for current environment
      */
-    public Set<RuleStatusEnum> getAllowedRuleStatuses() {
+    public Set<RuleStatusEnum> getEvalAvailableRuleStatuses() {
         EnvironmentEnum env = envUtil.getEnvEnum();
-        Set<RuleStatusEnum> allowedStatuses = ENV_RULE_STATUS_MAP.get(env);
+        Set<RuleStatusEnum> allowedStatuses = EVAL_RULE_STATUS_MAP.get(env);
         if (allowedStatuses == null) {
             log.warn("No rule statuses configured for environment: {}, use default value instead", env);
-            return new HashSet<>(Arrays.asList(RuleStatusEnum.OFFLINE) );
+            return new HashSet<>(Collections.singletonList(RuleStatusEnum.OFFLINE));
         }
         return allowedStatuses;
     }

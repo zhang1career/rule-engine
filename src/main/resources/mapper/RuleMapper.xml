@@ -12,7 +12,6 @@
                 name = #{item.name},
                 content_type = #{item.contentType},
                 rule_status = #{item.ruleStatus},
-                rule_group_id = #{item.ruleGroupId},
                 description = #{item.description},
                 ut = #{item.ut},
                 ct = #{item.ct}

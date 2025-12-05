@@ -34,7 +34,7 @@ public class RuleExecutionContext implements Serializable {
     /**
      * Event type ID.
      */
-    private Long eventId;
+    private Integer eventId;
     
     /**
      * Trace ID for request tracking.
@@ -69,7 +69,7 @@ public class RuleExecutionContext implements Serializable {
      * @param arguments the input arguments, may be null (will create empty map)
      * @throws IllegalArgumentException if arguments map contains null keys
      */
-    public RuleExecutionContext(Long userId, Long eventId, Long traceId, 
+    public RuleExecutionContext(Long userId, Integer eventId, Long traceId, 
                                Map<String, TypedValue> arguments) {
         this.userId = userId;
         this.eventId = eventId;
@@ -143,7 +143,7 @@ public class RuleExecutionContext implements Serializable {
      */
     public TypedValue getArgument(String key) {
         Objects.requireNonNull(key, "Argument key cannot be null");
-        return this.arguments != null ? this.arguments.get(key) : null;
+        return this.arguments != null ? this.arguments.get(key) : TypedValue.nullValue();
     }
     
     /**

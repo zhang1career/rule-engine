@@ -1,7 +1,6 @@
 package lab.zhang.rule.rule_engine.controller;
 
-import lab.zhang.rule.rule_engine.common.TypedValue;
-import lab.zhang.rule.rule_engine.engine.ExecutionTrace;
+import lab.zhang.rule.rule_engine.model.EvalResult;
 import lab.zhang.rule.rule_engine.pojo.dto.EvalDTO;
 import lab.zhang.rule.rule_engine.pojo.dto.EvalResultDTO;
 import lab.zhang.rule.rule_engine.pojo.qo.EvalQO;
@@ -28,7 +27,7 @@ public class EvalController {
 
     @Autowired
     private EvalService evalService;
-
+    
     @Autowired
     private EvalStructMapper evalStructMapper;
 
@@ -45,10 +44,9 @@ public class EvalController {
                 qo.getUserId(), qo.getEventId(), qo.getTraceId());
 
         EvalDTO dto = evalStructMapper.qoToDto(qo);
-        ExecutionTrace trace = new ExecutionTrace();
-        TypedValue result = evalService.eval(dto, trace);
+        EvalResult evalResult = evalService.eval(dto);
 
-        return ResponseEntity.ok(new EvalResultDTO(result, trace));
+        return ResponseEntity.ok(new EvalResultDTO(evalResult.getResult(), evalResult.getBriefSteps()));
     }
 }
 

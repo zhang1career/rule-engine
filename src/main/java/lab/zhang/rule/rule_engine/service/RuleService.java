@@ -2,6 +2,7 @@ package lab.zhang.rule.rule_engine.service;
 
 import lab.zhang.rule.rule_engine.engine.ExecutionItem;
 import lab.zhang.rule.rule_engine.model.Rule;
+import lab.zhang.rule.rule_engine.model.RuleExecutionContext;
 
 import java.util.List;
 
@@ -29,8 +30,18 @@ public interface RuleService {
      *
      * @param rule the rule to save
      * @throws IllegalArgumentException if rule with same name already exists
+     * todo: first parameter change from Rule to RuleDTO
      */
     void createRule(Rule rule);
+
+    /**
+     * Create rule
+     *
+     * @param rule the rule to save
+     * @param currentTimeSeconds current time in seconds
+     * @throws IllegalArgumentException if rule with same name already exists
+     */
+    void doCreateRule(Rule rule, long currentTimeSeconds);
 
     /**
      * Update rule
@@ -61,18 +72,15 @@ public interface RuleService {
      */
     void deleteRule(Long ruleId);
 
-    /**
-     * Save execution sequence
-     */
-    void saveExecutionSequence(Long eventId, List<Long> ruleIds);
 
     /**
-     * Get execution items (rules or rule groups) in execution sequence by eventId
-     * Returns a list of ExecutionItem, which can be either a single rule or a rule group
+     * Get execution items (rules) in execution sequence by eventId
+     * Returns a list of ExecutionItem, which are rules to be executed in order
      *
      * @param eventId event ID
-     * @return list of execution items
+     * @param context execution context (contains userId and userHashInt for rule selection)
+     * @return list of execution items (rules)
      */
-    List<ExecutionItem> getExecutionItemsByEventId(Long eventId);
+    List<ExecutionItem> getExecutionItemsByEventId(Integer eventId, RuleExecutionContext context);
 }
 

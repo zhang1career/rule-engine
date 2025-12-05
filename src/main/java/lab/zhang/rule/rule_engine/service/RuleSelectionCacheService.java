@@ -22,7 +22,7 @@ public interface RuleSelectionCacheService {
      * @param groupId rule group ID
      * @return cached rule ID, or null if not found
      */
-    Long get(Long userId, Long eventId, Long groupId);
+    Long get(Long userId, Integer eventId, Long groupId);
 
     /**
      * Put rule ID into cache for given userId, eventId, and groupId
@@ -32,7 +32,7 @@ public interface RuleSelectionCacheService {
      * @param groupId rule group ID
      * @param ruleId  rule ID to cache
      */
-    void put(Long userId, Long eventId, Long groupId, Long ruleId);
+    void put(Long userId, Integer eventId, Long groupId, Long ruleId);
 
     /**
      * Remove cached rule ID for given userId, eventId, and groupId
@@ -41,7 +41,7 @@ public interface RuleSelectionCacheService {
      * @param eventId event ID
      * @param groupId rule group ID
      */
-    void remove(Long userId, Long eventId, Long groupId);
+    void remove(Long userId, Integer eventId, Long groupId);
 
     /**
      * Get all cache keys matching the prefix
