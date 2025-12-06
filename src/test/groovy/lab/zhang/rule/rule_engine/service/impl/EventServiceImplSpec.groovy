@@ -330,7 +330,7 @@ class EventServiceImplSpec extends Specification {
 
         when: "batch set execution items"
         Integer eventIdInt = eventId != null ? eventId.intValue() : null
-        eventService.setExecutionArrangements(eventIdInt, executionItems)
+        eventService.setExecutionItems(eventIdInt, executionItems)
 
         then: "execution items should be set correctly"
         1 * eventMapper.selectById(eventId) >> eventEntity
@@ -403,7 +403,7 @@ class EventServiceImplSpec extends Specification {
 
         when: "batch set execution items"
         Integer eventIdInt = eventId != null ? eventId.intValue() : null
-        eventService.setExecutionArrangements(eventIdInt, executionItems)
+        eventService.setExecutionItems(eventIdInt, executionItems)
 
         then: "should succeed"
         1 * eventMapper.selectById(eventId) >> eventEntity
@@ -445,7 +445,7 @@ class EventServiceImplSpec extends Specification {
         def exception = null
         try {
             Integer eventIdInt = eventId != null ? eventId.intValue() : null
-            eventService.setExecutionArrangements(eventIdInt, executionItems)
+            eventService.setExecutionItems(eventIdInt, executionItems)
         } catch (IllegalArgumentException e) {
             exception = e
         }
@@ -500,7 +500,7 @@ class EventServiceImplSpec extends Specification {
 
         when: "batch set execution items"
         Integer eventIdInt = eventId != null ? eventId.intValue() : null
-        eventService.setExecutionArrangements(eventIdInt, executionItems)
+        eventService.setExecutionItems(eventIdInt, executionItems)
 
         then: "should succeed if group IDs are treated as valid rule IDs"
         1 * eventMapper.selectById(eventId) >> eventEntity
@@ -536,7 +536,7 @@ class EventServiceImplSpec extends Specification {
         def exception = null
         try {
             Integer eventIdInt = eventId != null ? eventId.intValue() : null
-            eventService.setExecutionArrangements(eventIdInt, executionItems)
+            eventService.setExecutionItems(eventIdInt, executionItems)
         } catch (IllegalArgumentException e) {
             exception = e
         }
@@ -609,7 +609,7 @@ class EventServiceImplSpec extends Specification {
 
         when: "batch set execution items"
         Integer eventIdInt = eventId != null ? eventId.intValue() : null
-        eventService.setExecutionArrangements(eventIdInt, executionItems)
+        eventService.setExecutionItems(eventIdInt, executionItems)
 
         then: "should succeed"
         1 * eventMapper.selectById(eventId) >> eventEntity
@@ -672,7 +672,7 @@ class EventServiceImplSpec extends Specification {
         def exception = null
         try {
             Integer eventIdInt = eventId != null ? eventId.intValue() : null
-            eventService.setExecutionArrangements(eventIdInt, executionItems)
+            eventService.setExecutionItems(eventIdInt, executionItems)
         } catch (IllegalArgumentException e) {
             exception = e
         }
@@ -732,7 +732,7 @@ class EventServiceImplSpec extends Specification {
         }
 
         when: "get execution event relations"
-        def result = eventService.getExecutionArrangements(eventId.intValue())
+        def result = eventService.getExecutionItems(eventId.intValue())
 
         then: "should return relations ordered by execution order"
         1 * ruleStatusConfig.getEvalAvailableRuleStatuses() >> allowedStatuses
@@ -754,7 +754,7 @@ class EventServiceImplSpec extends Specification {
         ruleStatusConfig.getEvalAvailableRuleStatuses() >> allowedStatuses
 
         when: "get execution event relations"
-        def result = eventService.getExecutionArrangements(eventIdInt)
+        def result = eventService.getExecutionItems(eventIdInt)
 
         then: "should return empty list"
         1 * ruleStatusConfig.getEvalAvailableRuleStatuses() >> allowedStatuses

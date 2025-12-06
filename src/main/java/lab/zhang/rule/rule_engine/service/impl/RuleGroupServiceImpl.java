@@ -132,16 +132,16 @@ public class RuleGroupServiceImpl implements RuleGroupService {
             throw new IllegalArgumentException("Rule must be in ONLINE status to create a group");
         }
 
-        // Step 1: Check if this rule+event combination already exists in another rule group
-        // Query table x to check if rule+event combination already exists with non-zero group_id
+        // Step 1: Check if this event-rule combination already exists in another rule group
         LambdaQueryWrapper<ExecutionArrangementEntity> checkWrapper = new LambdaQueryWrapper<>();
         checkWrapper.eq(ExecutionArrangementEntity::getEventId, eventId)
-                .eq(ExecutionArrangementEntity::getRuleId, rule.getId())
-                .ne(ExecutionArrangementEntity::getGroupId, 0);
+                .eq(ExecutionArrangementEntity::getRuleId, rule.getId());
         ExecutionArrangementEntity existingEntity = executionArrangementMapper.selectOne(checkWrapper);
-        if (existingEntity != null) {
-            throw new IllegalStateException(String.format("Rule %d and event %d combination already exists",
-                    rule.getId(), eventId));
+        if (existingEntity == null) {
+            throw new IllegalStateException("Event-Rule relation not found for ruleId=" + rule.getId() + ", eventId=" + eventId);
+        }
+        if (existingEntity.getGroupId() != null && existingEntity.getGroupId() != 0) {
+            throw new IllegalStateException("Rule is already in a rule group, event=" + eventId + ", rule=" + rule.getId() + ", group=" + existingEntity.getGroupId());
         }
 
         long currentTime = TimeUtil.getCurrentTime();
@@ -158,14 +158,12 @@ public class RuleGroupServiceImpl implements RuleGroupService {
         ExecutionArrangementEntity updateEntity = new ExecutionArrangementEntity();
         updateEntity.setEventId(eventId);
         updateEntity.setRuleId(rule.getId());
-
         // Set fields to update (non-primary key fields)
         updateEntity.setGroupId(groupId); // New group_id
         updateEntity.setUt((int) currentTime);
-
         // Update by primary key, passing original group_id (0) separately for WHERE condition
         int updatedRows = executionArrangementMapper.updateByPrimaryKey(updateEntity);
-        if (updatedRows == 0) {
+        if (updatedRows <= 0) {
             throw new IllegalStateException("Event-Rule relation not found for ruleId=" + rule.getId() + ", eventId=" + eventId);
         }
 
@@ -180,11 +178,7 @@ public class RuleGroupServiceImpl implements RuleGroupService {
     }
 
     /**
-     * Delete rule group and all its associations.
-     * This method deletes:
-     * 1. All group-rule-event associations (gre_rel table)
-     * 2. All group-event associations (execution_event_rel table)
-     * 3. The rule group entity itself (rule_group table)
+     * Delete rule group if it has no associations.
      *
      * @param groupId the group ID to delete
      */
@@ -197,40 +191,17 @@ public class RuleGroupServiceImpl implements RuleGroupService {
             throw new IllegalArgumentException("Rule group not found: " + groupId);
         }
 
-        // Set all rules in group to OFFLINE
         List<Long> ruleIds = group.getRuleIds();
         if (ruleIds != null && !ruleIds.isEmpty()) {
-            throw new RuntimeException("Deleting non-empty rule group is not allowed: groupId=" + groupId);
-        }
-
-        // Update all records in table x: set group_id from groupId to 0 (standalone rules)
-        LambdaQueryWrapper<ExecutionArrangementEntity> groupRelationWrapper = new LambdaQueryWrapper<>();
-        groupRelationWrapper.eq(ExecutionArrangementEntity::getGroupId, groupId);
-        List<ExecutionArrangementEntity> groupRelations = executionArrangementMapper.selectList(groupRelationWrapper);
-        
-        if (groupRelations != null && !groupRelations.isEmpty()) {
-            long currentTime = TimeUtil.getCurrentTime();
-            for (ExecutionArrangementEntity relation : groupRelations) {
-                // Delete old record (with group_id = groupId)
-                executionArrangementMapper.deleteById(relation);
-                
-                // Create new record with group_id = 0
-                ExecutionArrangementEntity newRelation = new ExecutionArrangementEntity();
-                newRelation.setEventId(relation.getEventId());
-                newRelation.setRuleId(relation.getRuleId());
-                newRelation.setGroupId(0L);
-                newRelation.setExeOrder(relation.getExeOrder());
-                newRelation.setAbRatio(0);
-                newRelation.setCt(relation.getCt());
-                newRelation.setUt((int) currentTime);
-                executionArrangementMapper.insert(newRelation);
-            }
+            throw new IllegalStateException("Deleting non-empty rule group is not allowed: groupId=" + groupId);
         }
 
         // Delete rule group entity
         ruleGroupMapper.deleteById(groupId);
 
-        log.info("Rule group and all associations deleted: groupId={}", groupId);
+        if (log.isDebugEnabled()) {
+            log.debug("Rule group deleted: groupId={}", groupId);
+        }
     }
 
     /**
@@ -397,55 +368,6 @@ public class RuleGroupServiceImpl implements RuleGroupService {
         }
 
         return newRule;
-    }
-
-    /**
-     * Delete rule group if it's empty.
-     * Business Logic 4: When a rule group has no rules,
-     * delete the group and its event associations.
-     *
-     * @param groupId the group ID to check and delete
-     */
-    @Override
-    @Transactional
-    public void deleteRuleGroupIfEmpty(Long groupId) {
-        if (groupId == null) {
-            return;
-        }
-
-        RuleGroup group = getRuleGroup(groupId);
-        if (group == null || !group.isEmpty()) {
-            return;
-        }
-
-        // Update all records in table x: set group_id from groupId to 0 (standalone rules)
-        LambdaQueryWrapper<ExecutionArrangementEntity> deleteWrapper = new LambdaQueryWrapper<>();
-        deleteWrapper.eq(ExecutionArrangementEntity::getGroupId, groupId);
-        List<ExecutionArrangementEntity> groupRelations = executionArrangementMapper.selectList(deleteWrapper);
-        
-        if (groupRelations != null && !groupRelations.isEmpty()) {
-            long currentTime = TimeUtil.getCurrentTime();
-            for (ExecutionArrangementEntity relation : groupRelations) {
-                // Delete old record (with group_id = groupId)
-                executionArrangementMapper.deleteById(relation);
-                
-                // Create new record with group_id = 0
-                ExecutionArrangementEntity newRelation = new ExecutionArrangementEntity();
-                newRelation.setEventId(relation.getEventId());
-                newRelation.setRuleId(relation.getRuleId());
-                newRelation.setGroupId(0L);
-                newRelation.setExeOrder(relation.getExeOrder());
-                newRelation.setAbRatio(0);
-                newRelation.setCt(relation.getCt());
-                newRelation.setUt((int) currentTime);
-                executionArrangementMapper.insert(newRelation);
-            }
-        }
-
-        // Delete rule group
-        ruleGroupMapper.deleteById(groupId);
-
-        log.info("Empty rule group deleted: groupId={}", groupId);
     }
 
     /**

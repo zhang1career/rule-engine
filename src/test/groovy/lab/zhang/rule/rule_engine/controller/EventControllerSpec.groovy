@@ -2,7 +2,6 @@ package lab.zhang.rule.rule_engine.controller
 
 
 import lab.zhang.rule.rule_engine.model.Event
-import lab.zhang.rule.rule_engine.entity.ExecutionArrangementEntity
 import lab.zhang.rule.rule_engine.model.ExecutionArrangement
 import lab.zhang.rule.rule_engine.pojo.dto.EventDTO
 import lab.zhang.rule.rule_engine.pojo.dto.ExecutionArrangementDTO
@@ -289,12 +288,12 @@ class EventControllerSpec extends Specification {
         request.setRules(executionItems)
 
         when: "batch set execution items"
-        def response = controller.setExecutionArrangements(eventId, request)
+        def response = controller.setExecutionItems(eventId, request)
 
         then: "should set execution items successfully"
         // Note: Database existence validation is now handled by @ValidExecutionItemExists annotation
         // In unit tests, validation is skipped if Validator dependencies are not available
-        1 * eventService.setExecutionArrangements(eventId, executionItems)
+        1 * eventService.setExecutionItems(eventId, executionItems)
         response.statusCode == HttpStatus.OK
         response.body.code == 0
         response.body.msg == "success"
@@ -314,10 +313,10 @@ class EventControllerSpec extends Specification {
         request.setRules([])
 
         when: "batch set empty execution items"
-        def response = controller.setExecutionArrangements(eventId, request)
+        def response = controller.setExecutionItems(eventId, request)
 
         then: "should remove all execution items"
-        1 * eventService.setExecutionArrangements(eventId, [])
+        1 * eventService.setExecutionItems(eventId, [])
         response.statusCode == HttpStatus.OK
         response.body.code == 0
 
@@ -374,10 +373,10 @@ class EventControllerSpec extends Specification {
         }
 
         when: "get execution items"
-        def response = controller.getExecutionArrangements(eventId)
+        def response = controller.getExecutionItems(eventId)
 
         then: "should return execution items"
-        1 * eventService.getExecutionArrangements(eventId) >> arrangements
+        1 * eventService.getExecutionItems(eventId) >> arrangements
         relationCount * executionArrangementStructMapper.modelToDTO(_ as ExecutionArrangement) >> { ExecutionArrangement model ->
             dtos.find { it.ruleId == model.ruleId }
         }

@@ -1,7 +1,6 @@
 package lab.zhang.rule.rule_engine.controller
 
 
-import lab.zhang.rule.rule_engine.entity.ExecutionArrangementEntity
 import lab.zhang.rule.rule_engine.model.ExecutionArrangement
 import lab.zhang.rule.rule_engine.pojo.dto.ExecutionArrangementDTO
 import lab.zhang.rule.rule_engine.pojo.qo.ExecutionArrangementQO
@@ -49,13 +48,13 @@ class EventExecutionItemsControllerSpec extends Specification {
         request.setRules(executionItems)
 
         when: "batch set mixed execution items"
-        def response = controller.setExecutionArrangements(eventId, request)
+        def response = controller.setExecutionItems(eventId, request)
 
         then: "should set execution items successfully"
         // Note: Database existence validation is now handled by @ValidExecutionItemExists annotation
         // In unit tests without Spring context, the validator will skip database validation
         // Service call
-        1 * eventService.setExecutionArrangements(eventId, executionItems)
+        1 * eventService.setExecutionItems(eventId, executionItems)
         response.statusCode == HttpStatus.OK
         response.body.code == 0
         response.body.msg == "success"
@@ -72,12 +71,12 @@ class EventExecutionItemsControllerSpec extends Specification {
         request.setRules(executionItems)
 
         when: "batch set execution items"
-        def response = controller.setExecutionArrangements(eventId, request)
+        def response = controller.setExecutionItems(eventId, request)
 
         then: "should update execution items successfully"
         // Note: Database existence validation is now handled by @ValidExecutionItemExists annotation
         // In unit tests without Spring context, the validator will skip database validation
-        1 * eventService.setExecutionArrangements(eventId, executionItems)
+        1 * eventService.setExecutionItems(eventId, executionItems)
         response.statusCode == HttpStatus.OK
         response.body.code == 0
 
@@ -94,7 +93,7 @@ class EventExecutionItemsControllerSpec extends Specification {
         request.setRules(executionItems)
 
         when: "batch set execution items with null item"
-        def response = controller.setExecutionArrangements(eventId, request)
+        def response = controller.setExecutionItems(eventId, request)
 
         then: "should be rejected by validation"
         // In unit tests without Spring context, validation may be skipped
@@ -114,7 +113,7 @@ class EventExecutionItemsControllerSpec extends Specification {
         request.setRules(executionItems)
 
         when: "batch set execution items with null ruleId"
-        def response = controller.setExecutionArrangements(eventId, request)
+        def response = controller.setExecutionItems(eventId, request)
 
         then: "should be rejected by @NotNull validation"
         // In unit tests without Spring context, validation may be skipped
@@ -152,10 +151,10 @@ class EventExecutionItemsControllerSpec extends Specification {
         ]
 
         when: "get execution items"
-        def response = controller.getExecutionArrangements(eventId)
+        def response = controller.getExecutionItems(eventId)
 
         then: "should return execution items with correct order"
-        1 * eventService.getExecutionArrangements(eventId) >> relations
+        1 * eventService.getExecutionItems(eventId) >> relations
         3 * executionArrangementStructMapper.modelToDTO(_ as ExecutionArrangement) >> { ExecutionArrangement model ->
             def dto = new ExecutionArrangementDTO()
             dto.setEventId(model.eventId)
@@ -188,10 +187,10 @@ class EventExecutionItemsControllerSpec extends Specification {
     @Unroll
     def "test getExecutionItems - empty result - eventId: #eventId"() {
         when: "get execution items for event with no items"
-        def response = controller.getExecutionArrangements(eventId)
+        def response = controller.getExecutionItems(eventId)
 
         then: "should return empty list"
-        1 * eventService.getExecutionArrangements(eventId) >> []
+        1 * eventService.getExecutionItems(eventId) >> []
         response.statusCode == HttpStatus.OK
         response.body.code == 0
         response.body.data.size() == 0

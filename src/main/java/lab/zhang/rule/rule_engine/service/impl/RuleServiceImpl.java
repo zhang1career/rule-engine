@@ -21,6 +21,7 @@ import lab.zhang.rule.rule_engine.service.RuleGroupService;
 import lab.zhang.rule.rule_engine.service.RuleSelectionCacheService;
 import lab.zhang.rule.rule_engine.service.RuleService;
 import lab.zhang.rule.rule_engine.struct_mapper.RuleStructMapper;
+import lab.zhang.rule.rule_engine.util.TimeUtil;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -180,7 +181,7 @@ public class RuleServiceImpl implements RuleService {
 
         // Handle rule status change
         if (oldStatus != newStatus) {
-            changeRuleStatus(existingRule, newRule);
+            changeRuleStatusAboutOnline(existingRule, newRule);
         }
 
         newRule.setId(existingRule.getId());
@@ -329,12 +330,12 @@ public class RuleServiceImpl implements RuleService {
     }
 
     /**
-     * Handle rule status change and update rule groups accordingly
+     * Handle rule status about online. Change and update rule groups accordingly
      *
      * @param oldRule the old rule state
      * @param newRule the new rule state
      */
-    private void changeRuleStatus(Rule oldRule, Rule newRule) {
+    private void changeRuleStatusAboutOnline(Rule oldRule, Rule newRule) {
         RuleStatusEnum oldStatus = oldRule.getRuleStatus();
         RuleStatusEnum newStatus = newRule.getRuleStatus();
 
@@ -439,7 +440,7 @@ public class RuleServiceImpl implements RuleService {
                         .eq(ExecutionArrangementEntity::getRuleId, arrangementEntity.getRuleId())
                         .set(ExecutionArrangementEntity::getGroupId, 0L)
                         .set(ExecutionArrangementEntity::getAbRatio, 0)
-                        .set(ExecutionArrangementEntity::getUt, (int) System.currentTimeMillis() / 1000);
+                        .set(ExecutionArrangementEntity::getUt, (int) TimeUtil.getCurrentTime());
                 executionArrangementMapper.update(null, updateWrapper);
             }
 
@@ -484,7 +485,7 @@ public class RuleServiceImpl implements RuleService {
         }
 
         // Step 1: Query all records from table x associated with event_id
-        List<ExecutionArrangement> arrangementList = eventService.getExecutionArrangements(eventId);
+        List<ExecutionArrangement> arrangementList = eventService.getExecutionItems(eventId);
         if (arrangementList == null || arrangementList.isEmpty()) {
             log.warn("No execution event relations found for eventId: {}", eventId);
             return Collections.emptyList();

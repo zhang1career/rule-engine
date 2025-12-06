@@ -152,7 +152,7 @@ public class EventServiceImpl implements EventService {
     }
 
     @Override
-    public List<ExecutionArrangement> getExecutionArrangements(@NotNull Integer eventId) {
+    public List<ExecutionArrangement> getExecutionItems(@NotNull Integer eventId) {
         // Get allowed rule statuses
         Set<RuleStatusEnum> allowedStatusSet = ruleStatusConfig.getEvalAvailableRuleStatuses();
         List<Integer> allowedStatusIdList = allowedStatusSet.stream()
@@ -178,7 +178,7 @@ public class EventServiceImpl implements EventService {
 
     @Override
     @Transactional
-    public void setExecutionArrangements(@NotNull Integer eventId, List<Long> ruleIdList) {
+    public void setExecutionItems(@NotNull Integer eventId, List<Long> ruleIdList) {
         // Validate event existence
         EventEntity event = eventMapper.selectById(eventId);
         if (event == null) {

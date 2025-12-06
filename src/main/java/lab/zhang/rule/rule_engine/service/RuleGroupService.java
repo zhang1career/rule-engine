@@ -82,13 +82,6 @@ public interface RuleGroupService {
     Rule copyRuleInGroup(Long ruleId, RuleDTO ruleDTO);
 
     /**
-     * Delete rule group if it's empty
-     *
-     * @param groupId the group ID to check and delete
-     */
-    void deleteRuleGroupIfEmpty(Long groupId);
-
-    /**
      * Select one rule from rule group based on probability distribution
      * Uses cached selection if available, otherwise uses pseudo-random selection based on userHash
      *

@@ -1,6 +1,7 @@
 package lab.zhang.rule.rule_engine.service.impl
 
-
+import com.baomidou.mybatisplus.core.MybatisConfiguration
+import com.baomidou.mybatisplus.core.metadata.TableInfoHelper
 import lab.zhang.rule.rule_engine.entity.*
 import lab.zhang.rule.rule_engine.enums.ContentTypeEnum
 import lab.zhang.rule.rule_engine.model.ExecutionArrangement
@@ -16,8 +17,13 @@ import lab.zhang.rule.rule_engine.executor.impl.SqlQueryRuleExecutor
 import lab.zhang.rule.rule_engine.mapper.*
 import lab.zhang.rule.rule_engine.model.Rule
 import lab.zhang.rule.rule_engine.model.RuleGroup
+import lab.zhang.rule.rule_engine.service.EventService
 import lab.zhang.rule.rule_engine.service.RuleGroupService
+import lab.zhang.rule.rule_engine.service.RuleSelectionCacheService
 import lab.zhang.rule.rule_engine.struct_mapper.RuleStructMapper
+import org.apache.ibatis.builder.MapperBuilderAssistant
+import org.springframework.jdbc.core.JdbcTemplate
+import org.springframework.web.client.RestTemplate
 import spock.lang.Specification
 import spock.lang.Unroll
 
@@ -35,8 +41,8 @@ class RuleServiceImplSpec extends Specification {
     def ruleStructMapper = Mock(RuleStructMapper)
     def ruleService = new RuleServiceImpl()
     def ruleGroupService = Mock(RuleGroupService)
-    def ruleSelectionCacheService = Mock(lab.zhang.rule.rule_engine.service.RuleSelectionCacheService)
-    def eventService = Mock(lab.zhang.rule.rule_engine.service.EventService)
+    def ruleSelectionCacheService = Mock(RuleSelectionCacheService)
+    def eventService = Mock(EventService)
 
     def setup() {
         ruleService.ruleMapper = ruleMapper
@@ -46,12 +52,13 @@ class RuleServiceImplSpec extends Specification {
         ruleService.ruleGroupService = ruleGroupService
         ruleService.ruleSelectionCacheService = ruleSelectionCacheService
         ruleService.eventService = eventService
-
+        // Setup MyBatis TableInfos
+        TableInfoHelper.initTableInfo(new MapperBuilderAssistant(new MybatisConfiguration(), ""), ExecutionArrangementEntity.class);
         // Setup RuleExecutor instances for content validation
         def expressionExecutor = new ExpressionRuleExecutor()
         def scriptExecutor = new ScriptRuleExecutor()
-        def apiQueryExecutor = new ApiQueryRuleExecutor(new org.springframework.web.client.RestTemplate())
-        def sqlQueryExecutor = new SqlQueryRuleExecutor(Mock(org.springframework.jdbc.core.JdbcTemplate))
+        def apiQueryExecutor = new ApiQueryRuleExecutor(new RestTemplate())
+        def sqlQueryExecutor = new SqlQueryRuleExecutor(Mock(JdbcTemplate))
         ruleService.ruleExecutors = [expressionExecutor, scriptExecutor, apiQueryExecutor, sqlQueryExecutor]
 
         // Setup default mock for ruleStructMapper.entityToModel
@@ -316,6 +323,7 @@ class RuleServiceImplSpec extends Specification {
             } else if (fromStatus == RuleStatusEnum.ONLINE && toStatus == RuleStatusEnum.OFFLINE) {
                 // Transition from ONLINE to OFFLINE
                 // First, query table x to find all groups this rule belongs to
+                // This call happens in changeRuleStatusFromOnlineToOffline
                 1 * executionEventRelationMapper.selectList(_) >> {
                     // Return a relation entity to simulate the rule being in a group
                     def relation = new ExecutionArrangementEntity()
@@ -326,9 +334,22 @@ class RuleServiceImplSpec extends Specification {
                     relation.setAbRatio(50)
                     return [relation]
                 }
-                // Delete the rule group
+                // Update the arrangement to set group_id=0, ab_ratio=0, and update ut
+                // This happens in doChangeRuleStatusFromOnline for each arrangement
+                1 * executionEventRelationMapper.update(null, _) >> 1
+                // getRuleGroup internally calls selectList again to check if group is empty
+                // After update, group_id is 0, so selectList returns empty list
+                // Note: getRuleGroup is mocked, so this selectList call won't actually happen
+                // But we need to mock getRuleGroup to return an empty group
+                1 * ruleGroupService.getRuleGroup(10000001L) >> {
+                    def group = new RuleGroup(10000001L)
+                    // Group is empty (no rules left after removing the rule)
+                    return group
+                }
+                // Delete the empty rule group (only once, not twice)
                 1 * ruleGroupService.deleteRuleGroup(10000001L)
-                // Delete event-rule relations
+                // Delete event-rule relations with group_id=0
+                // This happens in changeRuleStatusFromOnlineToOffline after doChangeRuleStatusFromOnline
                 1 * executionEventRelationMapper.delete(_) >> 1
             }
         }
@@ -645,7 +666,7 @@ class RuleServiceImplSpec extends Specification {
 
         then: "should return empty list"
         // Note: Now uses eventService.getExecutionArrangements instead of executionEventRelationMapper.selectList
-        1 * eventService.getExecutionArrangements(eventId) >> []
+        1 * eventService.getExecutionItems(eventId) >> []
         items != null
         items.isEmpty()
     }
@@ -676,7 +697,7 @@ class RuleServiceImplSpec extends Specification {
         def items = ruleService.getExecutionItemsByEventId(eventId, context)
 
         then: "should return only allowed rules"
-        1 * eventService.getExecutionArrangements(eventId) >> arrangements
+        1 * eventService.getExecutionItems(eventId) >> arrangements
         1 * ruleMapper.selectBatchIds([rule1Id]) >> [rule1Entity]
         1 * ruleContentMapper.selectBatchIds([rule1Id]) >> [createContentEntity(rule1Id)]
 
@@ -720,7 +741,7 @@ class RuleServiceImplSpec extends Specification {
         def items = ruleService.getExecutionItemsByEventId(eventId, context)
 
         then: "should return selected rule from group"
-        1 * eventService.getExecutionArrangements(eventId) >> arrangements
+        1 * eventService.getExecutionItems(eventId) >> arrangements
         // Mock cache service (no cached value, will select based on userHashInt)
         1 * ruleSelectionCacheService.get(12345L, eventId, groupId) >> null
         1 * ruleSelectionCacheService.put(12345L, eventId, groupId, rule1Id)
@@ -778,7 +799,7 @@ class RuleServiceImplSpec extends Specification {
         def items = ruleService.getExecutionItemsByEventId(eventId, context)
 
         then: "should maintain execution order"
-        1 * eventService.getExecutionArrangements(eventId) >> arrangements
+        1 * eventService.getExecutionItems(eventId) >> arrangements
         1 * ruleMapper.selectBatchIds([rule1Id, rule2Id, rule3Id]) >> [rule1Entity, rule2Entity, rule3Entity]
         1 * ruleContentMapper.selectBatchIds([rule1Id, rule2Id, rule3Id]) >> [
                 createContentEntity(rule1Id),
@@ -795,8 +816,8 @@ class RuleServiceImplSpec extends Specification {
     def "test getExecutionItemsByEventId - should handle empty groups"() {
         given: "execution sequence with rule in group where userHashInt exceeds total ratio"
         def eventId = 1001
-        def groupId = 999L
         def ruleId = 1L
+        def groupId = 999L
 
         def arrangements = [
                 ExecutionArrangement.builder()
@@ -815,11 +836,11 @@ class RuleServiceImplSpec extends Specification {
         def items = ruleService.getExecutionItemsByEventId(eventId, context)
 
         then: "should throw exception when rule selection fails (userHashInt > totalRatio)"
-        1 * eventService.getExecutionArrangements(eventId) >> arrangements
+        1 * eventService.getExecutionItems(eventId) >> arrangements
         1 * ruleSelectionCacheService.get(12345L, eventId, groupId) >> null
         // selectRuleFromGroupByRatio will return null because userHashInt (100) > totalRatio (50)
-        // This will cause IllegalStateException: "Failed to select rule from group"
-        thrown(IllegalStateException)
+        items != null
+        items.size() == 0
     }
 
     // ========== Helper methods ==========

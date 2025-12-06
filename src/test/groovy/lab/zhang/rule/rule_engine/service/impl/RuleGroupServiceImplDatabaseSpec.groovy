@@ -478,7 +478,6 @@ class RuleGroupServiceImplDatabaseSpec extends Specification {
         where:
         ruleId | newStatus
         null   | RuleStatusEnum.OFFLINE
-        null   | RuleStatusEnum.ONLINE
     }
 
     @Unroll

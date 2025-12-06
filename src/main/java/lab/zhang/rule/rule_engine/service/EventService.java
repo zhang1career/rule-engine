@@ -2,7 +2,6 @@ package lab.zhang.rule.rule_engine.service;
 
 import lab.zhang.rule.rule_engine.model.Event;
 import lab.zhang.rule.rule_engine.model.ExecutionArrangement;
-import lab.zhang.rule.rule_engine.pojo.dto.ExecutionArrangementDTO;
 
 import java.util.List;
 
@@ -64,7 +63,7 @@ public interface EventService {
      * @param eventId event ID
      * @return list of execution event relation entities
      */
-    List<ExecutionArrangement> getExecutionArrangements(Integer eventId);
+    List<ExecutionArrangement> getExecutionItems(Integer eventId);
 
     /**
      * Batch set execution items (rules and rule groups) for an event
@@ -79,6 +78,6 @@ public interface EventService {
      * @param ruleIdList     list of rule IDs (order represents execution order)
      * @throws IllegalArgumentException if event not found, or any item not found
      */
-    void setExecutionArrangements(Integer eventId, List<Long> ruleIdList);
+    void setExecutionItems(Integer eventId, List<Long> ruleIdList);
 }
 

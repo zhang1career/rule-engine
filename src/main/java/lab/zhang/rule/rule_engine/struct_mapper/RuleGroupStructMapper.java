@@ -106,18 +106,18 @@ public interface RuleGroupStructMapper {
     }
 
     default void setRuleMap(RuleGroup group,
-                            List<ExecutionArrangementEntity> entityList) {
-        if (entityList == null) {
+                            List<ExecutionArrangementEntity> arrangementEntityList) {
+        if (arrangementEntityList == null) {
             group.setRules(Collections.emptyMap());
             return;
         }
         Map<Long, Pair<Rule, Integer>> rulesMap = new HashMap<>();
-        for (ExecutionArrangementEntity entity : entityList) {
-            if (entity == null || entity.getRuleId() == null) {
+        for (ExecutionArrangementEntity arrangementEntity : arrangementEntityList) {
+            if (arrangementEntity == null || arrangementEntity.getRuleId() == null) {
                 continue;
             }
-            Long ruleId = entity.getRuleId();
-            Integer ratio = entity.getAbRatio() != null ? entity.getAbRatio() : 0;
+            Long ruleId = arrangementEntity.getRuleId();
+            Integer ratio = arrangementEntity.getAbRatio() != null ? arrangementEntity.getAbRatio() : 0;
             // Rule object will be loaded separately when needed
             rulesMap.put(ruleId, Pair.of(null, ratio));
         }

@@ -127,28 +127,34 @@ class RuleGroupStructMapperSpec extends Specification {
     def "test entityToModel - should populate rules map from entity list with null Rule objects"() {
         given: "a RuleGroupEntity"
         def entity = new RuleGroupEntity()
-        entity.id = 10000001L
+        entity.id = groupId
 
         and: "entity list with data"
-        def arrangement1 = new ExecutionArrangementEntity()
-        arrangement1.groupId = 10000001L
-        arrangement1.ruleId = 1L
-        arrangement1.abRatio = 50
+        def arrangementEntity = new ExecutionArrangementEntity()
+        arrangementEntity.groupId = groupId
+        arrangementEntity.ruleId = ruleId
+        arrangementEntity.abRatio = abRatio
 
-        def entityList = [arrangement1]
+        def arrangementEntities = [arrangementEntity]
 
         when: "convert to RuleGroup"
-        def ruleGroup = ruleGroupStructMapper.entityToModelWithRuleRatios(entity, entityList)
+        def ruleGroup = ruleGroupStructMapper.entityToModelWithRuleRatios(entity, arrangementEntities)
 
         then: "should populate rules map with rule IDs and ratios (Rule objects are null, loaded separately)"
         ruleGroup != null
-        ruleGroup.id == 10000001L
+        ruleGroup.id == groupId
         ruleGroup.rules != null
         ruleGroup.rules.size() == 1
-        ruleGroup.rules.containsKey(1L)
-        ruleGroup.rules.get(1L).left == null  // Rule object is null, loaded separately
-        ruleGroup.rules.get(1L).right == 50   // Ratio is populated
-        ruleGroup.getRuleIds().contains(1L)    // getRuleIds() works because rules map is populated
+        ruleGroup.rules.containsKey(ruleId)
+        ruleGroup.rules.get(ruleId).left == null      // Rule object is null, loaded separately
+        ruleGroup.rules.get(ruleId).right == abRatio  // Ratio is populated
+        ruleGroup.getRuleIds().contains(ruleId)       // getRuleIds() works because rules map is populated
+
+        where:
+        ruleId | groupId   | abRatio
+        1L     | 10000001L | 0
+        2L     | 10000002L | 50
+        3L     | 10000003L | 100
     }
 
     def "test entityToModel - should handle null entity list"() {

@@ -113,12 +113,12 @@ public class EventController {
     }
 
     /**
-     * Set execution arrangements for an event
+     * Set execution items for an event
      * The order of rules in the list represents the execution order
-     * PUT /api/events/{eventId}/execution-arrangements
+     * PUT /api/events/{eventId}/execution-items
      */
-    @PutMapping("/{eventId}/execution-arrangements")
-    public ResponseEntity<ApiResponseDTO<Void>> setExecutionArrangements(
+    @PutMapping("/{eventId}/execution-items")
+    public ResponseEntity<ApiResponseDTO<Void>> setExecutionItems(
             @PathVariable @NotNull Long eventId,
             @RequestBody @Valid ExecutionArrangementQO qo) {
         Integer eventIdInt = eventId != null ? eventId.intValue() : null;
@@ -126,26 +126,26 @@ public class EventController {
             throw new IllegalArgumentException("Event ID cannot be null");
         }
         List<Long> ruleIdList = qo.getRules();
-        eventService.setExecutionArrangements(eventIdInt, ruleIdList);
+        eventService.setExecutionItems(eventIdInt, ruleIdList);
         return ResponseEntity.ok(ApiResponseDTO.success(null));
     }
 
     /**
-     * Get execution arrangements for event
-     * GET /api/events/{eventId}/execution-arrangements
+     * Get execution items for event
+     * GET /api/events/{eventId}/execution-items
      */
-    @GetMapping("/{eventId}/execution-arrangements")
-    public ResponseEntity<ApiResponseDTO<List<ExecutionArrangementDTO>>> getExecutionArrangements(
+    @GetMapping("/{eventId}/execution-items")
+    public ResponseEntity<ApiResponseDTO<List<ExecutionArrangementDTO>>> getExecutionItems(
             @PathVariable @NotNull Long eventId) {
         Integer eventIdInt = eventId != null ? eventId.intValue() : null;
         if (eventIdInt == null) {
             throw new IllegalArgumentException("Event ID cannot be null");
         }
-        List<ExecutionArrangement> modelList = eventService.getExecutionArrangements(eventIdInt);
-        if (modelList == null || modelList.isEmpty()) {
+        List<ExecutionArrangement> arrangementList = eventService.getExecutionItems(eventIdInt);
+        if (arrangementList == null || arrangementList.isEmpty()) {
             return ResponseEntity.ok(ApiResponseDTO.success(Collections.emptyList()));
         }
-        List<ExecutionArrangementDTO> dtoList = modelList.stream()
+        List<ExecutionArrangementDTO> dtoList = arrangementList.stream()
                 .map(executionArrangementStructMapper::modelToDTO)
                 .collect(Collectors.toList());
         return ResponseEntity.ok(ApiResponseDTO.success(dtoList));
