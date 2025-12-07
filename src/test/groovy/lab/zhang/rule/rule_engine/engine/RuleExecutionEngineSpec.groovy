@@ -12,7 +12,7 @@ import lab.zhang.rule.rule_engine.model.Rule
 import lab.zhang.rule.rule_engine.model.RuleExecutionContext
 import lab.zhang.rule.rule_engine.model.RuleGroup
 import lab.zhang.rule.rule_engine.service.RuleGroupService
-import lab.zhang.rule.rule_engine.service.RuleSelectionCacheService
+import lab.zhang.rule.rule_engine.cache.RuleSelectionCacheService
 import lab.zhang.rule.rule_engine.service.RuleService
 import lab.zhang.rule.rule_engine.service.impl.RuleGroupServiceImpl
 import lab.zhang.rule.rule_engine.util.HashUtil

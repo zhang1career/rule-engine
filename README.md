@@ -13,70 +13,6 @@ A rule calculation service based on SpringBoot, supporting multiple rule types a
 - **Script Engine**: Groovy 3.0.17
 - **Expression Engine**: MVEL 2.4.14
 
-## Project Structure
-
-```
-rule-engine/
-├── src/
-│   ├── main/
-│   │   ├── java/
-│   │   │   └── com/ruleengine/
-│   │   │       ├── RuleEngineApplication.java      # Main application class
-│   │   │       ├── common/                         # Common classes
-│   │   │       │   └── TypedValue.java             # Typed value wrapper
-│   │   │       ├── config/                         # Configuration classes
-│   │   │       │   └── RuleEngineConfig.java       # Rule engine configuration
-│   │   │       ├── controller/                     # Controller layer
-│   │   │       │   └── RuleController.java         # Rule calculation interface
-│   │   │       ├── dto/                            # Data transfer objects
-│   │   │       │   ├── EvalRequest.java            # Evaluation request
-│   │   │       │   └── EvalResponse.java           # Evaluation response
-│   │   │       ├── engine/                         # Rule engine
-│   │   │       │   └── RuleExecutionEngine.java    # Rule execution engine
-│   │   │       ├── enums/                          # Enumeration classes
-│   │   │       │   ├── Environment.java           # Environment type
-│   │   │       │   ├── RuleStatus.java             # Rule status
-│   │   │       │   └── RuleType.java               # Rule type
-│   │   │       ├── model/                          # Entity models
-│   │   │       │   ├── ABTestRecord.java           # A/B test record
-│   │   │       │   ├── ExecutionSequence.java      # Execution sequence
-│   │   │       │   ├── Rule.java                   # Rule entity
-│   │   │       │   └── RuleExecutionContext.java   # Execution context
-│   │   │       ├── rule/                           # Rule related
-│   │   │       │   └── executor/                   # Rule executors
-│   │   │       │       ├── RuleExecutor.java       # Executor interface
-│   │   │       │       └── impl/                   # Executor implementations
-│   │   │       │           ├── ApiQueryRuleExecutor.java    # API query executor
-│   │   │       │           ├── ExpressionRuleExecutor.java  # Expression executor
-│   │   │       │           ├── ScriptRuleExecutor.java      # Script executor
-│   │   │       │           └── SqlQueryRuleExecutor.java    # SQL query executor
-│   │   │       └── service/                        # Service layer
-│   │   │           ├── EvalService.java            # Evaluation service
-│   │   │           ├── MessageQueueService.java   # Message queue service
-│   │   │           ├── RuleGroupService.java       # Rule group service (A/B testing)
-│   │   │           ├── RuleService.java            # Rule service
-│   │   │           └── impl/                        # Service implementations
-│   │   │               ├── EvalServiceImpl.java
-│   │   │               ├── MessageQueueServiceImpl.java
-│   │   │               ├── RuleGroupServiceImpl.java
-│   │   │               └── RuleServiceImpl.java
-│   │   └── resources/
-│   │       └── application.yml                      # Configuration file
-│   └── test/                                        # Test code
-├── pom.xml                                          # Maven configuration
-├── README.md                                        # Project documentation
-├── QUICKSTART.md                                    # Quick start guide
-└── docs/                                            # Documentation directory
-    ├── prd/                                         # Product requirements document
-    │   └── PRD.md
-    ├── api/                                         # API interface documentation
-    │   └── API_DOCUMENTATION.md
-    ├── schema/                                      # Database schema documentation
-    │   └── DATABASE_SCHEMA.md
-    └── uml/                                         # UML activity diagrams
-        └── *.puml
-```
-
 ## Core Features
 
 - Rule execution engine: Supports multiple rule types (expression, script, API query, SQL query)
@@ -290,12 +226,14 @@ Currently uses database storage (MySQL + MyBatis Plus), supporting:
 - [x] HTTP synchronous blocking interface
 - [x] Basic rule execution engine
 - [x] Rule status control
-- [x] RabbitMQ message sending
-- [ ] A/B testing feature improvements
-- [ ] Rule configuration persistence
-- [ ] RPC interface implementation
+- [ ] Kafka message sending
+- [x] Rule configuration persistence
 - [ ] Asynchronous non-blocking calls
 - [ ] Rule execution monitoring and logging
+- [ ] Rule content caching
+- [ ] Security validation on script/api/sql/groovy content
+- [ ] Load test
+- [ ] docker configurable
 
 ## License
 

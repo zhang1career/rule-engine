@@ -1,12 +1,23 @@
 # Development environment configuration
 spring:
-  rabbitmq:
-    host: localhost
-    port: 5672
-    username: guest
-    password: guest
+  datasource:
+    url: jdbc:mysql://127.0.0.1:3306/rule_engine?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai&allowMultiQueries=true
+    username: zhang
+    password: 123456
+    driver-class-name: com.mysql.cj.jdbc.Driver
 
 rule:
   engine:
     environment: DEV
+
+# Development logging configuration (overrides main application.yml)
+logging:
+  level:
+    root: DEBUG
+    lab.zhang.rule: DEBUG
+    # Third-party library logs
+    com.baomidou.mybatisplus: INFO
+    org.springframework.jdbc: DEBUG
+    org.springframework.data.redis: DEBUG
+    org.springframework.web: DEBUG
 

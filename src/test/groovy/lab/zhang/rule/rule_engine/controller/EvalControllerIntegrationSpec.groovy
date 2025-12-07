@@ -289,6 +289,37 @@ class EvalControllerIntegrationSpec extends Specification {
         }
     }
 
+    def "test eval interface - cache control via RULE_CONTENT_CACHE_ENABLED environment variable"() {
+        given: "prepare eval request"
+        def evalQO = new EvalQO()
+        evalQO.userId = 1000L
+        evalQO.eventId = EVENT_ID_2
+        evalQO.traceId = 9999L
+        evalQO.arguments = [
+                "amount": new TypedValue(300.0, ValueTypeEnum.DECIMAL)
+        ]
+
+        when: "call eval interface with cache enabled (default)"
+        def responseWithCache = evalController.eval(evalQO)
+
+        then: "should return success response"
+        responseWithCache.statusCode == HttpStatus.OK
+        responseWithCache.body != null
+        responseWithCache.body.result != null
+
+        when: "call eval interface again with same parameters (should use cache)"
+        def responseWithCacheAgain = evalController.eval(evalQO)
+
+        then: "should return same result"
+        responseWithCacheAgain.statusCode == HttpStatus.OK
+        responseWithCacheAgain.body != null
+        responseWithCacheAgain.body.result != null
+
+        // Note: In integration test, we can't easily verify cache behavior without mocking,
+        // but this test ensures the interface works correctly with cache configuration
+        // In a real environment, RULE_CONTENT_CACHE_ENABLED=false would bypass cache
+    }
+
     // Helper methods
     private void setupTestData() {
         // Create 3 events

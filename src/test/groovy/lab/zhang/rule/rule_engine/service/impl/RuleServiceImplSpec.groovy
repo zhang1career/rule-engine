@@ -19,7 +19,8 @@ import lab.zhang.rule.rule_engine.model.Rule
 import lab.zhang.rule.rule_engine.model.RuleGroup
 import lab.zhang.rule.rule_engine.service.EventService
 import lab.zhang.rule.rule_engine.service.RuleGroupService
-import lab.zhang.rule.rule_engine.service.RuleSelectionCacheService
+import lab.zhang.rule.rule_engine.cache.RuleSelectionCacheService
+import lab.zhang.rule.rule_engine.cache.RuleContentCacheService
 import lab.zhang.rule.rule_engine.struct_mapper.RuleStructMapper
 import org.apache.ibatis.builder.MapperBuilderAssistant
 import org.springframework.jdbc.core.JdbcTemplate
@@ -42,6 +43,7 @@ class RuleServiceImplSpec extends Specification {
     def ruleService = new RuleServiceImpl()
     def ruleGroupService = Mock(RuleGroupService)
     def ruleSelectionCacheService = Mock(RuleSelectionCacheService)
+    def ruleContentCacheService = Mock(RuleContentCacheService)
     def eventService = Mock(EventService)
 
     def setup() {
@@ -51,6 +53,7 @@ class RuleServiceImplSpec extends Specification {
         ruleService.ruleStructMapper = ruleStructMapper
         ruleService.ruleGroupService = ruleGroupService
         ruleService.ruleSelectionCacheService = ruleSelectionCacheService
+        ruleService.ruleContentCacheService = ruleContentCacheService
         ruleService.eventService = eventService
         // Setup MyBatis TableInfos
         TableInfoHelper.initTableInfo(new MapperBuilderAssistant(new MybatisConfiguration(), ""), ExecutionArrangementEntity.class);
@@ -843,16 +846,124 @@ class RuleServiceImplSpec extends Specification {
         items.size() == 0
     }
 
+    // ========== batchGetContentMapWithCache() tests ==========
+
+    def "test batchGetContentMapWithCache - should return from cache when all rules are cached"() {
+        given: "rule IDs and cache service is available"
+        def ruleIds = [1L, 2L, 3L] as Set
+        def cachedContent = ["rule1 content", "rule2 content", "rule3 content"]
+        def expectedResult = [
+                1L: "rule1 content",
+                2L: "rule2 content",
+                3L: "rule3 content"
+        ]
+
+        when: "call batchGetContentMapWithCache"
+        def result = invokePrivateMethod("batchGetContentMapWithCache", ruleIds)
+
+        then: "should get all content from cache"
+        1 * ruleContentCacheService.getBatch(ruleIds) >> expectedResult
+        0 * ruleContentMapper.selectBatchIds(_)
+        0 * ruleContentCacheService.putBatch(_)
+        result == expectedResult
+    }
+
+    def "test batchGetContentMapWithCache - should fetch from database when cache service is not available"() {
+        given: "rule IDs and cache service is not available"
+        def ruleIds = [1L, 2L] as Set
+        ruleService.ruleContentCacheService = null
+
+        def dbContent = [
+                1L: "rule1 content",
+                2L: "rule2 content"
+        ]
+
+        when: "call batchGetContentMapWithCache"
+        def result = invokePrivateMethod("batchGetContentMapWithCache", ruleIds)
+
+        then: "should fetch from database directly"
+        1 * ruleContentMapper.selectBatchIds([1L, 2L]) >> [
+                createContentEntity(1L),
+                createContentEntity(2L)
+        ]
+        result.size() == 2
+        result[1L] == "test content for rule 1"
+        result[2L] == "test content for rule 2"
+    }
+
+    def "test batchGetContentMapWithCache - should fetch missing content from database and update cache"() {
+        given: "rule IDs with partial cache hits"
+        def ruleIds = [1L, 2L, 3L] as Set
+        def cachedContent = [
+                1L: "rule1 content",
+                2L: "rule2 content"
+        ] // rule3 is not in cache
+
+        def dbContent = [createContentEntity(3L)]
+
+        when: "call batchGetContentMapWithCache"
+        def result = invokePrivateMethod("batchGetContentMapWithCache", ruleIds)
+
+        then: "should get partial content from cache and fetch missing from database"
+        1 * ruleContentCacheService.getBatch(ruleIds) >> cachedContent
+        1 * ruleContentMapper.selectBatchIds([3L]) >> dbContent
+        1 * ruleContentCacheService.putBatch(_) >> { Map<Long, String> map ->
+            assert map.size() == 1
+            assert map[3L] == "test content for rule 3"
+        }
+
+        result.size() == 3
+        result[1L] == "rule1 content"
+        result[2L] == "rule2 content"
+        result[3L] == "test content for rule 3"
+    }
+
+    def "test batchGetContentMapWithCache - should handle empty rule ID set"() {
+        given: "empty rule ID set"
+        def ruleIds = [] as Set
+
+        when: "call batchGetContentMapWithCache"
+        def result = invokePrivateMethod("batchGetContentMapWithCache", ruleIds)
+
+        then: "should return empty map"
+        1 * ruleContentCacheService.getBatch(ruleIds) >> [:]
+        0 * ruleContentMapper.selectBatchIds(_)
+        0 * ruleContentCacheService.putBatch(_)
+        result.isEmpty()
+    }
+
+    def "test batchGetContentMapWithCache - should handle null content from database"() {
+        given: "rule IDs with null content in database"
+        def ruleIds = [1L] as Set
+        def cachedContent = [:] // nothing in cache
+
+        def dbContentEntity = createContentEntity(1L)
+        dbContentEntity.content = null // null content
+
+        when: "call batchGetContentMapWithCache"
+        def result = invokePrivateMethod("batchGetContentMapWithCache", ruleIds)
+
+        then: "should handle null content gracefully"
+        1 * ruleContentCacheService.getBatch(ruleIds) >> cachedContent
+        1 * ruleContentMapper.selectBatchIds([1L]) >> [dbContentEntity]
+        1 * ruleContentCacheService.putBatch([:]) // empty map since null content is filtered out
+
+        result.size() == 0  // null content is filtered out by batchGetContentMap
+    }
+
     // ========== Helper methods ==========
 
-    private static ExecutionArrangementEntity createRelationEntity(Long eventId, Long ruleId, Long groupId, Integer exeOrder, Integer abRatio) {
-        def entity = new ExecutionArrangementEntity()
-        entity.eventId = eventId != null ? eventId.intValue() : null
-        entity.ruleId = ruleId
-        entity.groupId = groupId != null ? groupId : 0L
-        entity.exeOrder = exeOrder != null ? exeOrder : 0
-        entity.abRatio = abRatio != null ? abRatio : 0
-        return entity
+    private def invokePrivateMethod(String methodName, Object... args) {
+        // For Set<Long> parameter, we need to handle the generic type properly
+        Class<?>[] parameterTypes
+        if (methodName == "batchGetContentMapWithCache" && args.length == 1 && args[0] instanceof Set) {
+            parameterTypes = [Set.class] as Class[]
+        } else {
+            parameterTypes = args.collect { it.class } as Class[]
+        }
+        def method = RuleServiceImpl.class.getDeclaredMethod(methodName, parameterTypes)
+        method.accessible = true
+        return method.invoke(ruleService, args)
     }
 
     private static RuleExecutionContext createExecutionContext(Long userId, Integer eventId, Integer userHashInt) {

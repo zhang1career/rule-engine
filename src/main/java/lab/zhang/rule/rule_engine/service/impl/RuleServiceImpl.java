@@ -2,6 +2,8 @@ package lab.zhang.rule.rule_engine.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
+import lab.zhang.rule.rule_engine.cache.RuleContentCacheService;
+import lab.zhang.rule.rule_engine.cache.RuleSelectionCacheService;
 import lab.zhang.rule.rule_engine.engine.ExecutionItem;
 import lab.zhang.rule.rule_engine.entity.ExecutionArrangementEntity;
 import lab.zhang.rule.rule_engine.entity.RuleContentEntity;
@@ -18,13 +20,13 @@ import lab.zhang.rule.rule_engine.model.RuleExecutionContext;
 import lab.zhang.rule.rule_engine.model.RuleGroup;
 import lab.zhang.rule.rule_engine.service.EventService;
 import lab.zhang.rule.rule_engine.service.RuleGroupService;
-import lab.zhang.rule.rule_engine.service.RuleSelectionCacheService;
 import lab.zhang.rule.rule_engine.service.RuleService;
 import lab.zhang.rule.rule_engine.struct_mapper.RuleStructMapper;
 import lab.zhang.rule.rule_engine.util.TimeUtil;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -68,6 +70,12 @@ public class RuleServiceImpl implements RuleService {
 
     @Autowired(required = false)
     private RuleSelectionCacheService ruleSelectionCacheService;
+
+    @Autowired(required = false)
+    private RuleContentCacheService ruleContentCacheService;
+
+    @Value("${rule.content.cache.enabled:true}")
+    private boolean ruleContentCacheEnabled;
 
 
     @Override
@@ -492,13 +500,13 @@ public class RuleServiceImpl implements RuleService {
         }
 
         // Step 2: Build ruleIds array using exe_order as array index
-        DraftResult draftResult = draftExecutionItemIds(eventId, arrangementList);
-        Long[] executionQueue = draftResult.getExecutionQueue();
-        Map<Long, List<ExecutionArrangement>> groupRulesMap = draftResult.getGroupRuleMap();
-        Map<Long, Long> ruleGroupMap = draftResult.getRuleGroupMap();
+        DraftResult draftResult = draftExecutionQueue(eventId, arrangementList);
+        Long[] executionQueue = draftResult.getExecutionQueue();  // ruleId list in execution order
+        Map<Long, List<ExecutionArrangement>> groupMap = draftResult.getGroupMap();
+        Map<Long, Long> ruleGroupMap = draftResult.getArrangementGroupMap();
 
         // Step 3: Select rule from each group based on userHashInt
-        selectRuleFromGroupByRatio(eventId, userId, userHashInt, groupRulesMap, executionQueue);
+        selectRuleFromGroupByRatio(eventId, userId, userHashInt, groupMap, executionQueue);
 
         // Step 4: Collect all rule IDs from array (excluding nulls)
         List<Long> finalRuleIds = Arrays.stream(executionQueue)
@@ -531,14 +539,23 @@ public class RuleServiceImpl implements RuleService {
 
     @Data
     static class DraftResult {
+        /**
+         * Execution queue array, index = exe_order, value = rule_id
+         */
         private Long[] executionQueue;
-        private Map<Long, List<ExecutionArrangement>> groupRuleMap;
-        private Map<Long, Long> ruleGroupMap;
+        /**
+         * Map of group_id to list of ExecutionArrangement in that group
+         */
+        private Map<Long, List<ExecutionArrangement>> groupMap;
+        /**
+         * Map of rule_id to group_id
+         */
+        private Map<Long, Long> arrangementGroupMap;
 
         DraftResult(int queueSize) {
             this.executionQueue = new Long[queueSize];
-            this.groupRuleMap = new HashMap<>();
-            this.ruleGroupMap = new HashMap<>();
+            this.groupMap = new HashMap<>();
+            this.arrangementGroupMap = new HashMap<>();
         }
 
         void addArrangementInQueue(ExecutionArrangement arrangement) {
@@ -558,16 +575,17 @@ public class RuleServiceImpl implements RuleService {
             if (groupId == null) {
                 return;
             }
-            groupRuleMap.computeIfAbsent(groupId, k -> new ArrayList<>()).add(arrangement);
+            groupMap.computeIfAbsent(groupId, k -> new ArrayList<>()).add(arrangement);
         }
 
-        void addRuleGroupMapping(ExecutionArrangement arrangement) {
-            ruleGroupMap.put(arrangement.getRuleId(), arrangement.getGroupId());
+        void indexGroupByArrangement(ExecutionArrangement arrangement) {
+            arrangementGroupMap.put(arrangement.getRuleId(), arrangement.getGroupId());
         }
     }
 
-    private DraftResult draftExecutionItemIds(Integer eventId,
-                                              List<ExecutionArrangement> arrangementList) {
+
+    private DraftResult draftExecutionQueue(Integer eventId,
+                                            List<ExecutionArrangement> arrangementList) {
         int maxExeOrder = arrangementList.stream()
                 .mapToInt(entity -> entity.getExeOrder() != null ? entity.getExeOrder() : 0)
                 .max()
@@ -587,17 +605,18 @@ public class RuleServiceImpl implements RuleService {
                 // Rule in group, group by group_id
                 result.addArrangementInGroup(arrangement);
             }
-            result.addRuleGroupMapping(arrangement);
+            result.indexGroupByArrangement(arrangement);
         }
         return result;
     }
 
+
     private void selectRuleFromGroupByRatio(Integer eventId,
                                             Long userId,
                                             Integer userHashInt,
-                                            Map<Long, List<ExecutionArrangement>> groupArrangmentMap,
+                                            Map<Long, List<ExecutionArrangement>> groupMap,
                                             Long[] executionItemIds) {
-        for (Map.Entry<Long, List<ExecutionArrangement>> entry : groupArrangmentMap.entrySet()) {
+        for (Map.Entry<Long, List<ExecutionArrangement>> entry : groupMap.entrySet()) {
             Long groupId = entry.getKey();
             if (groupId == null) {
                 throw new IllegalStateException("Invalid groupId (null) in groupRulesMap");
@@ -627,6 +646,7 @@ public class RuleServiceImpl implements RuleService {
             }
         }
     }
+
 
     private Long getCachedRuleId(Long userId,
                                  Integer userHashInt,
@@ -662,6 +682,7 @@ public class RuleServiceImpl implements RuleService {
 
         return selectedRuleId;
     }
+
 
     /**
      * Select rule from group based on probability distribution (ab_ratio)
@@ -704,6 +725,7 @@ public class RuleServiceImpl implements RuleService {
         }
         return null;
     }
+
 
     /**
      * Set execution item into execution queue
@@ -752,10 +774,54 @@ public class RuleServiceImpl implements RuleService {
                 .filter(Objects::nonNull)
                 .collect(Collectors.toSet());
 
-        // Batch load rule contents
-        Map<Long, String> contentMap = batchGetContentMap(foundRuleIds);
+        // Batch load rule contents with cache support (configurable)
+        Map<Long, String> contentMap = ruleContentCacheEnabled
+                ? batchGetContentMapWithCache(foundRuleIds)
+                : batchGetContentMap(foundRuleIds);
 
         return buildRuleMap(ruleEntities, contentMap);
+    }
+
+
+    private Map<Long, String> batchGetContentMapWithCache(Set<Long> ruleIdSet) {
+        // Check if cache service is available
+        if (ruleContentCacheService == null) {
+            log.warn("RuleContentCacheService is not configured, fetching from database directly");
+            return batchGetContentMap(ruleIdSet);
+        }
+
+        // First, try to get content from cache in batch
+        Map<Long, String> cachedContentMap = ruleContentCacheService.getBatch(ruleIdSet);
+
+        // Find uncached rule IDs
+        Set<Long> uncachedRuleIds = ruleIdSet.stream()
+                .filter(ruleId -> !cachedContentMap.containsKey(ruleId))
+                .collect(Collectors.toSet());
+        if (uncachedRuleIds.isEmpty()) {
+            if (log.isDebugEnabled()) {
+                log.debug("[eval] all rules from cache: {} total", ruleIdSet.size());
+            }
+            return cachedContentMap;
+        }
+        if (log.isDebugEnabled()) {
+            log.debug("[eval] rule content cache: {} hits, {} misses out of {} total",
+                    cachedContentMap.size(), uncachedRuleIds.size(), ruleIdSet.size());
+        }
+
+        Map<Long, String> contentMap = new HashMap<>(cachedContentMap);
+
+        // If there are uncached rule IDs, fetch from database
+        Map<Long, String> dbContentMap = batchGetContentMap(uncachedRuleIds);
+        contentMap.putAll(dbContentMap);
+
+        // Update cache with newly fetched content
+        ruleContentCacheService.putBatch(dbContentMap);
+
+        if (log.isDebugEnabled()) {
+            log.debug("[eval] fetched {} rule contents from database and updated cache", dbContentMap.size());
+        }
+
+        return contentMap;
     }
 
 
@@ -767,6 +833,7 @@ public class RuleServiceImpl implements RuleService {
                 .collect(Collectors.toMap(RuleContentEntity::getId, RuleContentEntity::getContent))
                 : Collections.emptyMap();
     }
+
 
     private Map<Long, Rule> buildRuleMap(List<RuleEntity> ruleEntities, Map<Long, String> contentMap) {
         Map<Long, Rule> ruleMap = new HashMap<>();

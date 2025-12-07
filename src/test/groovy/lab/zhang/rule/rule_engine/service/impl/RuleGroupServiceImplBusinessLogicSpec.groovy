@@ -16,7 +16,7 @@ import lab.zhang.rule.rule_engine.mapper.RuleGroupMapper
 import lab.zhang.rule.rule_engine.model.Rule
 import lab.zhang.rule.rule_engine.model.RuleExecutionContext
 import lab.zhang.rule.rule_engine.model.RuleGroup
-import lab.zhang.rule.rule_engine.service.RuleSelectionCacheService
+import lab.zhang.rule.rule_engine.cache.RuleSelectionCacheService
 import lab.zhang.rule.rule_engine.service.RuleService
 import lab.zhang.rule.rule_engine.struct_mapper.RuleGroupStructMapper
 import org.apache.commons.lang3.tuple.Pair
@@ -845,4 +845,3 @@ class RuleGroupServiceImplBusinessLogicSpec extends Specification {
         false             | false    | "Valid Pair for comparison"
     }
 }
-

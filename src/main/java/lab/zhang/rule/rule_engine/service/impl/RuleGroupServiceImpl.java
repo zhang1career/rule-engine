@@ -13,7 +13,7 @@ import lab.zhang.rule.rule_engine.model.RuleExecutionContext;
 import lab.zhang.rule.rule_engine.model.RuleGroup;
 import lab.zhang.rule.rule_engine.pojo.dto.RuleDTO;
 import lab.zhang.rule.rule_engine.service.RuleGroupService;
-import lab.zhang.rule.rule_engine.service.RuleSelectionCacheService;
+import lab.zhang.rule.rule_engine.cache.RuleSelectionCacheService;
 import lab.zhang.rule.rule_engine.service.RuleService;
 import lab.zhang.rule.rule_engine.struct_mapper.RuleGroupStructMapper;
 import lab.zhang.rule.rule_engine.util.TimeUtil;

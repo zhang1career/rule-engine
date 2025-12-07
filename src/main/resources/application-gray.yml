@@ -1,0 +1,34 @@
+# Gray environment configuration (pre-production/staging)
+spring:
+  datasource:
+    url: jdbc:mysql://${MYSQL_HOST:localhost}:${MYSQL_PORT:3306}/rule_engine?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai&allowMultiQueries=true
+    username: ${MYSQL_USER:rule_engine}
+    password: ${MYSQL_PASS}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+
+  # Redis configuration for gray environment
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+      database: ${REDIS_DB:0}
+
+rule:
+  engine:
+    environment: GRAY
+
+# Gray environment logging configuration
+logging:
+  level:
+    root: INFO
+    lab.zhang.rule: INFO
+    # Third-party library logs
+    com.baomidou.mybatisplus: WARN
+    org.springframework.jdbc: WARN
+    org.springframework.data.redis: WARN
+    org.springframework.web: INFO
+  # Gray environment log files
+  file:
+    name: /var/log/rule-engine/rule-engine.log
+

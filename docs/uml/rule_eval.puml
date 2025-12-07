@@ -4,7 +4,7 @@ title Rule Evaluation Interface Activity Diagram
 start
 
 :Receive POST /api/eval request;
-:Parse request body EvalQO;
+:Parse request body EvalDTO;
 
 :Validate request parameters;
 note right: userId, eventId cannot be null
@@ -16,41 +16,78 @@ endif
 
 :Call EvalService.eval();
 
+:Create ExecutionTrace for tracking;
+note right: Record execution process and steps
+
 :Build RuleExecutionContext;
 note right: Contains userId, eventId, traceId, arguments
 
+:Extend arguments with hash values;
+note right: Add userHash and userHashInt based on userId
+
 :Call RuleExecutionEngine.execute();
 
-:Query execution items by eventId;
-note right: Query rules and rule groups
+:Call RuleService.getExecutionItemsByEventId();
+note right: Get all execution items (rules) for the event
+
+partition "getExecutionItemsByEventId Process" {
+  :Query execution arrangements by eventId;
+  note right: Get all rule-event associations from database
+
+  :Draft execution queue by exe_order;
+  note right: Build ordered array using exe_order as index
+
+  :Select rules from groups by user hash;
+  note right: Use userHashInt to select specific rule from each group
+
+  :Batch query rules with content;
+  note right: Get all selected rules and their content
+
+  :Build ExecutionItem list in order;
+  note right: Create execution items with rule and groupId mapping
+}
 
 if (Execution items empty?) then (yes)
-  :Return default result or error;
+  :Return TypedValue.nullValue();
   stop
 endif
 
-:Iterate execution items in execution order;
+:Iterate execution items sequentially;
+note right: All items are now rules (group selection done beforehand)
 
-if (Execution item type?) then (rule group)
-  :Calculate rule selection based on user hash;
-  :Select one rule from rule group;
-  :Execute selected rule;
-else (rule)
-  :Execute rule directly;
-endif
+repeat
+  :Get rule from execution item;
 
-:Get rule calculation result;
+  if (Rule is null?) then (yes)
+    :Skip execution item;
+'    continue
+  endif
 
-if (More execution items?) then (yes)
-  :Continue to next execution item;
-else (no)
-  :Use last result as final result;
-endif
+  :Execute rule using appropriate executor;
+  note right: Based on rule's ContentTypeEnum
 
-:Asynchronously send result to message queue;
-note right: Send failure does not affect main flow
+  :Store result in execution context;
+  note right: Set lastResult and rule-specific result variables
 
-:Return calculation result;
+  :Add execution step to trace;
+  note right: Record ruleId, groupId, result, and error if any
+
+  :Check if should break execution early;
+  note right: Based on rule result (e.g., boolean false)
+
+  if (Should break early?) then (yes)
+    :Break execution loop;
+  endif
+
+repeat while (More execution items? AND not break early?)
+
+:Save execution trace to database;
+note right: Serialize arguments and steps to JSON, insert into eval_log
+
+:Send result to Kafka asynchronously;
+note right: Send EvalDTO and result, failure doesn't affect main flow
+
+:Return EvalResult with result and trace;
 
 stop
 

@@ -3,28 +3,30 @@
 rule:
   engine:
     environment: GRAY
+  content:
+    cache:
+      enabled: true
 
 spring:
-  # Test database configuration
-  # Option 1: Use real MySQL database (requires MySQL running)
   datasource:
     url: jdbc:mysql://127.0.0.1:3306/rule_engine_test?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai&createDatabaseIfNotExist=true&allowMultiQueries=true
     username: zhang
     password: 123456
     driver-class-name: com.mysql.cj.jdbc.Driver
 
-  # Option 2: Use H2 in-memory database (no MySQL required)
-  # Uncomment below and comment out MySQL config above
-  # datasource:
-  #   url: jdbc:h2:mem:testdb;MODE=MySQL;DATABASE_TO_LOWER=TRUE;CASE_INSENSITIVE_IDENTIFIERS=TRUE
-  #   driver-class-name: org.h2.Driver
-  #   username: sa
-  #   password:
-
-  rabbitmq:
-    # Test environment does not connect to real RabbitMQ
-    host: localhost
-    port: 5672
+  # Redis configuration for tests
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      database: 1  # Use database 1 for tests to avoid conflicts with main app
+      timeout: 3000
+      lettuce:
+        pool:
+          max-active: 8
+          max-idle: 8
+          min-idle: 0
+          max-wait: -1
 
 # MyBatis Plus configuration for tests
 mybatis-plus:
@@ -40,7 +42,7 @@ mybatis-plus:
 
 logging:
   level:
-    root: WARN
+    root: INFO
     lab.zhang.rule: DEBUG
     org.springframework.jdbc: DEBUG
     # MyBatis-Plus SQL 日志
@@ -49,4 +51,5 @@ logging:
     org.apache.ibatis: DEBUG
     # 更详细的 SQL 参数和结果日志
     org.apache.ibatis.logging.stdout.StdOutImpl: DEBUG
-
+  file:
+    name: logs/rule-engine.log

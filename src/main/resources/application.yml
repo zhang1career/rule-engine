@@ -6,30 +6,17 @@ server:
 spring:
   application:
     name: rule-engine
-  
-  # RabbitMQ configuration (optional, if not configured, messages will not be sent)
-#  rabbitmq:
-#    host: localhost
-#    port: 5672
-#    username: guest
-#    password: guest
-#    virtual-host: /
-    # If RabbitMQ is not configured, you can comment out the above configuration, message sending will be skipped
 
-  # Kafka configuration (optional, if not configured, messages will not be sent)
+  profiles:
+    active: prod
+
+  # Kafka configuration
 #  kafka:
 #    bootstrap-servers: localhost:9092
 #    producer:
 #      key-serializer: org.apache.kafka.common.serialization.StringSerializer
 #      value-serializer: org.apache.kafka.common.serialization.StringSerializer
-    # If Kafka is not configured, you can comment out the above configuration, message sending will be skipped
-
-  # Database configuration
-  datasource:
-    url: jdbc:mysql://127.0.0.1:3306/rule_engine?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai&allowMultiQueries=true
-    username: zhang
-    password: 123456
-    driver-class-name: com.mysql.cj.jdbc.Driver
+# If Kafka is not configured, you can comment out the above configuration, message sending will be skipped
 
   # Redis configuration
   data:
@@ -62,7 +49,7 @@ mybatis-plus:
 # Rule engine configuration
 rule:
   engine:
-    # Environment type: TEST (test environment) or PRODUCTION (production environment)
+    # Environment type: DEV (development environment), TEST (test environment), GRAY (gray environment) or PRODUCTION (production environment)
     environment: TEST
     # RabbitMQ configuration
     rabbitmq:
@@ -71,12 +58,29 @@ rule:
     # Kafka configuration
     kafka:
       topic: rule.eval.result
+  content:
+    cache:
+      # Enable/disable rule content caching
+      enabled: ${RULE_CONTENT_CACHE_ENABLED:true}
 
 # Logging configuration
 logging:
   level:
     root: INFO
     lab.zhang.rule: DEBUG
+    # Database operation logs
+    com.baomidou.mybatisplus: INFO
+    org.springframework.jdbc: INFO
+    # Redis operation logs
+    org.springframework.data.redis: INFO
   pattern:
     console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
+  # File output configuration
+  file:
+    name: logs/rule-engine.log
+  # Logback configuration (if using logback-spring.xml, this will be overridden)
+  logback:
+    rollingpolicy:
+      max-file-size: 10MB
+      max-history: 30
 
