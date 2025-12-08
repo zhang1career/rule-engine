@@ -48,13 +48,13 @@ class EventExecutionItemsControllerSpec extends Specification {
         request.setRules(executionItems)
 
         when: "batch set mixed execution items"
-        def response = controller.setExecutionItems(eventId, request)
+        def response = controller.setExecutionArrangements(eventId, request)
 
         then: "should set execution items successfully"
         // Note: Database existence validation is now handled by @ValidExecutionItemExists annotation
         // In unit tests without Spring context, the validator will skip database validation
         // Service call
-        1 * eventService.setExecutionItems(eventId, executionItems)
+        1 * eventService.setExecutionArrangements(eventId, executionItems)
         response.statusCode == HttpStatus.OK
         response.body.code == 0
         response.body.msg == "success"
@@ -71,12 +71,12 @@ class EventExecutionItemsControllerSpec extends Specification {
         request.setRules(executionItems)
 
         when: "batch set execution items"
-        def response = controller.setExecutionItems(eventId, request)
+        def response = controller.setExecutionArrangements(eventId, request)
 
         then: "should update execution items successfully"
         // Note: Database existence validation is now handled by @ValidExecutionItemExists annotation
         // In unit tests without Spring context, the validator will skip database validation
-        1 * eventService.setExecutionItems(eventId, executionItems)
+        1 * eventService.setExecutionArrangements(eventId, executionItems)
         response.statusCode == HttpStatus.OK
         response.body.code == 0
 
@@ -93,7 +93,7 @@ class EventExecutionItemsControllerSpec extends Specification {
         request.setRules(executionItems)
 
         when: "batch set execution items with null item"
-        def response = controller.setExecutionItems(eventId, request)
+        def response = controller.setExecutionArrangements(eventId, request)
 
         then: "should be rejected by validation"
         // In unit tests without Spring context, validation may be skipped
@@ -113,7 +113,7 @@ class EventExecutionItemsControllerSpec extends Specification {
         request.setRules(executionItems)
 
         when: "batch set execution items with null ruleId"
-        def response = controller.setExecutionItems(eventId, request)
+        def response = controller.setExecutionArrangements(eventId, request)
 
         then: "should be rejected by @NotNull validation"
         // In unit tests without Spring context, validation may be skipped

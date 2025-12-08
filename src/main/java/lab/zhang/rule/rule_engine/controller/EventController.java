@@ -62,7 +62,7 @@ public class EventController {
      */
     @GetMapping("/{eventId}")
     public ResponseEntity<ApiResponseDTO<EventDTO>> getEvent(
-            @PathVariable @NotNull @Min(value = 1, message = "Event ID must be a positive integer") Long eventId) {
+            @PathVariable @NotNull @Min(value = 1, message = "Event ID must be a positive integer") Integer eventId) {
         Event event = eventService.getEventById(eventId);
         if (event == null) {
             throw new IllegalArgumentException("Event not found for ID: " + eventId);
@@ -79,7 +79,8 @@ public class EventController {
     @PostMapping
     public ResponseEntity<ApiResponseDTO<EventDTO>> createEvent(
             @RequestBody @Validated(EventQO.Create.class) EventQO eventQO) {
-        Event event = eventService.createEvent(eventQO.getId(), eventQO.getName(), eventQO.getDescription());
+        Event event = eventStructMapper.qoToModel(eventQO);
+        event = eventService.createEvent(event);
         EventDTO dto = eventStructMapper.entityToDTO(event);
         return ResponseEntity.ok(ApiResponseDTO.success(dto));
     }
@@ -94,7 +95,7 @@ public class EventController {
      */
     @PutMapping("/{eventId}")
     public ResponseEntity<ApiResponseDTO<EventDTO>> updateEvent(
-            @PathVariable @NotNull Long eventId,
+            @PathVariable @NotNull Integer eventId,
             @RequestBody @Validated(EventQO.Update.class) EventQO eventQO) {
         Event event = eventService.updateEvent(eventId, eventQO.getName(), eventQO.getDescription());
         EventDTO dto = eventStructMapper.entityToDTO(event);
@@ -107,7 +108,7 @@ public class EventController {
      */
     @DeleteMapping("/{eventId}")
     public ResponseEntity<ApiResponseDTO<Void>> deleteEvent(
-            @PathVariable @NotNull Long eventId) {
+            @PathVariable @NotNull Integer eventId) {
         eventService.deleteEvent(eventId);
         return ResponseEntity.ok(ApiResponseDTO.success(null));
     }
@@ -118,15 +119,11 @@ public class EventController {
      * PUT /api/events/{eventId}/execution-items
      */
     @PutMapping("/{eventId}/execution-items")
-    public ResponseEntity<ApiResponseDTO<Void>> setExecutionItems(
-            @PathVariable @NotNull Long eventId,
+    public ResponseEntity<ApiResponseDTO<Void>> setExecutionArrangements(
+            @PathVariable @NotNull Integer eventId,
             @RequestBody @Valid ExecutionArrangementQO qo) {
-        Integer eventIdInt = eventId != null ? eventId.intValue() : null;
-        if (eventIdInt == null) {
-            throw new IllegalArgumentException("Event ID cannot be null");
-        }
         List<Long> ruleIdList = qo.getRules();
-        eventService.setExecutionItems(eventIdInt, ruleIdList);
+        eventService.setExecutionArrangements(eventId, ruleIdList);
         return ResponseEntity.ok(ApiResponseDTO.success(null));
     }
 
@@ -136,12 +133,8 @@ public class EventController {
      */
     @GetMapping("/{eventId}/execution-items")
     public ResponseEntity<ApiResponseDTO<List<ExecutionArrangementDTO>>> getExecutionItems(
-            @PathVariable @NotNull Long eventId) {
-        Integer eventIdInt = eventId != null ? eventId.intValue() : null;
-        if (eventIdInt == null) {
-            throw new IllegalArgumentException("Event ID cannot be null");
-        }
-        List<ExecutionArrangement> arrangementList = eventService.getExecutionItems(eventIdInt);
+            @PathVariable @NotNull Integer eventId) {
+        List<ExecutionArrangement> arrangementList = eventService.getExecutionItems(eventId);
         if (arrangementList == null || arrangementList.isEmpty()) {
             return ResponseEntity.ok(ApiResponseDTO.success(Collections.emptyList()));
         }

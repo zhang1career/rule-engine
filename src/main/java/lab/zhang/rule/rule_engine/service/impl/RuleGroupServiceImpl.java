@@ -93,9 +93,9 @@ public class RuleGroupServiceImpl implements RuleGroupService {
         }
 
         // Load execution arrangements from table x
-        LambdaQueryWrapper<ExecutionArrangementEntity> queryWrapper = new LambdaQueryWrapper<>();
-        queryWrapper.eq(ExecutionArrangementEntity::getGroupId, groupId);
-        List<ExecutionArrangementEntity> entityList = executionArrangementMapper.selectList(queryWrapper);
+        LambdaQueryWrapper<ExecutionArrangementEntity> arrangementOfGroupWrapper = new LambdaQueryWrapper<>();
+        arrangementOfGroupWrapper.eq(ExecutionArrangementEntity::getGroupId, groupId);
+        List<ExecutionArrangementEntity> entityList = executionArrangementMapper.selectList(arrangementOfGroupWrapper);
         if (log.isDebugEnabled()) {
             log.debug("Loaded {} execution arrangements for groupId={}, ruleIds={}",
                     entityList != null ? entityList.size() : 0,
@@ -133,10 +133,10 @@ public class RuleGroupServiceImpl implements RuleGroupService {
         }
 
         // Step 1: Check if this event-rule combination already exists in another rule group
-        LambdaQueryWrapper<ExecutionArrangementEntity> checkWrapper = new LambdaQueryWrapper<>();
-        checkWrapper.eq(ExecutionArrangementEntity::getEventId, eventId)
+        LambdaQueryWrapper<ExecutionArrangementEntity> arrangementWrapper = new LambdaQueryWrapper<>();
+        arrangementWrapper.eq(ExecutionArrangementEntity::getEventId, eventId)
                 .eq(ExecutionArrangementEntity::getRuleId, rule.getId());
-        ExecutionArrangementEntity existingEntity = executionArrangementMapper.selectOne(checkWrapper);
+        ExecutionArrangementEntity existingEntity = executionArrangementMapper.selectOne(arrangementWrapper);
         if (existingEntity == null) {
             throw new IllegalStateException("Event-Rule relation not found for ruleId=" + rule.getId() + ", eventId=" + eventId);
         }
@@ -236,17 +236,17 @@ public class RuleGroupServiceImpl implements RuleGroupService {
         }
 
         // Get all records for this group from table x
-        LambdaQueryWrapper<ExecutionArrangementEntity> groupRelationQueryWrapper = new LambdaQueryWrapper<>();
-        groupRelationQueryWrapper.eq(ExecutionArrangementEntity::getGroupId, groupId);
-        List<ExecutionArrangementEntity> groupRelations = executionArrangementMapper.selectList(groupRelationQueryWrapper);
-        if (groupRelations == null || groupRelations.isEmpty()) {
+        LambdaQueryWrapper<ExecutionArrangementEntity> arrangementOfGroupWrapper = new LambdaQueryWrapper<>();
+        arrangementOfGroupWrapper.eq(ExecutionArrangementEntity::getGroupId, groupId);
+        List<ExecutionArrangementEntity> arrangementEntityList = executionArrangementMapper.selectList(arrangementOfGroupWrapper);
+        if (arrangementEntityList == null || arrangementEntityList.isEmpty()) {
             throw new IllegalStateException("Rule group " + groupId + " has no associated rules");
         }
         
         // Group by eventId to check if group is associated with multiple events
-        Map<Integer, List<ExecutionArrangementEntity>> relationsByEvent = groupRelations.stream()
+        Map<Integer, List<ExecutionArrangementEntity>> eventArrangementMap = arrangementEntityList.stream()
                 .collect(Collectors.groupingBy(ExecutionArrangementEntity::getEventId));
-        if (relationsByEvent.size() > 1) {
+        if (eventArrangementMap.size() > 1) {
             throw new IllegalStateException("Rule group " + groupId + " is associated with multiple events, which violates the design constraint");
         }
 
@@ -258,7 +258,7 @@ public class RuleGroupServiceImpl implements RuleGroupService {
             Integer ratio = entry.getValue();
 
             // Find the relation for this rule in this group
-            ExecutionArrangementEntity relation = groupRelations.stream()
+            ExecutionArrangementEntity relation = arrangementEntityList.stream()
                     .filter(r -> r.getRuleId().equals(ruleId))
                     .findFirst()
                     .orElse(null);
@@ -268,13 +268,13 @@ public class RuleGroupServiceImpl implements RuleGroupService {
             }
             
             // Update ab_ratio
-            LambdaUpdateWrapper<ExecutionArrangementEntity> updateWrapper = new LambdaUpdateWrapper<>();
-            updateWrapper.eq(ExecutionArrangementEntity::getEventId, relation.getEventId())
+            LambdaUpdateWrapper<ExecutionArrangementEntity> arrangementWrapper = new LambdaUpdateWrapper<>();
+            arrangementWrapper.eq(ExecutionArrangementEntity::getEventId, relation.getEventId())
                     .eq(ExecutionArrangementEntity::getRuleId, ruleId)
                     .eq(ExecutionArrangementEntity::getGroupId, groupId)
                     .set(ExecutionArrangementEntity::getAbRatio, ratio)
                     .set(ExecutionArrangementEntity::getUt, (int) currentTime);
-            executionArrangementMapper.update(null, updateWrapper);
+            executionArrangementMapper.update(null, arrangementWrapper);
         }
 
         // Update group update time
@@ -309,10 +309,10 @@ public class RuleGroupServiceImpl implements RuleGroupService {
         }
 
         // Check if rule is in a group (query table x)
-        LambdaQueryWrapper<ExecutionArrangementEntity> relationQueryWrapper = new LambdaQueryWrapper<>();
-        relationQueryWrapper.eq(ExecutionArrangementEntity::getRuleId, ruleId)
+        LambdaQueryWrapper<ExecutionArrangementEntity> groupedArrangementWrapper = new LambdaQueryWrapper<>();
+        groupedArrangementWrapper.eq(ExecutionArrangementEntity::getRuleId, ruleId)
                 .ne(ExecutionArrangementEntity::getGroupId, 0);
-        List<ExecutionArrangementEntity> relations = executionArrangementMapper.selectList(relationQueryWrapper);
+        List<ExecutionArrangementEntity> relations = executionArrangementMapper.selectList(groupedArrangementWrapper);
         if (relations == null || relations.isEmpty()) {
             throw new IllegalArgumentException("Rule " + ruleId + " is not in any group");
         }

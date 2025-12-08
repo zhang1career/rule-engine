@@ -2,6 +2,7 @@ package lab.zhang.rule.rule_engine.struct_mapper;
 
 import lab.zhang.rule.rule_engine.entity.EventEntity;
 import lab.zhang.rule.rule_engine.pojo.dto.EventDTO;
+import lab.zhang.rule.rule_engine.pojo.qo.EventQO;
 import lab.zhang.rule.rule_engine.model.Event;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
@@ -21,6 +22,22 @@ public interface EventStructMapper {
      * @return EventDTO
      */
     EventDTO entityToDTO(Event event);
+
+    /**
+     * Convert Event model to EventDTO
+     *
+     * @param event Event model
+     * @return EventDTO
+     */
+    EventDTO modelToDto(Event event);
+
+    /**
+     * Convert EventQO to Event model
+     *
+     * @param qo EventQO
+     * @return Event model
+     */
+    Event qoToModel(EventQO qo);
 
     /**
      * Convert EventEntity to Event model

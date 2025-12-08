@@ -36,7 +36,7 @@ public class Event implements Serializable {
      * Event ID (unique identifier).
      * Must be specified when creating, not auto-increment.
      */
-    private Long id;
+    private Integer id;
     
     /**
      * Event name for identification and display purposes.

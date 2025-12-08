@@ -7,8 +7,6 @@ import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.serializer.GenericToStringSerializer;
 import org.springframework.data.redis.serializer.StringRedisSerializer;
 
-import java.util.Objects;
-
 /**
  * Redis configuration
  *
@@ -58,7 +56,7 @@ public class RedisConfig {
         template.setHashKeySerializer(new StringRedisSerializer());
 
         // Use JDK serialization for values (can handle any Object)
-        template.setValueSerializer(Objects.requireNonNull(template.getDefaultSerializer()));
+        template.setValueSerializer(template.getDefaultSerializer());
         template.setHashValueSerializer(template.getDefaultSerializer());
 
         template.afterPropertiesSet();

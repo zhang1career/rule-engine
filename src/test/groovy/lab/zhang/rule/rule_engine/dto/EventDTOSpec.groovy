@@ -39,9 +39,9 @@ class EventDTOSpec extends Specification {
 
         where:
         id          | name       | description
-        10000001L   | "Event 1"  | "Description 1"
-        10000002L   | "Event 2"  | null
-        10000003L   | null       | "Description 3"
+        10000001   | "Event 1"  | "Description 1"
+        10000002   | "Event 2"  | null
+        10000003   | null       | "Description 3"
     }
 
     @Unroll
@@ -61,23 +61,23 @@ class EventDTOSpec extends Specification {
 
         where:
         id          | name       | description        | shouldPass
-        10000001L   | "Event 1"  | "Description 1"   | true
-        10000002L   | "Event 2"  | null              | true
+        10000001   | "Event 1"  | "Description 1"   | true
+        10000002   | "Event 2"  | null              | true
         null        | "Event 1" | "Description"     | false  // id is null
-        10000001L   | null       | "Description"     | false  // name is null
-        10000001L   | ""         | "Description"     | false  // name is blank
-        10000001L   | "   "      | "Description"     | false  // name is blank
+        10000001   | null       | "Description"     | false  // name is null
+        10000001   | ""         | "Description"     | false  // name is blank
+        10000001   | "   "      | "Description"     | false  // name is blank
         -1L         | "Event 1" | "Description"     | false  // id is negative
         0L          | "Event 1" | "Description"      | false  // id is zero
-        10000001L   | "Event 1" | "a" * 251          | false  // description too long
-        10000001L   | "a" * 101 | "Description"     | false  // name too long
+        10000001   | "Event 1" | "a" * 251          | false  // description too long
+        10000001   | "a" * 101 | "Description"     | false  // name too long
     }
 
     @Unroll
     def "test EventDTO validation - Update group - name: #name, description: #description, shouldPass: #shouldPass"() {
         given: "create EventDTO"
         def qo = EventQO.builder()
-                .id(10000001L)
+                .id(10000001)
                 .name(name)
                 .description(description)
                 .build()
@@ -115,9 +115,9 @@ class EventDTOSpec extends Specification {
 
         where:
         id          | name       | description
-        10000001L   | "Event 1"  | "Description 1"
-        10000002L   | "Event 2"  | null
-        10000003L   | null       | "Description 3"
+        10000001   | "Event 1"  | "Description 1"
+        10000002   | "Event 2"  | null
+        10000003   | null       | "Description 3"
     }
 
     @Unroll
@@ -139,8 +139,8 @@ class EventDTOSpec extends Specification {
 
         where:
         id          | name
-        10000001L   | "Event 1"
-        10000002L   | "Event 2"
+        10000001   | "Event 1"
+        10000002   | "Event 2"
     }
 
     @Unroll
@@ -170,9 +170,9 @@ class EventDTOSpec extends Specification {
 
         where:
         id1         | name1      | id2         | name2      | shouldEqual
-        10000001L   | "Event 1"  | 10000001L   | "Event 1"  | true
-        10000001L   | "Event 1"  | 10000002L   | "Event 1"  | false
-        10000001L   | "Event 1"  | 10000001L   | "Event 2"  | false
+        10000001   | "Event 1"  | 10000001   | "Event 1"  | true
+        10000001   | "Event 1"  | 10000002   | "Event 1"  | false
+        10000001   | "Event 1"  | 10000001   | "Event 2"  | false
     }
 }
 

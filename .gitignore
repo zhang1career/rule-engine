@@ -45,3 +45,5 @@ logs/
 *.tar.gz
 *.rar
 
+# Enviroment
+.env*

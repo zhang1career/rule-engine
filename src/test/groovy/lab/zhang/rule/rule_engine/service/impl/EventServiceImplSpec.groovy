@@ -1,17 +1,18 @@
 package lab.zhang.rule.rule_engine.service.impl
 
-
+import com.baomidou.mybatisplus.core.conditions.Wrapper
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper
+import lab.zhang.rule.rule_engine.config.RuleStatusConfig
 import lab.zhang.rule.rule_engine.entity.EventEntity
 import lab.zhang.rule.rule_engine.entity.ExecutionArrangementEntity
 import lab.zhang.rule.rule_engine.entity.RuleEntity
-import lab.zhang.rule.rule_engine.config.RuleStatusConfig
 import lab.zhang.rule.rule_engine.enums.ExecutionArrangementTypeEnum
 import lab.zhang.rule.rule_engine.enums.RuleStatusEnum
 import lab.zhang.rule.rule_engine.mapper.EventMapper
 import lab.zhang.rule.rule_engine.mapper.ExecutionArrangementMapper
 import lab.zhang.rule.rule_engine.mapper.RuleMapper
 import lab.zhang.rule.rule_engine.model.Event
+import lab.zhang.rule.rule_engine.model.ExecutionArrangement
 import lab.zhang.rule.rule_engine.struct_mapper.EventStructMapper
 import lab.zhang.rule.rule_engine.struct_mapper.ExecutionArrangementStructMapper
 import spock.lang.Specification
@@ -64,7 +65,12 @@ class EventServiceImplSpec extends Specification {
         eventMapper.selectById(eventId) >> null
 
         when: "create event"
-        def result = eventService.createEvent(eventId, name, description)
+        def event = Event.builder()
+                .id(eventId)
+                .name(name)
+                .description(description)
+                .build()
+        def result = eventService.createEvent(event)
 
         then: "event should be created"
         1 * eventMapper.selectById(eventId) >> null
@@ -97,7 +103,12 @@ class EventServiceImplSpec extends Specification {
         eventMapper.selectById(id) >> existingEventEntity
 
         when: "create event with duplicate id"
-        eventService.createEvent(id, name, "Description")
+        def event = Event.builder()
+                .id(id)
+                .name(name)
+                .description("Description")
+                .build()
+        eventService.createEvent(event)
 
         then: "should throw IllegalArgumentException"
         1 * eventMapper.selectById(id) >> existingEventEntity
@@ -133,10 +144,10 @@ class EventServiceImplSpec extends Specification {
         }
 
         where:
-        eventId   | exists
-        10000001L | true
-        10000002L | true
-        99999999L | false
+        eventId  | exists
+        10000001 | true
+        10000002 | true
+        99999999 | false
     }
 
     @Unroll
@@ -171,12 +182,12 @@ class EventServiceImplSpec extends Specification {
         }
 
         where:
-        eventId   | name         | description
-        10000001L | "New Name 1" | "New Description 1"
-        10000002L | "New Name 2" | null
-        10000003L | null         | "New Description 3"
-        10000004L | null         | null
-        10000005L | ""           | "New Description 5"
+        eventId  | name         | description
+        10000001 | "New Name 1" | "New Description 1"
+        10000002 | "New Name 2" | null
+        10000003 | null         | "New Description 3"
+        10000004 | null         | null
+        10000005 | ""           | "New Description 5"
     }
 
     @Unroll
@@ -193,7 +204,7 @@ class EventServiceImplSpec extends Specification {
         e.message.contains("Event not found")
 
         where:
-        eventId << [99999999L, 88888888L]
+        eventId << [99999999, 88888888]
     }
 
     @Unroll
@@ -202,7 +213,7 @@ class EventServiceImplSpec extends Specification {
         def eventEntities = []
         eventCount.times { i ->
             def entity = new EventEntity()
-            entity.setId(10000001L + i)
+            entity.setId(10000001 + i)
             entity.setName("Event ${i + 1}")
             entity.setDescription("Description ${i + 1}")
             eventEntities.add(entity)
@@ -252,7 +263,7 @@ class EventServiceImplSpec extends Specification {
         1 * eventMapper.deleteById(eventId) >> 1
 
         where:
-        eventId << [10000001L, 10000002L]
+        eventId << [10000001, 10000002]
     }
 
     @Unroll
@@ -269,7 +280,7 @@ class EventServiceImplSpec extends Specification {
         e.message.contains("Event not found")
 
         where:
-        eventId << [99999999L, 88888888L]
+        eventId << [99999999, 88888888]
     }
 
     @Unroll
@@ -309,7 +320,7 @@ class EventServiceImplSpec extends Specification {
             rule2.setId(2L)
             ruleEntities.add(rule2)
         }
-        ruleMapper.selectBatchIds(_) >> ruleEntities
+        ruleMapper.selectBatchIds(_ as Collection<? extends Serializable>) >> ruleEntities
 
         // Mock insert, update, and delete
         executionArrangementMapper.insert(_ as ExecutionArrangementEntity) >> 1
@@ -330,7 +341,7 @@ class EventServiceImplSpec extends Specification {
 
         when: "batch set execution items"
         Integer eventIdInt = eventId != null ? eventId.intValue() : null
-        eventService.setExecutionItems(eventIdInt, executionItems)
+        eventService.setExecutionArrangements(eventIdInt, executionItems)
 
         then: "execution items should be set correctly"
         1 * eventMapper.selectById(eventId) >> eventEntity
@@ -364,19 +375,19 @@ class EventServiceImplSpec extends Specification {
         }
 
         where:
-        eventId   | hasExisting | newItemCount
-        10000001L | false       | 0
-        10000001L | false       | 1
-        10000001L | false       | 2
-        10000001L | true        | 0
-        10000001L | true        | 1
-        10000001L | true        | 2
+        eventId  | hasExisting | newItemCount
+        10000001 | false       | 0
+        10000001 | false       | 1
+        10000001 | false       | 2
+        10000001 | true        | 0
+        10000001 | true        | 1
+        10000001 | true        | 2
     }
 
     @Unroll
     def "test batchSetExecutionItems - batch validation - existingRuleIds: #existingRuleIds, nonExistentRuleIds: #nonExistentRuleIds"() {
         given: "event exists"
-        def eventId = 10000001L
+        def eventId = 10000001
         def eventEntity = new EventEntity()
         eventEntity.setId(eventId)
         eventMapper.selectById(eventId) >> eventEntity
@@ -396,14 +407,14 @@ class EventServiceImplSpec extends Specification {
             entity.setId(ruleId)
             return entity
         }
-        ruleMapper.selectBatchIds(_) >> existingRuleEntities
+        ruleMapper.selectBatchIds(_ as Collection<? extends Serializable>) >> existingRuleEntities
 
         // Mock existing relations (empty)
-        executionArrangementMapper.selectList(_) >> []
+        executionArrangementMapper.selectList(_ as Wrapper<ExecutionArrangementEntity>) >> []
 
         when: "batch set execution items"
         Integer eventIdInt = eventId != null ? eventId.intValue() : null
-        eventService.setExecutionItems(eventIdInt, executionItems)
+        eventService.setExecutionArrangements(eventIdInt, executionItems)
 
         then: "should succeed"
         1 * eventMapper.selectById(eventId) >> eventEntity
@@ -419,7 +430,7 @@ class EventServiceImplSpec extends Specification {
     @Unroll
     def "test batchSetExecutionItems - batch validation failure - existingRuleIds: #existingRuleIds, nonExistentRuleIds: #nonExistentRuleIds"() {
         given: "event exists"
-        def eventId = 10000001L
+        def eventId = 10000001
         def eventEntity = new EventEntity()
         eventEntity.setId(eventId)
         eventMapper.selectById(eventId) >> eventEntity
@@ -439,13 +450,13 @@ class EventServiceImplSpec extends Specification {
             entity.setId(ruleId)
             return entity
         }
-        ruleMapper.selectBatchIds(_) >> existingRuleEntities
+        ruleMapper.selectBatchIds(_ as Collection<? extends Serializable>) >> existingRuleEntities
 
         when: "batch set execution items"
         def exception = null
         try {
             Integer eventIdInt = eventId != null ? eventId.intValue() : null
-            eventService.setExecutionItems(eventIdInt, executionItems)
+            eventService.setExecutionArrangements(eventIdInt, executionItems)
         } catch (IllegalArgumentException e) {
             exception = e
         }
@@ -470,7 +481,7 @@ class EventServiceImplSpec extends Specification {
     @Unroll
     def "test batchSetExecutionItems - batch validation with rule groups - existingGroupIds: #existingGroupIds, nonExistentGroupIds: #nonExistentGroupIds"() {
         given: "event exists"
-        def eventId = 10000001L
+        def eventId = 10000001
         def eventEntity = new EventEntity()
         eventEntity.setId(eventId)
         eventMapper.selectById(eventId) >> eventEntity
@@ -490,17 +501,17 @@ class EventServiceImplSpec extends Specification {
             entity.setId(groupId)
             return entity
         }
-        ruleMapper.selectBatchIds(_) >> { List<Long> ids ->
+        ruleMapper.selectBatchIds(_ as Collection<? extends Serializable>) >> { List<Long> ids ->
             // Return only existing group IDs that are treated as rule IDs
             return ruleEntities.findAll { it.id in ids }
         }
 
         // Mock existing relations (empty)
-        executionArrangementMapper.selectList(_) >> []
+        executionArrangementMapper.selectList(_ as Wrapper<ExecutionArrangementEntity>) >> []
 
         when: "batch set execution items"
         Integer eventIdInt = eventId != null ? eventId.intValue() : null
-        eventService.setExecutionItems(eventIdInt, executionItems)
+        eventService.setExecutionArrangements(eventIdInt, executionItems)
 
         then: "should succeed if group IDs are treated as valid rule IDs"
         1 * eventMapper.selectById(eventId) >> eventEntity
@@ -518,7 +529,7 @@ class EventServiceImplSpec extends Specification {
     @Unroll
     def "test batchSetExecutionItems - batch validation failure with rule groups - existingGroupIds: #existingGroupIds, nonExistentGroupIds: #nonExistentGroupIds"() {
         given: "event exists"
-        def eventId = 10000001L
+        def eventId = 10000001
         def eventEntity = new EventEntity()
         eventEntity.setId(eventId)
         eventMapper.selectById(eventId) >> eventEntity
@@ -536,7 +547,7 @@ class EventServiceImplSpec extends Specification {
         def exception = null
         try {
             Integer eventIdInt = eventId != null ? eventId.intValue() : null
-            eventService.setExecutionItems(eventIdInt, executionItems)
+            eventService.setExecutionArrangements(eventIdInt, executionItems)
         } catch (IllegalArgumentException e) {
             exception = e
         }
@@ -563,7 +574,7 @@ class EventServiceImplSpec extends Specification {
     @Unroll
     def "test batchSetExecutionItems - batch validation with mixed types - existingRuleIds: #existingRuleIds, existingGroupIds: #existingGroupIds, nonExistentRuleIds: #nonExistentRuleIds, nonExistentGroupIds: #nonExistentGroupIds"() {
         given: "event exists"
-        def eventId = 10000001L
+        def eventId = 10000001
         def eventEntity = new EventEntity()
         eventEntity.setId(eventId)
         eventMapper.selectById(eventId) >> eventEntity
@@ -589,27 +600,27 @@ class EventServiceImplSpec extends Specification {
             entity.setId(ruleId)
             return entity
         }
-        
+
         // Mock rule entities for group IDs (treating them as rule IDs)
         def groupRuleEntities = existingGroupIds.collect { groupId ->
             def entity = new RuleEntity()
             entity.setId(groupId)
             return entity
         }
-        
+
         def allRuleEntities = existingRuleEntities + groupRuleEntities
-        
-        ruleMapper.selectBatchIds(_) >> { List<Long> ids ->
+
+        ruleMapper.selectBatchIds(_ as Collection<? extends Serializable>) >> { List<Long> ids ->
             // Return only existing rules and group IDs (treated as rule IDs)
             return allRuleEntities.findAll { it.id in ids }
         }
 
         // Mock existing relations (empty)
-        executionArrangementMapper.selectList(_) >> []
+        executionArrangementMapper.selectList(_ as Wrapper<ExecutionArrangementEntity>) >> []
 
         when: "batch set execution items"
         Integer eventIdInt = eventId != null ? eventId.intValue() : null
-        eventService.setExecutionItems(eventIdInt, executionItems)
+        eventService.setExecutionArrangements(eventIdInt, executionItems)
 
         then: "should succeed"
         1 * eventMapper.selectById(eventId) >> eventEntity
@@ -627,7 +638,7 @@ class EventServiceImplSpec extends Specification {
     @Unroll
     def "test batchSetExecutionItems - batch validation failure with mixed types - existingRuleIds: #existingRuleIds, existingGroupIds: #existingGroupIds, nonExistentRuleIds: #nonExistentRuleIds, nonExistentGroupIds: #nonExistentGroupIds"() {
         given: "event exists"
-        def eventId = 10000001L
+        def eventId = 10000001
         def eventEntity = new EventEntity()
         eventEntity.setId(eventId)
         eventMapper.selectById(eventId) >> eventEntity
@@ -653,17 +664,17 @@ class EventServiceImplSpec extends Specification {
             entity.setId(ruleId)
             return entity
         }
-        
+
         // Mock rule entities for group IDs (treating them as rule IDs)
         def groupRuleEntities = existingGroupIds.collect { groupId ->
             def entity = new RuleEntity()
             entity.setId(groupId)
             return entity
         }
-        
+
         def allRuleEntities = existingRuleEntities + groupRuleEntities
-        
-        ruleMapper.selectBatchIds(_) >> { List<Long> ids ->
+
+        ruleMapper.selectBatchIds(_ as Collection<? extends Serializable>) >> { List<Long> ids ->
             // Return only existing rules and group IDs (treated as rule IDs)
             return allRuleEntities.findAll { it.id in ids }
         }
@@ -672,7 +683,7 @@ class EventServiceImplSpec extends Specification {
         def exception = null
         try {
             Integer eventIdInt = eventId != null ? eventId.intValue() : null
-            eventService.setExecutionItems(eventIdInt, executionItems)
+            eventService.setExecutionArrangements(eventIdInt, executionItems)
         } catch (IllegalArgumentException e) {
             exception = e
         }
@@ -707,7 +718,7 @@ class EventServiceImplSpec extends Specification {
 
     def "test getExecutionItems - should return relations ordered by execution order"() {
         given: "event with execution relations"
-        def eventId = 10000001L
+        def eventId = 10000001
         def eventIdInt = eventId.intValue()
         // Create relations in unsorted order
         def relation1 = createRelation(eventIdInt, ExecutionArrangementTypeEnum.RULE, 1L, 2)
@@ -722,7 +733,7 @@ class EventServiceImplSpec extends Specification {
 
         // Mock struct mapper - convert entity to model
         executionArrangementStructMapper.entityToModel(_ as ExecutionArrangementEntity) >> { ExecutionArrangementEntity e ->
-            def model = new lab.zhang.rule.rule_engine.model.ExecutionArrangement()
+            def model = new ExecutionArrangement()
             model.setEventId(e.eventId)
             model.setRuleId(e.ruleId)
             model.setGroupId(e.groupId)
@@ -746,9 +757,9 @@ class EventServiceImplSpec extends Specification {
 
     def "test getExecutionItems - should return empty list when no relations exist"() {
         given: "event with no relations"
-        def eventId = 10000001L
+        def eventId = 10000001
         def eventIdInt = eventId.intValue()
-        
+
         // Mock rule status config
         def allowedStatuses = [RuleStatusEnum.ONLINE, RuleStatusEnum.GRAY] as Set
         ruleStatusConfig.getEvalAvailableRuleStatuses() >> allowedStatuses

@@ -77,7 +77,7 @@ class EventExecutionItemsServiceSpec extends Specification {
         }
 
         when: "batch set execution items"
-        eventService.setExecutionItems(eventId, executionItems)
+        eventService.setExecutionArrangements(eventId, executionItems)
 
         then: "should insert all new relations"
         1 * eventMapper.selectById(eventId) >> eventEntity

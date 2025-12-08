@@ -37,6 +37,7 @@ import java.util.*;
 import java.util.stream.Collectors;
 
 import static lab.zhang.rule.rule_engine.constant.EvalArgumentConst.ARG_USER_HASH_INT;
+import static lab.zhang.rule.rule_engine.model.RuleGroup.DEFAULT_RULE_GROUP_ID;
 
 /**
  * Rule service implementation
@@ -187,6 +188,16 @@ public class RuleServiceImpl implements RuleService {
                             oldStatus, newStatus, oldStatus, oldStatus.getAllowedTargetStatuses()));
         }
 
+        // Validate that rule must be associated with at least one event before transitioning to TEST/GRAY/ONLINE status
+        if (newStatus == RuleStatusEnum.TEST || newStatus == RuleStatusEnum.GRAY || newStatus == RuleStatusEnum.ONLINE) {
+            LambdaQueryWrapper<ExecutionArrangementEntity> arrangementQuery = new LambdaQueryWrapper<>();
+            arrangementQuery.eq(ExecutionArrangementEntity::getRuleId, ruleId);
+            List<ExecutionArrangementEntity> arrangementList = executionArrangementMapper.selectList(arrangementQuery);
+            if (arrangementList == null || arrangementList.isEmpty()) {
+                throw new IllegalStateException("Rule must be associated with at least one event before transitioning to " + newStatus + " status");
+            }
+        }
+
         // Handle rule status change
         if (oldStatus != newStatus) {
             changeRuleStatusAboutOnline(existingRule, newRule);
@@ -330,9 +341,9 @@ public class RuleServiceImpl implements RuleService {
         ruleMapper.deleteById(ruleId);
 
         // Delete execution event relations for this rule
-        LambdaQueryWrapper<ExecutionArrangementEntity> deleteWrapper = new LambdaQueryWrapper<>();
-        deleteWrapper.eq(ExecutionArrangementEntity::getRuleId, ruleId);
-        executionArrangementMapper.delete(deleteWrapper);
+        LambdaQueryWrapper<ExecutionArrangementEntity> arrangementWrapper = new LambdaQueryWrapper<>();
+        arrangementWrapper.eq(ExecutionArrangementEntity::getRuleId, ruleId);
+        executionArrangementMapper.delete(arrangementWrapper);
 
         log.info("Rule deleted: ruleId={}, ruleName={}", ruleId, rule.getName());
     }
@@ -369,18 +380,17 @@ public class RuleServiceImpl implements RuleService {
 
     private void changeRuleStatusToOnline(Rule newRule) {
         // Get all event IDs associated with this rule (with group_id = 0, standalone rules)
-        LambdaQueryWrapper<ExecutionArrangementEntity> arrangementQueryWrapper = new LambdaQueryWrapper<>();
-        arrangementQueryWrapper.eq(ExecutionArrangementEntity::getGroupId, 0)
+        LambdaQueryWrapper<ExecutionArrangementEntity> singleArrangementWrapper = new LambdaQueryWrapper<>();
+        singleArrangementWrapper.eq(ExecutionArrangementEntity::getGroupId, 0)
                 .eq(ExecutionArrangementEntity::getRuleId, newRule.getId());
-        List<ExecutionArrangementEntity> arrangementEntityList = executionArrangementMapper.selectList(arrangementQueryWrapper);
-
-        if (arrangementEntityList == null || arrangementEntityList.isEmpty()) {
+        List<ExecutionArrangementEntity> singleArrangementEntityList = executionArrangementMapper.selectList(singleArrangementWrapper);
+        if (singleArrangementEntityList == null || singleArrangementEntityList.isEmpty()) {
             throw new IllegalArgumentException("Rule must be associated with at least one event before transitioning to ONLINE status");
         }
 
         // Create rule group for each event
-        for (ExecutionArrangementEntity arrangementEntity : arrangementEntityList) {
-            Integer eventId = arrangementEntity.getEventId();
+        for (ExecutionArrangementEntity singleArrangementEntity : singleArrangementEntityList) {
+            Integer eventId = singleArrangementEntity.getEventId();
             if (eventId == null) {
                 log.warn("Skipping arrangement with null eventId for rule {}", newRule.getId());
                 continue;
@@ -388,28 +398,28 @@ public class RuleServiceImpl implements RuleService {
             // create rule group
             RuleGroup ruleGroup = ruleGroupService.createRuleGroup(newRule, eventId);
             // update execution arrangement
-            arrangementEntity.setGroupId(ruleGroup.getId());
-            arrangementEntity.setTimeOnUpdate();
-            executionArrangementMapper.updateByPrimaryKey(arrangementEntity);
+            singleArrangementEntity.setGroupId(ruleGroup.getId());
+            singleArrangementEntity.setTimeOnUpdate();
+            executionArrangementMapper.updateByPrimaryKey(singleArrangementEntity);
         }
     }
 
     private void changeRuleStatusFromOnlineToOffline(Rule oldRule) {
         // Get all records from table x associated with this rule (with non-zero group_id)
-        LambdaQueryWrapper<ExecutionArrangementEntity> groupQueryWrapper = new LambdaQueryWrapper<>();
-        groupQueryWrapper.eq(ExecutionArrangementEntity::getRuleId, oldRule.getId())
+        LambdaQueryWrapper<ExecutionArrangementEntity> groupedArrangementWrapper = new LambdaQueryWrapper<>();
+        groupedArrangementWrapper.eq(ExecutionArrangementEntity::getRuleId, oldRule.getId())
                 .ne(ExecutionArrangementEntity::getGroupId, 0);
-        List<ExecutionArrangementEntity> relations = executionArrangementMapper.selectList(groupQueryWrapper);
+        List<ExecutionArrangementEntity> relations = executionArrangementMapper.selectList(groupedArrangementWrapper);
 
         if (relations != null && !relations.isEmpty()) {
             doChangeRuleStatusFromOnline(relations);
         }
 
         // Delete all event-rule associations (with group_id = 0)
-        LambdaQueryWrapper<ExecutionArrangementEntity> eventDeleteWrapper = new LambdaQueryWrapper<>();
-        eventDeleteWrapper.eq(ExecutionArrangementEntity::getRuleId, oldRule.getId())
-                .eq(ExecutionArrangementEntity::getGroupId, 0);
-        executionArrangementMapper.delete(eventDeleteWrapper);
+        LambdaQueryWrapper<ExecutionArrangementEntity> singleArrangementWrapper = new LambdaQueryWrapper<>();
+        singleArrangementWrapper.eq(ExecutionArrangementEntity::getGroupId, 0)
+                .eq(ExecutionArrangementEntity::getRuleId, oldRule.getId());
+        executionArrangementMapper.delete(singleArrangementWrapper);
     }
 
     /**
@@ -421,10 +431,10 @@ public class RuleServiceImpl implements RuleService {
     private void changeRuleStatusFromOnlineToOther(Rule oldRule) {
         log.info("Removing rule {} from groups (transitioning from ONLINE to other status)", oldRule.getId());
         // Get all records from table x associated with this rule (with non-zero group_id)
-        LambdaQueryWrapper<ExecutionArrangementEntity> groupQueryWrapper = new LambdaQueryWrapper<>();
-        groupQueryWrapper.eq(ExecutionArrangementEntity::getRuleId, oldRule.getId())
+        LambdaQueryWrapper<ExecutionArrangementEntity> groupedArrangementWrapper = new LambdaQueryWrapper<>();
+        groupedArrangementWrapper.eq(ExecutionArrangementEntity::getRuleId, oldRule.getId())
                 .ne(ExecutionArrangementEntity::getGroupId, 0);
-        List<ExecutionArrangementEntity> relations = executionArrangementMapper.selectList(groupQueryWrapper);
+        List<ExecutionArrangementEntity> relations = executionArrangementMapper.selectList(groupedArrangementWrapper);
         log.info("Found {} relations with non-zero group_id for rule {}",
                 relations != null ? relations.size() : 0, oldRule.getId());
 
@@ -443,13 +453,13 @@ public class RuleServiceImpl implements RuleService {
             Long groupId = entry.getKey();
             // Update records in table x: set group_id from groupId to 0 (standalone rules)
             for (ExecutionArrangementEntity arrangementEntity : entry.getValue()) {
-                LambdaUpdateWrapper<ExecutionArrangementEntity> updateWrapper = new LambdaUpdateWrapper<>();
-                updateWrapper.eq(ExecutionArrangementEntity::getEventId, arrangementEntity.getEventId())
+                LambdaUpdateWrapper<ExecutionArrangementEntity> arrangementWrapper = new LambdaUpdateWrapper<>();
+                arrangementWrapper.eq(ExecutionArrangementEntity::getEventId, arrangementEntity.getEventId())
                         .eq(ExecutionArrangementEntity::getRuleId, arrangementEntity.getRuleId())
                         .set(ExecutionArrangementEntity::getGroupId, 0L)
                         .set(ExecutionArrangementEntity::getAbRatio, 0)
                         .set(ExecutionArrangementEntity::getUt, (int) TimeUtil.getCurrentTime());
-                executionArrangementMapper.update(null, updateWrapper);
+                executionArrangementMapper.update(null, arrangementWrapper);
             }
 
             // Check if group is empty, if so, delete the group

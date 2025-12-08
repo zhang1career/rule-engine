@@ -2,6 +2,7 @@ package lab.zhang.rule.rule_engine.service;
 
 import lab.zhang.rule.rule_engine.model.Event;
 import lab.zhang.rule.rule_engine.model.ExecutionArrangement;
+import lab.zhang.rule.rule_engine.pojo.dto.EventDTO;
 
 import java.util.List;
 
@@ -22,40 +23,38 @@ public interface EventService {
     /**
      * Get event by eventId
      *
-     * @param eventId event ID (unsigned long integer)
+     * @param eventId event ID (unsigned integer)
      * @return event model, or null if not found
      */
-    Event getEventById(Long eventId);
+    Event getEventById(Integer eventId);
 
     /**
      * Create a new event
      *
-     * @param id          event ID (required, unsigned long integer, must be specified)
-     * @param name        event name (required, max 100 characters)
-     * @param description event description (optional, max 250 characters)
+     * @param event event model containing id, name, and description
      * @return created event model
      * @throws IllegalArgumentException if id is null or event with same id already exists
      */
-    Event createEvent(Long id, String name, String description);
+    Event createEvent(Event event);
 
     /**
      * Update event
      *
-     * @param eventId     event ID (unsigned long integer)
+     * @param eventId     event ID (unsigned integer)
      * @param name        event name (optional, max 100 characters)
      * @param description event description (optional, max 250 characters)
      * @return updated event model
      * @throws IllegalArgumentException if event not found
      */
-    Event updateEvent(Long eventId, String name, String description);
+    Event updateEvent(Integer eventId, String name, String description);
 
     /**
      * Delete event
      *
-     * @param eventId event ID (unsigned long integer)
+     * @param eventId event ID (unsigned integer)
      * @throws IllegalArgumentException if event not found
      */
-    void deleteEvent(Long eventId);
+    void deleteEvent(Integer eventId);
 
     /**
      * Get execution event relations for an event
@@ -66,7 +65,7 @@ public interface EventService {
     List<ExecutionArrangement> getExecutionItems(Integer eventId);
 
     /**
-     * Batch set execution items (rules and rule groups) for an event
+     * Batch set execution arrangements (rules and rule groups) for an event
      * The order of items in the list represents the execution order
      * <p>
      * This method will:
@@ -78,6 +77,6 @@ public interface EventService {
      * @param ruleIdList     list of rule IDs (order represents execution order)
      * @throws IllegalArgumentException if event not found, or any item not found
      */
-    void setExecutionItems(Integer eventId, List<Long> ruleIdList);
+    void setExecutionArrangements(Integer eventId, List<Long> ruleIdList);
 }
 

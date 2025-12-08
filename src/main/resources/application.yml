@@ -8,7 +8,7 @@ spring:
     name: rule-engine
 
   profiles:
-    active: prod
+    active: gray
 
   # Kafka configuration
 #  kafka:

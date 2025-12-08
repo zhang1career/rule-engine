@@ -304,6 +304,18 @@ class RuleServiceImplSpec extends Specification {
                     .content("old content")
                     .build()
         }
+        // For TEST/GRAY/ONLINE status, always mock event association check (even for same status)
+        if (toStatus == RuleStatusEnum.TEST || toStatus == RuleStatusEnum.GRAY || toStatus == RuleStatusEnum.ONLINE) {
+            1 * executionEventRelationMapper.selectList(_) >> {
+                def relation = new ExecutionArrangementEntity()
+                relation.setEventId(1001)
+                relation.setRuleId(ruleId)
+                relation.setGroupId(0L)
+                relation.setExeOrder(0)
+                relation.setAbRatio(0)
+                return [relation]
+            }
+        }
         if (fromStatus != toStatus) {
             // Status change handling
             if (fromStatus != RuleStatusEnum.ONLINE && toStatus == RuleStatusEnum.ONLINE) {
@@ -461,6 +473,14 @@ class RuleServiceImplSpec extends Specification {
                 .ruleStatus(RuleStatusEnum.TEST)
                 .build()
 
+        // Mock event association exists (group_id=0) for TEST status
+        def eventAssociation = new ExecutionArrangementEntity()
+        eventAssociation.setEventId(1001)
+        eventAssociation.setRuleId(ruleId)
+        eventAssociation.setGroupId(0L)
+        eventAssociation.setExeOrder(0)
+        eventAssociation.setAbRatio(0)
+
         when: "update rule with null values"
         ruleService.updateRule(ruleId, newRule)
 
@@ -476,6 +496,8 @@ class RuleServiceImplSpec extends Specification {
                     .content("old content")
                     .build()
         }
+        // Query for event associations with group_id=0 should return one record for TEST status
+        1 * executionEventRelationMapper.selectList(_) >> [eventAssociation]
         1 * ruleStructMapper.modelToEntity(_) >> { Rule r ->
             def entity = new RuleEntity()
             entity.id = r.id
@@ -488,6 +510,281 @@ class RuleServiceImplSpec extends Specification {
         }
         1 * ruleMapper.updateById(_) >> 1
         0 * ruleContentMapper.updateById(_)
+    }
+
+    def "test updateRule - should throw IllegalStateException when transitioning to TEST status without event association"() {
+        given: "an existing rule with OFFLINE status and no event associations"
+        def ruleId = 1L
+        def existingEntity = createRuleEntity(ruleId, RuleStatusEnum.OFFLINE)
+        def existingContent = createContentEntity(ruleId)
+
+        def newRule = Rule.builder()
+                .id(ruleId)
+                .name("Updated Rule")
+                .contentType(ContentTypeEnum.EXPRESSION)
+                .content("updated content")
+                .ruleStatus(RuleStatusEnum.TEST)
+                .build()
+
+        when: "update rule to TEST status without event association"
+        ruleService.updateRule(ruleId, newRule)
+
+        then: "should throw IllegalStateException"
+        1 * ruleMapper.selectById(ruleId) >> existingEntity
+        1 * ruleStructMapper.entityToModel(existingEntity) >> {
+            Rule.builder()
+                    .id(ruleId)
+                    .name("Old Name")
+                    .contentType(ContentTypeEnum.EXPRESSION)
+                    .ruleStatus(RuleStatusEnum.OFFLINE)
+                    .build()
+        }
+        // Query for event associations with group_id=0 should return empty
+        1 * executionEventRelationMapper.selectList(_) >> []
+        IllegalStateException e = thrown()
+        e.message.contains("Rule must be associated with at least one event before transitioning to TEST status")
+    }
+
+    def "test updateRule - should throw IllegalStateException when transitioning to GRAY status without event association"() {
+        given: "an existing rule with TEST status and no event associations"
+        def ruleId = 1L
+        def existingEntity = createRuleEntity(ruleId, RuleStatusEnum.TEST)
+        def existingContent = createContentEntity(ruleId)
+
+        def newRule = Rule.builder()
+                .id(ruleId)
+                .name("Updated Rule")
+                .contentType(ContentTypeEnum.EXPRESSION)
+                .content("updated content")
+                .ruleStatus(RuleStatusEnum.GRAY)
+                .build()
+
+        when: "update rule to GRAY status without event association"
+        ruleService.updateRule(ruleId, newRule)
+
+        then: "should throw IllegalStateException"
+        1 * ruleMapper.selectById(ruleId) >> existingEntity
+        1 * ruleStructMapper.entityToModel(existingEntity) >> {
+            Rule.builder()
+                    .id(ruleId)
+                    .name("Old Name")
+                    .contentType(ContentTypeEnum.EXPRESSION)
+                    .ruleStatus(RuleStatusEnum.TEST)
+                    .build()
+        }
+        // Query for event associations with group_id=0 should return empty
+        1 * executionEventRelationMapper.selectList(_) >> []
+        IllegalStateException e = thrown()
+        e.message.contains("Rule must be associated with at least one event before transitioning to GRAY status")
+    }
+
+    def "test updateRule - should throw IllegalStateException when transitioning to ONLINE status without event association"() {
+        given: "an existing rule with GRAY status and no event associations"
+        def ruleId = 1L
+        def existingEntity = createRuleEntity(ruleId, RuleStatusEnum.GRAY)
+        def existingContent = createContentEntity(ruleId)
+
+        def newRule = Rule.builder()
+                .id(ruleId)
+                .name("Updated Rule")
+                .contentType(ContentTypeEnum.EXPRESSION)
+                .content("updated content")
+                .ruleStatus(RuleStatusEnum.ONLINE)
+                .build()
+
+        when: "update rule to ONLINE status without event association"
+        ruleService.updateRule(ruleId, newRule)
+
+        then: "should throw IllegalStateException"
+        1 * ruleMapper.selectById(ruleId) >> existingEntity
+        1 * ruleStructMapper.entityToModel(existingEntity) >> {
+            Rule.builder()
+                    .id(ruleId)
+                    .name("Old Name")
+                    .contentType(ContentTypeEnum.EXPRESSION)
+                    .ruleStatus(RuleStatusEnum.GRAY)
+                    .build()
+        }
+        // Query for event associations with group_id=0 should return empty
+        1 * executionEventRelationMapper.selectList(_) >> []
+        IllegalStateException e = thrown()
+        e.message.contains("Rule must be associated with at least one event before transitioning to ONLINE status")
+    }
+
+    def "test updateRule - should succeed when transitioning to TEST status with event association"() {
+        given: "an existing rule with OFFLINE status and event associations"
+        def ruleId = 1L
+        def existingEntity = createRuleEntity(ruleId, RuleStatusEnum.OFFLINE)
+        def existingContent = createContentEntity(ruleId)
+
+        def newRule = Rule.builder()
+                .id(ruleId)
+                .name("Updated Rule")
+                .contentType(ContentTypeEnum.EXPRESSION)
+                .content("amount > 1000")
+                .ruleStatus(RuleStatusEnum.TEST)
+                .build()
+
+        // Mock event association exists (group_id=0)
+        def eventAssociation = new ExecutionArrangementEntity()
+        eventAssociation.setEventId(1001)
+        eventAssociation.setRuleId(ruleId)
+        eventAssociation.setGroupId(0L)
+        eventAssociation.setExeOrder(0)
+        eventAssociation.setAbRatio(0)
+
+        when: "update rule to TEST status with event association"
+        ruleService.updateRule(ruleId, newRule)
+
+        then: "should succeed"
+        1 * ruleMapper.selectById(ruleId) >> existingEntity
+        1 * ruleStructMapper.entityToModel(existingEntity) >> {
+            Rule.builder()
+                    .id(ruleId)
+                    .name("Old Name")
+                    .contentType(ContentTypeEnum.EXPRESSION)
+                    .ruleStatus(RuleStatusEnum.OFFLINE)
+                    .build()
+        }
+        // Query for event associations with group_id=0 should return one record
+        1 * executionEventRelationMapper.selectList(_) >> [eventAssociation]
+        // Database update calls
+        1 * ruleStructMapper.modelToEntity(_) >> { Rule r ->
+            def entity = new RuleEntity()
+            entity.id = r.id
+            entity.name = r.name
+            entity.contentType = r.contentType != null ? r.contentType.getId() : null
+            entity.ruleStatus = r.ruleStatus != null ? r.ruleStatus.getId() : null
+            entity.ct = existingEntity.ct
+            return entity
+        }
+        1 * ruleMapper.updateById(_) >> 1
+        1 * ruleStructMapper.modelToContentEntity(_) >> { Rule r ->
+            def content = new RuleContentEntity()
+            content.id = r.id
+            content.content = r.content
+            return content
+        }
+        1 * ruleContentMapper.updateById(_) >> 1
+    }
+
+    def "test updateRule - should succeed when transitioning to GRAY status with event association"() {
+        given: "an existing rule with TEST status and event associations"
+        def ruleId = 1L
+        def existingEntity = createRuleEntity(ruleId, RuleStatusEnum.TEST)
+        def existingContent = createContentEntity(ruleId)
+
+        def newRule = Rule.builder()
+                .id(ruleId)
+                .name("Updated Rule")
+                .contentType(ContentTypeEnum.EXPRESSION)
+                .content("amount > 1000")
+                .ruleStatus(RuleStatusEnum.GRAY)
+                .build()
+
+        // Mock event association exists (group_id=0)
+        def eventAssociation = new ExecutionArrangementEntity()
+        eventAssociation.setEventId(1001)
+        eventAssociation.setRuleId(ruleId)
+        eventAssociation.setGroupId(0L)
+        eventAssociation.setExeOrder(0)
+        eventAssociation.setAbRatio(0)
+
+        when: "update rule to GRAY status with event association"
+        ruleService.updateRule(ruleId, newRule)
+
+        then: "should succeed"
+        1 * ruleMapper.selectById(ruleId) >> existingEntity
+        1 * ruleStructMapper.entityToModel(existingEntity) >> {
+            Rule.builder()
+                    .id(ruleId)
+                    .name("Old Name")
+                    .contentType(ContentTypeEnum.EXPRESSION)
+                    .ruleStatus(RuleStatusEnum.TEST)
+                    .build()
+        }
+        // Query for event associations with group_id=0 should return one record
+        1 * executionEventRelationMapper.selectList(_) >> [eventAssociation]
+        // Database update calls
+        1 * ruleStructMapper.modelToEntity(_) >> { Rule r ->
+            def entity = new RuleEntity()
+            entity.id = r.id
+            entity.name = r.name
+            entity.contentType = r.contentType != null ? r.contentType.getId() : null
+            entity.ruleStatus = r.ruleStatus != null ? r.ruleStatus.getId() : null
+            entity.ct = existingEntity.ct
+            return entity
+        }
+        1 * ruleMapper.updateById(_) >> 1
+        1 * ruleStructMapper.modelToContentEntity(_) >> { Rule r ->
+            def content = new RuleContentEntity()
+            content.id = r.id
+            content.content = r.content
+            return content
+        }
+        1 * ruleContentMapper.updateById(_) >> 1
+    }
+
+    def "test updateRule - should succeed when transitioning to ONLINE status with event association"() {
+        given: "an existing rule with GRAY status and event associations"
+        def ruleId = 1L
+        def existingEntity = createRuleEntity(ruleId, RuleStatusEnum.GRAY)
+        def existingContent = createContentEntity(ruleId)
+
+        def newRule = Rule.builder()
+                .id(ruleId)
+                .name("Updated Rule")
+                .contentType(ContentTypeEnum.EXPRESSION)
+                .content("amount > 1000")
+                .ruleStatus(RuleStatusEnum.ONLINE)
+                .build()
+
+        // Mock event association exists (group_id=0)
+        def eventAssociation = new ExecutionArrangementEntity()
+        eventAssociation.setEventId(1001)
+        eventAssociation.setRuleId(ruleId)
+        eventAssociation.setGroupId(0L)
+        eventAssociation.setExeOrder(0)
+        eventAssociation.setAbRatio(0)
+
+        when: "update rule to ONLINE status with event association"
+        ruleService.updateRule(ruleId, newRule)
+
+        then: "should succeed"
+        1 * ruleMapper.selectById(ruleId) >> existingEntity
+        1 * ruleStructMapper.entityToModel(existingEntity) >> {
+            Rule.builder()
+                    .id(ruleId)
+                    .name("Old Name")
+                    .contentType(ContentTypeEnum.EXPRESSION)
+                    .ruleStatus(RuleStatusEnum.GRAY)
+                    .build()
+        }
+        // Query for event associations with group_id=0 - first call for validation, second for status change
+        2 * executionEventRelationMapper.selectList(_) >> [eventAssociation]
+        // For ONLINE transition, should create rule group
+        1 * ruleGroupService.createRuleGroup(_, 1001) >> {
+            def group = new RuleGroup(10000001L)
+            return group
+        }
+        // Database update calls
+        1 * ruleStructMapper.modelToEntity(_) >> { Rule r ->
+            def entity = new RuleEntity()
+            entity.id = r.id
+            entity.name = r.name
+            entity.contentType = r.contentType != null ? r.contentType.getId() : null
+            entity.ruleStatus = r.ruleStatus != null ? r.ruleStatus.getId() : null
+            entity.ct = existingEntity.ct
+            return entity
+        }
+        1 * ruleMapper.updateById(_) >> 1
+        1 * ruleStructMapper.modelToContentEntity(_) >> { Rule r ->
+            def content = new RuleContentEntity()
+            content.id = r.id
+            content.content = r.content
+            return content
+        }
+        1 * ruleContentMapper.updateById(_) >> 1
     }
 
     // ========== doUpdateRule() tests ==========

@@ -102,6 +102,9 @@ FULL → OFFLINE, AB_TEST
 - Only rules in Offline status (OFFLINE) can be deleted
 - Attempting to delete rules in non-offline status will throw an exception
 
+**Event Association Constraints for Status Transitions**:
+- For rules transitioning to Test (TEST), Gray (GRAY), or Online (ONLINE) status, the rule must be associated with at least one event
+
 ### 4. Execution Flow
 
 1. Get execution sequence based on `eventId`

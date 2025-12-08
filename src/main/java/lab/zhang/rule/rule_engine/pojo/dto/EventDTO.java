@@ -17,10 +17,10 @@ import lombok.NoArgsConstructor;
 public class EventDTO {
 
     /**
-     * Event ID (required for creation, unsigned long integer)
+     * Event ID (required for creation, unsigned integer)
      * Note: For PUT /api/events/{eventId} (update), this field is optional and will be ignored
      */
-    private Long id;
+    private Integer id;
 
     /**
      * Event name (required for creation, max 100 characters)

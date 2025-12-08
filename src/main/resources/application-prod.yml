@@ -1,10 +1,19 @@
 # Production environment configuration
 spring:
+  # database
   datasource:
     url: jdbc:mysql://${MYSQL_HOST}:${MYSQL_PORT}/rule_engine?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai&allowMultiQueries=true
-    username: ${MYSQL_USER}
+    username: ${MYSQL_USER:rule_engine}
     password: ${MYSQL_PASS}
     driver-class-name: com.mysql.cj.jdbc.Driver
+
+  # cache
+  data:
+    redis:
+      host: ${REDIS_HOST}
+      port: ${REDIS_PORT}
+      password: ${REDIS_PASSWORD:}
+      database: ${REDIS_DB:0}
 
 rule:
   engine:
