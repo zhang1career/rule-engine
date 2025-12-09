@@ -36,7 +36,7 @@ docker build -t rule-engine:v1.0.0 .
 #### Method 1: Using Docker Compose (Recommended, includes all dependencies)
 
 ```bash
-# Start all services (MySQL, Redis, RabbitMQ, Rule Engine)
+# Start all services (MySQL, Redis, Rule Engine)
 docker-compose up -d
 
 # View logs
@@ -86,7 +86,6 @@ docker-compose -f docker-compose.dev.yml down
 Contains the following services:
 - **mysql**: MySQL 8.0 database
 - **redis**: Redis 7 cache
-- **rabbitmq**: RabbitMQ 3.12 message queue (optional)
 - **rule-engine**: Rule engine application
 
 ### docker-compose.dev.yml (Development Environment)
@@ -112,8 +111,6 @@ Only contains dependency services:
 | `SPRING_PROFILES_ACTIVE` | Spring configuration file | `prod` |
 | `SPRING_DATA_REDIS_HOST` | Redis host | `redis` |
 | `SPRING_DATA_REDIS_PORT` | Redis port | `6379` |
-| `SPRING_RABBITMQ_HOST` | RabbitMQ host | `rabbitmq` |
-| `SPRING_RABBITMQ_PORT` | RabbitMQ port | `5672` |
 | `RULE_ENGINE_ENVIRONMENT` | Rule engine environment (TEST/GRAY/PRODUCTION) | `PRODUCTION` |
 | `JAVA_OPTS` | JVM parameters | `-Xms512m -Xmx1024m -XX:+UseG1GC` |
 
@@ -314,7 +311,7 @@ docker run -e JAVA_OPTS="-Xms256m -Xmx512m" rule-engine:latest
 ## Notes
 
 1. **Database Initialization**: On first startup, MySQL will automatically execute `schema.sql` to initialize database
-2. **Data Persistence**: Use Docker volumes to persist MySQL, Redis, RabbitMQ data
+2. **Data Persistence**: Use Docker volumes to persist MySQL and Redis data
 3. **Timezone Setting**: All containers are set to `Asia/Shanghai` timezone
 4. **Health Check**: Ensure application starts before health check (start-period=40s)
 5. **Log Directory**: Application logs will be mounted to `./logs` directory

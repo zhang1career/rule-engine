@@ -1,7 +1,7 @@
 package lab.zhang.rule.rule_engine.engine;
 
 import lab.zhang.rule.rule_engine.common.TypedValue;
-import lab.zhang.rule.rule_engine.pojo.dto.EvalDTO;
+import lab.zhang.rule.rule_engine.model.EvalRequest;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -57,11 +57,11 @@ public class ExecutionTrace implements Serializable {
     private List<ExecutionStep> steps = new ArrayList<>();
 
 
-    public ExecutionTrace(@NotNull EvalDTO dto) {
-        this.traceId = dto.getTraceId();
-        this.userId = dto.getUserId();
-        this.eventId = dto.getEventId();
-        this.arguments = dto.getArguments();
+    public ExecutionTrace(@NotNull EvalRequest request) {
+        this.traceId = request.getTraceId();
+        this.userId = request.getUserId();
+        this.eventId = request.getEventId();
+        this.arguments = request.getArguments();
     }
 
     /**

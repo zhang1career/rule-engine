@@ -1,7 +1,7 @@
 package lab.zhang.rule.rule_engine.service;
 
+import lab.zhang.rule.rule_engine.model.EvalRequest;
 import lab.zhang.rule.rule_engine.model.EvalResult;
-import lab.zhang.rule.rule_engine.pojo.dto.EvalDTO;
 
 /**
  * Rule evaluation service interface
@@ -16,6 +16,6 @@ public interface EvalService {
      * @param request evaluation request
      * @return evaluation result with execution trace
      */
-    EvalResult eval(EvalDTO request);
+    EvalResult eval(EvalRequest request);
 }
 

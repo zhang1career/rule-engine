@@ -16,8 +16,8 @@ The rule engine system is a rule calculation service based on SpringBoot, used t
 ### 2.1 Core Interface
 
 #### 2.1.1 Interface Definition
-- **Interface Path**: `/rule/eval`
-- **Interface Name**: `eval`
+- **Interface Path**: `/rule/evalRequest`
+- **Interface Name**: `evalRequest`
 - **Call Methods**: 
   - HTTP (initial implementation)
   - RPC (future extension)
@@ -159,7 +159,7 @@ If these constraints are not met, the status transition will throw an `IllegalSt
 #### 2.4.1 Message Sending
 - **Trigger Timing**: After rule calculation completes
 - **Message Content**: Contains input parameters and calculation results
-- **Message Queue**: RabbitMQ (external system, called through interface)
+- **Message Queue**: Kafka (external system, called through interface)
 - **Sending Method**: Asynchronous sending, does not affect main flow
 
 ## 3 Non-functional Requirements
@@ -207,7 +207,7 @@ If these constraints are not met, the status transition will throw an `IllegalSt
 - [ ] HTTP synchronous blocking interface implementation
 - [ ] Basic rule execution engine
 - [ ] Rule status control (offline, test, full)
-- [ ] RabbitMQ message sending
+- [ ] Kafka message sending
 
 ### 5.2 Phase 2
 - [x] A/B test rule group functionality implementation
@@ -223,7 +223,7 @@ If these constraints are not met, the status transition will throw an `IllegalSt
 
 ### 6.1 HTTP Request Example
 ```json
-POST /rule/eval
+POST /rule/evalRequest
 {
   "userId": 123456789,
   "eventId": 1001,

@@ -32,7 +32,7 @@ A rule calculation service based on SpringBoot, supporting multiple rule types a
 
 ### 1. Rule Evaluation Interface
 
-**Interface Path**: `POST /rule/eval`
+**Interface Path**: `POST /rule/evalRequest`
 
 **Request Example**:
 ```json
@@ -121,7 +121,6 @@ FULL → OFFLINE, AB_TEST
 - JDK 1.8+
 - Maven 3.6+
 - MySQL 5.7+ (optional, only needed when using SQL query functionality)
-- RabbitMQ (optional, only needed when message queue functionality is required)
 
 ### 2. Configuration
 
@@ -132,14 +131,6 @@ Edit `src/main/resources/application.yml`:
 rule:
   engine:
     environment: TEST  # or PRODUCTION or GRAY
-
-# RabbitMQ configuration (optional)
-spring:
-  rabbitmq:
-    host: localhost
-    port: 5672
-    username: guest
-    password: guest
 
 # Database configuration (optional)
 spring:
@@ -166,7 +157,7 @@ java -jar target/rule-engine-0.7.0-SNAPSHOT.jar
 ### 4. Test Interface
 
 ```bash
-curl -X POST http://localhost:8080/rule/eval \
+curl -X POST http://localhost:8080/rule/evalRequest \
   -H "Content-Type: application/json" \
   -d '{
     "userId": 123456789,
@@ -219,7 +210,7 @@ Currently uses database storage (MySQL + MyBatis Plus), supporting:
 1. **Rule Configuration**: Uses MySQL database for persistent storage
 2. **A/B Testing**: Implemented using rule group mechanism, data persisted in database
 3. **Execution Depth Limit**: Default maximum execution depth is 100 to prevent infinite recursion
-4. **Message Queue**: RabbitMQ is optional configuration, message sending will be skipped if not configured
+4. **Message Queue**: Kafka is used for message sending (optional, message sending will be skipped if not configured)
 5. **Database**: Database is required for storing rules, events, rule groups, etc.
 6. **Redis Cache**: Rule selection cache uses Redis storage, cache key format is `rule:gw:abt:{userId}:{eventId}:{groupId}`, used to record selection results for each rule group, cache expiration time is 24 hours
 

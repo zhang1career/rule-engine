@@ -605,7 +605,7 @@ EXPLAIN DELETE FROM rule_group WHERE id = 10000001;
 
 ## 4. Rule Evaluation Interface
 
-### 4.1 POST /api/eval - Execute Rule Evaluation
+### 4.1 POST /api/evalRequest - Execute Rule Evaluation
 
 **SQL**:
 ```sql

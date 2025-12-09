@@ -57,7 +57,6 @@ export MYSQL_PASS=prod-password
 
 # 可选配置
 export REDIS_HOST=prod-redis-host
-export RABBITMQ_HOST=prod-rabbitmq-host
 # ... 其他配置
 ```
 
@@ -79,7 +78,7 @@ export RABBITMQ_HOST=prod-rabbitmq-host
 # Gray环境（包含MySQL和Redis）
 docker-compose -f docker-compose.gray.yml up -d
 
-# Production环境（包含MySQL、Redis、RabbitMQ）
+# Production环境（包含MySQL、Redis）
 docker-compose -f docker-compose.prod.yml up -d
 ```
 
@@ -125,7 +124,6 @@ docker run -d \
 - **日志级别**: INFO级别，第三方库使用WARN
 - **数据库**: 必须通过环境变量配置MySQL
 - **缓存**: 支持Redis
-- **消息队列**: 支持RabbitMQ
 - **日志路径**: `/var/log/rule-engine/`
 - **资源限制**: 内存1.5GB，1个CPU核心
 
@@ -148,10 +146,6 @@ docker run -d \
 | `REDIS_PORT` | Redis端口 | 6379 |
 | `REDIS_PASSWORD` | Redis密码 | (空) |
 | `REDIS_DB` | Redis数据库编号 | 0 |
-| `RABBITMQ_HOST` | RabbitMQ主机地址 | localhost |
-| `RABBITMQ_PORT` | RabbitMQ端口 | 5672 |
-| `RABBITMQ_USERNAME` | RabbitMQ用户名 | guest |
-| `RABBITMQ_PASSWORD` | RabbitMQ密码 | guest |
 
 ## 日志管理
 
@@ -164,7 +158,7 @@ docker run -d \
 
 - `rule-engine.log`: 主要应用日志
 - `rule-engine-error.log`: 错误日志
-- `rule-engine-eval.log`: 规则评估专用日志
+- `rule-engine-evalRequest.log`: 规则评估专用日志
 
 ### 查看日志
 
@@ -173,7 +167,7 @@ docker run -d \
 docker logs -f rule-engine-prod
 
 # 查看文件日志
-tail -f logs/prod/rule-engine.log
+tail -f logs/prod/*.log
 ```
 
 ## 健康检查

@@ -25,16 +25,6 @@ REDIS_PASSWORD=your_redis_password
 REDIS_DB=0
 
 # =============================================================================
-# MESSAGE QUEUE CONFIGURATION
-# =============================================================================
-
-# RabbitMQ Configuration (Optional - used for async message sending)
-RABBITMQ_HOST=rabbitmq-prod.example.com
-RABBITMQ_PORT=5672
-RABBITMQ_USERNAME=rule_engine
-RABBITMQ_PASSWORD=your_rabbitmq_password
-
-# =============================================================================
 # APPLICATION CONFIGURATION
 # =============================================================================
 
@@ -43,6 +33,10 @@ SPRING_PROFILES_ACTIVE=prod
 
 # Enable Rule Content Caching (true/false)
 RULE_CONTENT_CACHE_ENABLED=true
+
+# Eval Result Cache Configuration
+RULE_EVAL_CACHE_CAPACITY=10000
+RULE_EVAL_CACHE_HASH_LENGTH=32
 
 # JVM Options
 JAVA_OPTS=-Xmx1g -Xms512m
@@ -69,8 +63,4 @@ LOG_DIR=/var/log/rule-engine
 # REDIS_HOST=localhost
 # REDIS_PORT=6379
 # REDIS_PASSWORD=
-# RABBITMQ_HOST=localhost
-# RABBITMQ_PORT=5672
-# RABBITMQ_USERNAME=guest
-# RABBITMQ_PASSWORD=guest
 # SPRING_PROFILES_ACTIVE=gray

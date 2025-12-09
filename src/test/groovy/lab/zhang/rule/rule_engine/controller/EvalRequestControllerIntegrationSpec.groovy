@@ -12,9 +12,8 @@ import lab.zhang.rule.rule_engine.mapper.RuleGroupMapper
 import lab.zhang.rule.rule_engine.mapper.RuleMapper
 import lab.zhang.rule.rule_engine.model.Event
 import lab.zhang.rule.rule_engine.model.Rule
-import lab.zhang.rule.rule_engine.pojo.dto.EventDTO
 import lab.zhang.rule.rule_engine.pojo.dto.RuleDTO
-import lab.zhang.rule.rule_engine.pojo.qo.EvalQO
+import lab.zhang.rule.rule_engine.pojo.qo.EvalRequestQO
 import lab.zhang.rule.rule_engine.service.EventService
 import lab.zhang.rule.rule_engine.service.RuleGroupService
 import lab.zhang.rule.rule_engine.service.RuleService
@@ -40,7 +39,7 @@ import spock.lang.Specification
 @SpringBootTest
 @ActiveProfiles("test")
 @Transactional
-class EvalControllerIntegrationSpec extends Specification {
+class EvalRequestControllerIntegrationSpec extends Specification {
 
     @Autowired
     private EvalController evalController
@@ -93,7 +92,7 @@ class EvalControllerIntegrationSpec extends Specification {
 
     def "test eval interface - integration test with execution trace"() {
         given: "prepare eval request"
-        def evalQO = new EvalQO()
+        def evalQO = new EvalRequestQO()
         evalQO.userId = 1000L
         evalQO.eventId = EVENT_ID_2
         evalQO.traceId = 9999L
@@ -141,7 +140,7 @@ class EvalControllerIntegrationSpec extends Specification {
         when: "call eval interface multiple times"
         requestCount.times { index ->
             def amount = Math.random() * 500  // Random amount between 0 and 500
-            def evalQO = new EvalQO()
+            def evalQO = new EvalRequestQO()
             evalQO.userId = 1000L + index  // Different userId for each request
             evalQO.eventId = EVENT_ID_2
             evalQO.traceId = 9999L + index
@@ -225,7 +224,7 @@ class EvalControllerIntegrationSpec extends Specification {
 
     def "test eval interface - event with no rules should return null result"() {
         given: "prepare eval request for event with no rules"
-        def evalQO = new EvalQO()
+        def evalQO = new EvalRequestQO()
         evalQO.userId = 1000L
         evalQO.eventId = EVENT_ID_3
         evalQO.traceId = 9999L
@@ -247,7 +246,7 @@ class EvalControllerIntegrationSpec extends Specification {
 
     def "test eval interface - execution trace details"() {
         given: "prepare eval request"
-        def evalQO = new EvalQO()
+        def evalQO = new EvalRequestQO()
         evalQO.userId = 1000L
         evalQO.eventId = EVENT_ID_2
         evalQO.traceId = 9999L
@@ -292,7 +291,7 @@ class EvalControllerIntegrationSpec extends Specification {
 
     def "test eval interface - cache control via RULE_CONTENT_CACHE_ENABLED environment variable"() {
         given: "prepare eval request"
-        def evalQO = new EvalQO()
+        def evalQO = new EvalRequestQO()
         evalQO.userId = 1000L
         evalQO.eventId = EVENT_ID_2
         evalQO.traceId = 9999L

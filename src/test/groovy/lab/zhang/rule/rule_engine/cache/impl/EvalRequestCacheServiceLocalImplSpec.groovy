@@ -11,7 +11,7 @@ import spock.lang.Specification
 /**
  * EvalCacheServiceImpl unit test
  */
-class EvalCacheServiceLocalImplSpec extends Specification {
+class EvalRequestCacheServiceLocalImplSpec extends Specification {
 
     def cacheService = new EvalCacheServiceLocalImpl()
 

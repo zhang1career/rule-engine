@@ -1,9 +1,9 @@
 package lab.zhang.rule.rule_engine.controller;
 
+import lab.zhang.rule.rule_engine.model.EvalRequest;
 import lab.zhang.rule.rule_engine.model.EvalResult;
-import lab.zhang.rule.rule_engine.pojo.dto.EvalDTO;
 import lab.zhang.rule.rule_engine.pojo.dto.EvalResultDTO;
-import lab.zhang.rule.rule_engine.pojo.qo.EvalQO;
+import lab.zhang.rule.rule_engine.pojo.qo.EvalRequestQO;
 import lab.zhang.rule.rule_engine.service.EvalService;
 import lab.zhang.rule.rule_engine.struct_mapper.EvalStructMapper;
 import lombok.extern.slf4j.Slf4j;
@@ -39,12 +39,12 @@ public class EvalController {
      */
     @PostMapping
     public ResponseEntity<EvalResultDTO> eval(
-            @RequestBody EvalQO qo) {
+            @RequestBody EvalRequestQO qo) {
         log.info("Received eval request: userId={}, eventId={}, traceId={}",
                 qo.getUserId(), qo.getEventId(), qo.getTraceId());
 
-        EvalDTO dto = evalStructMapper.qoToDto(qo);
-        EvalResult evalResult = evalService.eval(dto);
+        EvalRequest request = evalStructMapper.qoToModel(qo);
+        EvalResult evalResult = evalService.eval(request);
 
         return ResponseEntity.ok(new EvalResultDTO(evalResult.getResult(), evalResult.getBriefSteps()));
     }

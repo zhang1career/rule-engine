@@ -466,7 +466,7 @@ paths:
            - If it's a rule, execute rule calculation directly
            - If it's a rule group, select a rule based on user hash and rule probability, then execute
         3. Return the result of the last execution item
-        4. Asynchronously send calculation results to message queue (RabbitMQ) for subsequent processing
+        4. Asynchronously send calculation results to message queue (Kafka) for subsequent processing
         
         Note: This interface is synchronous blocking and will wait for rule calculation to complete before returning results.
         If an exception occurs during rule calculation, an error message will be returned, but no HTTP exception will be thrown (always returns 200 status code).

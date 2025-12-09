@@ -1,4 +1,4 @@
-package lab.zhang.rule.rule_engine.pojo.dto;
+package lab.zhang.rule.rule_engine.model;
 
 import lab.zhang.rule.rule_engine.common.TypedValue;
 import lombok.Data;
@@ -11,7 +11,7 @@ import java.util.Map;
  * @author Rongjin Zhang
  */
 @Data
-public class EvalDTO {
+public class EvalRequest {
 
     /**
      * User ID

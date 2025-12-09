@@ -4,8 +4,8 @@ import lab.zhang.rule.rule_engine.common.TypedValue
 import lab.zhang.rule.rule_engine.engine.ExecutionTrace
 import lab.zhang.rule.rule_engine.enums.ValueTypeEnum
 import lab.zhang.rule.rule_engine.model.EvalResult
-import lab.zhang.rule.rule_engine.pojo.dto.EvalDTO
-import lab.zhang.rule.rule_engine.pojo.qo.EvalQO
+import lab.zhang.rule.rule_engine.model.EvalRequest
+import lab.zhang.rule.rule_engine.pojo.qo.EvalRequestQO
 import lab.zhang.rule.rule_engine.service.EvalService
 import lab.zhang.rule.rule_engine.struct_mapper.EvalStructMapper
 import org.springframework.http.HttpStatus
@@ -14,7 +14,7 @@ import spock.lang.Specification
 /**
  * RuleController unit test
  */
-class EvalControllerSpec extends Specification {
+class EvalRequestControllerSpec extends Specification {
 
     def evalService = Mock(EvalService)
     def evalStructMapper = Mock(EvalStructMapper)
@@ -27,7 +27,7 @@ class EvalControllerSpec extends Specification {
 
     def "test eval interface - normal case"() {
         given: "prepare request parameters"
-        def request = new EvalQO()
+        def request = new EvalRequestQO()
         request.userId = 123L
         request.eventId = 1001L
         request.traceId = 999L
@@ -35,12 +35,12 @@ class EvalControllerSpec extends Specification {
             "amount": new TypedValue(1000.0, ValueTypeEnum.DECIMAL)
         ]
 
-        and: "prepare DTO for service call"
-        def dto = new EvalDTO()
-        dto.userId = 123L
-        dto.eventId = 1001L
-        dto.traceId = 999L
-        dto.arguments = [
+        and: "prepare data for service call"
+        def request1 = new EvalRequest()
+        request1.userId = 123L
+        request1.eventId = 1001L
+        request1.traceId = 999L
+        request1.arguments = [
             "amount": new TypedValue(1000.0, ValueTypeEnum.DECIMAL)
         ]
 
@@ -53,8 +53,8 @@ class EvalControllerSpec extends Specification {
         def response = controller.eval(request)
 
         then: "should return success response"
-        1 * evalStructMapper.qoToDto(request) >> dto
-        1 * evalService.eval(dto) >> evalResult
+        1 * evalStructMapper.qoToModel(request) >> request1
+        1 * evalService.eval(request1) >> evalResult
         response.statusCode == HttpStatus.OK
         response.body.result == expectedResult
         response.body.briefSteps == evalResult.getBriefSteps()
@@ -62,25 +62,25 @@ class EvalControllerSpec extends Specification {
 
     def "test eval interface - service throws exception"() {
         given: "prepare request parameters"
-        def request = new EvalQO()
+        def request = new EvalRequestQO()
         request.userId = 123L
         request.eventId = 1001L
         request.traceId = 999L
         request.arguments = [:]
 
-        and: "prepare DTO for service call"
-        def dto = new EvalDTO()
-        dto.userId = 123L
-        dto.eventId = 1001L
-        dto.traceId = 999L
-        dto.arguments = [:]
+        and: "prepare data for service call"
+        def request1 = new EvalRequest()
+        request1.userId = 123L
+        request1.eventId = 1001L
+        request1.traceId = 999L
+        request1.arguments = [:]
 
         when: "call eval interface"
         controller.eval(request)
 
         then: "should throw exception"
-        1 * evalStructMapper.qoToDto(request) >> dto
-        1 * evalService.eval(dto) >> {
+        1 * evalStructMapper.qoToModel(request) >> request1
+        1 * evalService.eval(request1) >> {
             throw new RuntimeException("Rule execution failed")
         }
         thrown(RuntimeException)
@@ -88,7 +88,7 @@ class EvalControllerSpec extends Specification {
 
     def "test eval interface - verify request parameter passing"() {
         given: "prepare request parameters"
-        def request = new EvalQO()
+        def request = new EvalRequestQO()
         request.userId = 123L
         request.eventId = 1001L
         request.traceId = 999L
@@ -97,12 +97,12 @@ class EvalControllerSpec extends Specification {
             "age": new TypedValue(25, ValueTypeEnum.INTEGER)
         ]
 
-        and: "prepare DTO for service call"
-        def dto = new EvalDTO()
-        dto.userId = 123L
-        dto.eventId = 1001L
-        dto.traceId = 999L
-        dto.arguments = [
+        and: "prepare data for service call"
+        def request1 = new EvalRequest()
+        request1.userId = 123L
+        request1.eventId = 1001L
+        request1.traceId = 999L
+        request1.arguments = [
             "amount": new TypedValue(2000.0, ValueTypeEnum.DECIMAL),
             "age": new TypedValue(25, ValueTypeEnum.INTEGER)
         ]
@@ -116,8 +116,8 @@ class EvalControllerSpec extends Specification {
         def response = controller.eval(request)
 
         then: "should correctly pass request parameters"
-        1 * evalStructMapper.qoToDto(request) >> dto
-        1 * evalService.eval({ EvalDTO req ->
+        1 * evalStructMapper.qoToModel(request) >> request1
+        1 * evalService.eval({ EvalRequest req ->
             req.userId == 123L &&
             req.eventId == 1001L &&
             req.traceId == 999L &&

@@ -2,16 +2,13 @@ package lab.zhang.rule.rule_engine.service.impl;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lab.zhang.rule.rule_engine.common.TypedValue;
-import lab.zhang.rule.rule_engine.pojo.dto.EvalDTO;
+import lab.zhang.rule.rule_engine.model.EvalRequest;
 import lab.zhang.rule.rule_engine.service.KafkaService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Service;
-
-import java.util.HashMap;
-import java.util.Map;
 
 /**
  * Kafka service implementation
@@ -32,7 +29,7 @@ public class KafkaServiceImpl implements KafkaService {
     private String topic;
 
     @Override
-    public void sendEvalResult(EvalDTO request, TypedValue result) {
+    public void sendEvalResult(EvalRequest request, TypedValue result) {
 //        if (kafkaTemplate == null) {
 //            log.warn("KafkaTemplate not configured, skip sending message");
 //            return;

@@ -555,7 +555,7 @@ curl -X DELETE http://localhost:8080/api/rule-groups/10000001
 
 ### 4.1 Execute Rule Evaluation
 
-**Interface**: `POST /api/eval`
+**Interface**: `POST /api/evalRequest`
 
 **Description**: Execute rule evaluation based on event ID and user ID, return calculation result. This interface is a synchronous blocking HTTP interface.
 
@@ -631,7 +631,7 @@ curl -X DELETE http://localhost:8080/api/rule-groups/10000001
 
 **Call Example**:
 ```bash
-curl -X POST http://localhost:8080/api/eval \
+curl -X POST http://localhost:8080/api/evalRequest \
   -H "Content-Type: application/json" \
   -d '{
     "userId": 123456,
@@ -656,7 +656,7 @@ curl -X POST http://localhost:8080/api/eval \
    - If it's a rule, directly execute rule calculation
    - If it's a rule group, select rule based on user hash and rule probability, then execute
 3. Return calculation result of the last executed item
-4. Asynchronously send calculation result to message queue (RabbitMQ) for subsequent processing
+4. Asynchronously send calculation result to message queue (Kafka) for subsequent processing
 
 **Notes**:
 - This interface is synchronous blocking and will wait for rule calculation to complete before returning result

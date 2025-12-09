@@ -5,9 +5,8 @@ import lab.zhang.rule.rule_engine.common.TypedValue
 import lab.zhang.rule.rule_engine.constant.EvalArgumentConst
 import lab.zhang.rule.rule_engine.engine.ExecutionTrace
 import lab.zhang.rule.rule_engine.enums.ValueTypeEnum
-import lab.zhang.rule.rule_engine.model.EvalResult
-import lab.zhang.rule.rule_engine.pojo.dto.EvalDTO
 import lab.zhang.rule.rule_engine.engine.RuleExecutionEngine
+import lab.zhang.rule.rule_engine.model.EvalRequest
 import lab.zhang.rule.rule_engine.model.RuleExecutionContext
 import lab.zhang.rule.rule_engine.service.KafkaService
 import spock.lang.Specification
@@ -16,7 +15,7 @@ import spock.lang.Unroll
 /**
  * EvalService unit test
  */
-class EvalServiceImplSpec extends Specification {
+class EvalRequestServiceImplSpec extends Specification {
 
     def ruleExecutionEngine = Mock(RuleExecutionEngine)
     def kafkaService = Mock(KafkaService)
@@ -32,7 +31,7 @@ class EvalServiceImplSpec extends Specification {
     @Unroll
     def "test eval method - normal execution - userId: #userId, eventId: #eventId, traceId: #traceId"() {
         given: "prepare request parameters"
-        def request = new EvalDTO()
+        def request = new EvalRequest()
         request.userId = userId
         request.eventId = eventId
         request.traceId = traceId
@@ -68,7 +67,7 @@ class EvalServiceImplSpec extends Specification {
     @Unroll
     def "test eval method - kafka send failure should not affect main flow - errorMessage: #errorMessage"() {
         given: "prepare request parameters"
-        def request = new EvalDTO()
+        def request = new EvalRequest()
         request.userId = 123L
         request.eventId = 1001
         request.traceId = 999L
@@ -100,7 +99,7 @@ class EvalServiceImplSpec extends Specification {
     @Unroll
     def "test eval method - verify execution context construction - userId: #userId, eventId: #eventId, traceId: #traceId, argKey: #argKey, argValue: #argValue"() {
         given: "prepare request parameters"
-        def request = new EvalDTO()
+        def request = new EvalRequest()
         request.userId = userId
         request.eventId = eventId
         request.traceId = traceId
@@ -134,7 +133,7 @@ class EvalServiceImplSpec extends Specification {
     @Unroll
     def "test eval method - rule execution engine throws exception - eventId: #eventId, errorMessage: #errorMessage"() {
         given: "prepare request parameters"
-        def request = new EvalDTO()
+        def request = new EvalRequest()
         request.userId = 123L
         request.eventId = eventId
         request.traceId = 999L
@@ -158,7 +157,7 @@ class EvalServiceImplSpec extends Specification {
 
     def "test eval method - userId is null should not calculate userHash"() {
         given: "prepare request parameters with null userId"
-        def request = new EvalDTO()
+        def request = new EvalRequest()
         request.userId = null
         request.eventId = 1001L
         request.traceId = 999L
@@ -189,7 +188,7 @@ class EvalServiceImplSpec extends Specification {
 
     def "test eval method - userId is not null should calculate userHash and userHashInt"() {
         given: "prepare request parameters with userId"
-        def request = new EvalDTO()
+        def request = new EvalRequest()
         def userId = 12345L
         request.userId = userId
         request.eventId = 1001L
@@ -227,7 +226,7 @@ class EvalServiceImplSpec extends Specification {
     @Unroll
     def "test eval method - verify userHash calculation for different userIds - userId: #userId"() {
         given: "prepare request parameters"
-        def request = new EvalDTO()
+        def request = new EvalRequest()
         request.userId = userId
         request.eventId = 1001L
         request.traceId = 999L
@@ -256,7 +255,7 @@ class EvalServiceImplSpec extends Specification {
 
     def "test eval method - verify userHashInt is in range 1-100"() {
         given: "prepare request parameters"
-        def request = new EvalDTO()
+        def request = new EvalRequest()
         request.userId = 12345L
         request.eventId = 1001L
         request.traceId = 999L
@@ -288,7 +287,7 @@ class EvalServiceImplSpec extends Specification {
 
     def "test eval method - verify same userId produces same userHash"() {
         given: "prepare request parameters"
-        def request = new EvalDTO()
+        def request = new EvalRequest()
         def userId = 12345L
         request.userId = userId
         request.eventId = 1001L
@@ -323,7 +322,7 @@ class EvalServiceImplSpec extends Specification {
 
     def "test eval method - verify arguments are correctly passed to context"() {
         given: "prepare request parameters with multiple arguments"
-        def request = new EvalDTO()
+        def request = new EvalRequest()
         request.userId = 123L
         request.eventId = 1001L
         request.traceId = 999L
