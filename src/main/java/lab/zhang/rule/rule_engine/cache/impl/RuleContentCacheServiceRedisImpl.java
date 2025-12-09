@@ -1,7 +1,7 @@
 package lab.zhang.rule.rule_engine.cache.impl;
 
 import lab.zhang.rule.rule_engine.cache.RuleContentCacheService;
-import lab.zhang.rule.rule_engine.constant.RedisConst;
+import lab.zhang.rule.rule_engine.constant.CacheConst;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -30,7 +30,7 @@ import java.util.concurrent.TimeUnit;
  */
 @Slf4j
 @Service
-public class RuleContentCacheServiceImpl implements RuleContentCacheService {
+public class RuleContentCacheServiceRedisImpl implements RuleContentCacheService {
 
     @Qualifier("redisTemplateStringString")
     @Autowired
@@ -92,9 +92,9 @@ public class RuleContentCacheServiceImpl implements RuleContentCacheService {
     public void put(@NotNull Long ruleId, @NotEmpty String content) {
         String cacheKey = buildCacheKey(ruleId);
         try {
-            redisTemplate.opsForValue().set(cacheKey, content, RedisConst.RULE_CONTENT_TTL, TimeUnit.SECONDS);
+            redisTemplate.opsForValue().set(cacheKey, content, CacheConst.RULE_CONTENT_TTL, TimeUnit.SECONDS);
             if (log.isDebugEnabled()) {
-                log.debug("[cache_exp] cache put: key={}, content length={}, expireSeconds={}", cacheKey, content.length(), RedisConst.RULE_CONTENT_TTL);
+                log.debug("[cache_exp] cache put: key={}, content length={}, expireSeconds={}", cacheKey, content.length(), CacheConst.RULE_CONTENT_TTL);
             }
         } catch (Exception e) {
             log.error("[cache_exp] error putting cache value for key: {}, content length: {}", cacheKey, content.length(), e);
@@ -116,13 +116,13 @@ public class RuleContentCacheServiceImpl implements RuleContentCacheService {
                     }
                     String cacheKey = buildCacheKey(ruleId);
                     connection.set(cacheKey.getBytes(), content.getBytes());
-                    connection.expire(cacheKey.getBytes(), RedisConst.RULE_CONTENT_TTL);
+                    connection.expire(cacheKey.getBytes(), CacheConst.RULE_CONTENT_TTL);
                 }
                 return null;
             });
 
             if (log.isDebugEnabled()) {
-                log.debug("[cache_exp] batch cache put: {} entries, expireSeconds={}", ruleContentMap.size(), RedisConst.RULE_CONTENT_TTL);
+                log.debug("[cache_exp] batch cache put: {} entries, expireSeconds={}", ruleContentMap.size(), CacheConst.RULE_CONTENT_TTL);
             }
         } catch (Exception e) {
             log.error("[cache_exp] error putting batch cache values for {} entries", ruleContentMap.size(), e);
@@ -138,6 +138,6 @@ public class RuleContentCacheServiceImpl implements RuleContentCacheService {
      * @return cache key
      */
     private String buildCacheKey(Long ruleId) {
-        return RedisConst.RULE_CONTENT_KEY + ruleId;
+        return CacheConst.RULE_CONTENT_KEY + ruleId;
     }
 }

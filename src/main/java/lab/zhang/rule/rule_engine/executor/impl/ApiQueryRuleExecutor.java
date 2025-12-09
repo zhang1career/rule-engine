@@ -17,7 +17,12 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestTemplate;
 
+import javax.validation.constraints.NotBlank;
+import java.util.HashSet;
 import java.util.Map;
+import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * API query rule executor
@@ -115,6 +120,61 @@ public class ApiQueryRuleExecutor implements RuleExecutor {
                 throw e;
             }
             throw new IllegalArgumentException("Invalid API query content: " + e.getMessage(), e);
+        }
+    }
+
+    @Override
+    public Set<String> extractArgs(@NotBlank String content) {
+        Set<String> args = new HashSet<>();
+
+        try {
+            // Parse JSON to extract string values that may contain placeholders
+            Map<String, Object> apiConfig = objectMapper.readValue(content, Map.class);
+
+            // Extract placeholders from URL
+            String url = (String) apiConfig.get("url");
+            if (url != null) {
+                extractPlaceholders(url, args);
+            }
+
+            // Extract placeholders from headers
+            Map<String, String> headers = (Map<String, String>) apiConfig.get("headers");
+            if (headers != null) {
+                headers.values().forEach(headerValue -> extractPlaceholders(headerValue, args));
+            }
+
+            // Extract placeholders from body (if it's a string)
+            Object body = apiConfig.get("body");
+            if (body instanceof String) {
+                extractPlaceholders((String) body, args);
+            }
+
+        } catch (Exception e) {
+            // If JSON parsing fails, try to extract placeholders from raw content
+            extractPlaceholders(content, args);
+        }
+
+        return args;
+    }
+
+    /**
+     * Extract parameter placeholders from a string
+     */
+    private void extractPlaceholders(String text, Set<String> args) {
+        if (text == null) return;
+
+        // Pattern for ${param} format
+        Pattern dollarBracePattern = Pattern.compile("\\$\\{([^}]+)\\}");
+        Matcher dollarBraceMatcher = dollarBracePattern.matcher(text);
+        while (dollarBraceMatcher.find()) {
+            args.add(dollarBraceMatcher.group(1));
+        }
+
+        // Pattern for :param format
+        Pattern colonPattern = Pattern.compile(":([a-zA-Z_][a-zA-Z0-9_]*)");
+        Matcher colonMatcher = colonPattern.matcher(text);
+        while (colonMatcher.find()) {
+            args.add(colonMatcher.group(1));
         }
     }
 }

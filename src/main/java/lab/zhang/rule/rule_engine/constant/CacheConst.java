@@ -1,6 +1,6 @@
 package lab.zhang.rule.rule_engine.constant;
 
-public class RedisConst {
+public class CacheConst {
     /**
      * selected rules in A/B testing
      */
@@ -12,4 +12,10 @@ public class RedisConst {
      */
     public static final String RULE_CONTENT_KEY = "rule:exp:";
     public static final long RULE_CONTENT_TTL = 10 * 60;
+
+
+    /**
+     * rule evaluation cache
+     */
+    public static final String RULE_EVAL_KEY = "rule:eval:";
 }

@@ -3,6 +3,7 @@ package lab.zhang.rule.rule_engine.service.impl;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import lab.zhang.rule.rule_engine.config.RuleStatusConfig;
+import lab.zhang.rule.rule_engine.constant.CommonConst;
 import lab.zhang.rule.rule_engine.entity.EventEntity;
 import lab.zhang.rule.rule_engine.entity.ExecutionArrangementEntity;
 import lab.zhang.rule.rule_engine.entity.RuleEntity;
@@ -89,8 +90,8 @@ public class EventServiceImpl implements EventService {
 
         Event eventToCreate = Event.builder()
                 .id(event.getId())
-                .name(event.getName() != null ? event.getName().trim() : "")
-                .description(event.getDescription() != null ? event.getDescription().trim() : "")
+                .name(event.getName() != null ? event.getName().trim() : CommonConst.EMPTY_STRING)
+                .description(event.getDescription() != null ? event.getDescription().trim() : CommonConst.EMPTY_STRING)
                 .build();
         EventEntity eventEntity = eventStructMapper.modelToEntity(eventToCreate);
         eventEntity.setTimeOnCreate();

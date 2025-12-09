@@ -197,7 +197,7 @@ class RuleServiceImplSpec extends Specification {
                 .id(null)
                 .name("Test Rule")
                 .contentType(contentType)
-                .content("test content")
+                .content("return 'test content'")
                 .description("test description")
                 .build()
 
@@ -301,7 +301,7 @@ class RuleServiceImplSpec extends Specification {
                     .name("Old Name")
                     .contentType(ContentTypeEnum.EXPRESSION)
                     .ruleStatus(fromStatus)
-                    .content("old content")
+                    .content("return 'old content'")
                     .build()
         }
         // For TEST/GRAY/ONLINE status, always mock event association check (even for same status)
@@ -493,7 +493,7 @@ class RuleServiceImplSpec extends Specification {
                     .contentType(ContentTypeEnum.EXPRESSION)
                     .ruleStatus(RuleStatusEnum.TEST)
                     .description("Old Description")
-                    .content("old content")
+                    .content("return 'old content'")
                     .build()
         }
         // Query for event associations with group_id=0 should return one record for TEST status
@@ -522,7 +522,7 @@ class RuleServiceImplSpec extends Specification {
                 .id(ruleId)
                 .name("Updated Rule")
                 .contentType(ContentTypeEnum.EXPRESSION)
-                .content("updated content")
+                .content("return 'updated content'")
                 .ruleStatus(RuleStatusEnum.TEST)
                 .build()
 
@@ -555,7 +555,7 @@ class RuleServiceImplSpec extends Specification {
                 .id(ruleId)
                 .name("Updated Rule")
                 .contentType(ContentTypeEnum.EXPRESSION)
-                .content("updated content")
+                .content("return 'updated content'")
                 .ruleStatus(RuleStatusEnum.GRAY)
                 .build()
 
@@ -588,7 +588,7 @@ class RuleServiceImplSpec extends Specification {
                 .id(ruleId)
                 .name("Updated Rule")
                 .contentType(ContentTypeEnum.EXPRESSION)
-                .content("updated content")
+                .content("return 'updated content'")
                 .ruleStatus(RuleStatusEnum.ONLINE)
                 .build()
 
@@ -787,117 +787,6 @@ class RuleServiceImplSpec extends Specification {
         1 * ruleContentMapper.updateById(_) >> 1
     }
 
-    // ========== doUpdateRule() tests ==========
-
-    @Unroll
-    def "test doUpdateRule - should update rule content when both contentType and content provided - contentType: #contentType"() {
-        given: "existing and new rules"
-        def existingRule = Rule.builder()
-                .id(1L)
-                .name("Old Rule")
-                .contentType(ContentTypeEnum.EXPRESSION)
-                .content("old content")
-                .ruleStatus(RuleStatusEnum.TEST)
-                .build()
-
-        def newRule = Rule.builder()
-                .id(1L)
-                .name("New Rule")
-                .contentType(contentType)
-                .content(validContent)
-                .ruleStatus(RuleStatusEnum.TEST)
-                .build()
-
-        when: "do update rule"
-        ruleService.doUpdateRule(existingRule, newRule)
-
-        then: "should update both entity and content"
-        1 * ruleStructMapper.modelToEntity(_) >> { Rule r ->
-            def entity = new RuleEntity()
-            entity.id = r.id
-            entity.name = r.name
-            entity.contentType = r.contentType != null ? r.contentType.getId() : null
-            entity.ruleStatus = r.ruleStatus != null ? r.ruleStatus.getId() : null
-            return entity
-        }
-        1 * ruleMapper.updateById(_) >> 1
-        1 * ruleStructMapper.modelToContentEntity(_) >> { Rule r ->
-            def content = new RuleContentEntity()
-            content.id = r.id
-            content.content = r.content
-            return content
-        }
-        1 * ruleContentMapper.updateById(_) >> 1
-
-        where:
-        contentType              | validContent
-        ContentTypeEnum.EXPRESSION | "1 + 1"
-        ContentTypeEnum.SCRIPT     | "return 'new content'"
-        ContentTypeEnum.API_QUERY  | '{"url": "http://example.com"}'
-        ContentTypeEnum.SQL_QUERY  | "SELECT 1"
-    }
-
-    def "test doUpdateRule - should skip content update when content is null"() {
-        given: "existing and new rules"
-        def existingRule = Rule.builder()
-                .id(1L)
-                .name("Old Rule")
-                .contentType(ContentTypeEnum.EXPRESSION)
-                .content("old content")
-                .ruleStatus(RuleStatusEnum.TEST)
-                .build()
-
-        def newRule = Rule.builder()
-                .id(1L)
-                .name("New Rule")
-                .contentType(ContentTypeEnum.EXPRESSION)
-                .content(null)
-                .ruleStatus(RuleStatusEnum.TEST)
-                .build()
-
-        when: "do update rule without content"
-        ruleService.doUpdateRule(existingRule, newRule)
-
-        then: "should update entity but not content"
-        1 * ruleStructMapper.modelToEntity(_) >> { Rule r ->
-            def entity = new RuleEntity()
-            entity.id = r.id
-            entity.name = r.name
-            entity.contentType = r.contentType != null ? r.contentType.getId() : null
-            entity.ruleStatus = r.ruleStatus != null ? r.ruleStatus.getId() : null
-            return entity
-        }
-        1 * ruleMapper.updateById(_) >> 1
-        0 * ruleContentMapper.updateById(_)
-    }
-
-    def "test doUpdateRule - should throw exception when executor not found"() {
-        given: "existing and new rules with unsupported contentType"
-        def existingRule = Rule.builder()
-                .id(1L)
-                .name("Old Rule")
-                .contentType(ContentTypeEnum.EXPRESSION)
-                .content("old content")
-                .ruleStatus(RuleStatusEnum.TEST)
-                .build()
-
-        def newRule = Rule.builder()
-                .id(1L)
-                .name("New Rule")
-                .contentType(ContentTypeEnum.EXPRESSION)
-                .content("invalid content")
-                .ruleStatus(RuleStatusEnum.TEST)
-                .build()
-
-        and: "no executor available"
-        ruleService.ruleExecutors = []
-
-        when: "do update rule"
-        ruleService.doUpdateRule(existingRule, newRule)
-
-        then: "should throw IllegalArgumentException"
-        thrown(IllegalArgumentException)
-    }
 
     // ========== deleteRule() tests ==========
 

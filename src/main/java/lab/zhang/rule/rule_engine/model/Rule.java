@@ -1,10 +1,14 @@
 package lab.zhang.rule.rule_engine.model;
 
-import lab.zhang.rule.rule_engine.enums.RuleStatusEnum;
 import lab.zhang.rule.rule_engine.enums.ContentTypeEnum;
-import lombok.*;
+import lab.zhang.rule.rule_engine.enums.RuleStatusEnum;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Data;
+import lombok.NoArgsConstructor;
 
 import java.io.Serializable;
+import java.util.List;
 import java.util.Objects;
 
 /**
@@ -20,7 +24,7 @@ import java.util.Objects;
  *
  * <p>This class follows the builder pattern for object creation.
  * Use {@link RuleBuilder} to create instances.
- * 
+ *
  * @author Rongjin Zhang
  * @see ContentTypeEnum
  * @see RuleStatusEnum
@@ -30,15 +34,15 @@ import java.util.Objects;
 @NoArgsConstructor
 @AllArgsConstructor
 public class Rule extends BaseModel implements Serializable {
-    
+
     private static final long serialVersionUID = 1L;
-    
+
     /**
      * Rule ID (unique identifier).
      * Default value is 0, not required for rule calculation.
      */
     private Long id;
-    
+
     /**
      * Rule name for identification and display purposes.
      */
@@ -51,10 +55,17 @@ public class Rule extends BaseModel implements Serializable {
 
     /**
      * Rule content type determines how the rule content is executed.
+     *
      * @see ContentTypeEnum
      */
     private ContentTypeEnum contentType;
-    
+
+    /**
+     * List of argument names that the rule content depends on.
+     * sorted in alphabetical order.
+     */
+    private List<String> contentArgList;
+
     /**
      * Rule content in a format specific to the rule content type.
      * <ul>
@@ -65,14 +76,15 @@ public class Rule extends BaseModel implements Serializable {
      * </ul>
      */
     private String content;
-    
+
     /**
      * Rule status determines when and where the rule can be executed.
+     *
      * @see RuleStatusEnum
      */
     private RuleStatusEnum ruleStatus;
 
-    
+
     @Override
     public boolean equals(Object o) {
         if (this == o) return true;
@@ -80,12 +92,12 @@ public class Rule extends BaseModel implements Serializable {
         Rule rule = (Rule) o;
         return Objects.equals(id, rule.id);
     }
-    
+
     @Override
     public int hashCode() {
         return Objects.hash(id);
     }
-    
+
     @Override
     public String toString() {
         return "Rule{" +

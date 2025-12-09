@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import lab.zhang.rule.rule_engine.cache.RuleContentCacheService;
 import lab.zhang.rule.rule_engine.cache.RuleSelectionCacheService;
+import lab.zhang.rule.rule_engine.constant.CommonConst;
 import lab.zhang.rule.rule_engine.engine.ExecutionItem;
 import lab.zhang.rule.rule_engine.entity.ExecutionArrangementEntity;
 import lab.zhang.rule.rule_engine.entity.RuleContentEntity;
@@ -31,13 +32,13 @@ import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import javax.validation.constraints.NotBlank;
 import javax.validation.constraints.NotEmpty;
 import javax.validation.constraints.NotNull;
 import java.util.*;
 import java.util.stream.Collectors;
 
 import static lab.zhang.rule.rule_engine.constant.EvalArgumentConst.ARG_USER_HASH_INT;
-import static lab.zhang.rule.rule_engine.model.RuleGroup.DEFAULT_RULE_GROUP_ID;
 
 /**
  * Rule service implementation
@@ -115,7 +116,7 @@ public class RuleServiceImpl implements RuleService {
         if (contentEntity != null && contentEntity.getContent() != null) {
             rule.setContent(contentEntity.getContent());
         } else {
-            rule.setContent("");
+            rule.setContent(CommonConst.EMPTY_STRING);
         }
 
         return rule;
@@ -123,10 +124,24 @@ public class RuleServiceImpl implements RuleService {
 
 
     @Override
-    public void doCreateRule(Rule rule, long currentTimeSeconds) {
+    @Transactional
+    public void createRule(Rule rule) {
+        createRuleAt(rule, 0);
+    }
+
+    @Override
+    @Transactional
+    public void createRuleAt(Rule rule, long currentTimeSeconds) {
         // Set default status to OFFLINE if not provided
         if (rule.getRuleStatus() == null) {
             rule.setRuleStatus(RuleStatusEnum.OFFLINE);
+        }
+        // Set content_args based on the rule content
+        if (rule.getContent() != null) {
+            Set<String> contentArgSet = calculateContentArgs(rule.getContentType(), rule.getContent());
+            rule.setContentArgList(contentArgSet.stream().sorted().collect(Collectors.toList()));
+        } else {
+            rule.setContentArgList(Collections.emptyList());
         }
 
         RuleEntity ruleEntity = ruleStructMapper.modelToEntity(rule);
@@ -154,14 +169,11 @@ public class RuleServiceImpl implements RuleService {
         contentEntity.setId(ruleId);
         contentEntity.setTimeOnCreate();
         ruleContentMapper.insert(contentEntity);
+        // Update content_args based on the rule content
+        ruleMapper.updateById(ruleEntity);
 
         log.info("Rule created: ruleId={}, ruleName={}, status=OFFLINE",
                 ruleEntity.getId(), ruleEntity.getName());
-    }
-
-    @Override
-    public void createRule(Rule rule) {
-        doCreateRule(rule, 0);
     }
 
     @Override
@@ -225,24 +237,9 @@ public class RuleServiceImpl implements RuleService {
         // Use doUpdateRule to perform the actual database update
         // Pass original user-provided values to determine if validation is needed
         // If originalContentType is null, pass a special marker to indicate "called from updateRule but user didn't provide"
-        doUpdateRule(existingRule, newRule, originalContentType, originalContent, true);
+        doUpdateRule(existingRule, newRule, originalContentType, originalContent);
     }
 
-    /**
-     * Update rule in database without handling status change logic.
-     * This is a pure database update method that does not trigger status change handlers.
-     *
-     * @param existingRule the existing rule
-     * @param newRule      the new rule data
-     * @throws IllegalArgumentException if rule not found
-     */
-    @Override
-    @Transactional
-    public void doUpdateRule(Rule existingRule, Rule newRule) {
-        // Call the overloaded method with null original values and fromUpdateRule=false
-        // This indicates direct call (not from updateRule), use original logic
-        doUpdateRule(existingRule, newRule, null, null, false);
-    }
 
     /**
      * Internal method to update rule with original user-provided values.
@@ -252,35 +249,20 @@ public class RuleServiceImpl implements RuleService {
      * @param newRule             the new rule data (may have been modified by copying from existingRule)
      * @param originalContentType the original contentType provided by user (null if not provided)
      * @param originalContent     the original content provided by user (null if not provided)
-     * @param fromUpdateRule      true if called from updateRule, false if called directly
      */
-    private void doUpdateRule(Rule existingRule, Rule newRule, ContentTypeEnum originalContentType, String originalContent, boolean fromUpdateRule) {
-        // Validate contentType and content before updating
-        // Only update contentType and content if both are provided and both are valid
-        boolean shouldUpdateContent = false;
-
-        // Determine if user provided contentType and content
-        boolean userProvidedContentType;
-        boolean userProvidedContent;
-
-        if (fromUpdateRule) {
-            // Called from updateRule
-            // User provided contentType if originalContentType is not null
-            userProvidedContentType = originalContentType != null;
-            // User provided content if originalContent is not null and not empty
-            userProvidedContent = originalContent != null && !originalContent.trim().isEmpty();
-        } else {
-            // Called directly (not from updateRule), use original logic:
-            // If both contentType and content are provided, validate both
-            userProvidedContentType = newRule.getContentType() != null;
-            userProvidedContent = newRule.getContent() != null && !newRule.getContent().trim().isEmpty();
+    private void doUpdateRule(Rule existingRule, Rule newRule, ContentTypeEnum originalContentType, String originalContent) {
+        // Use the original values passed from updateRule method
+        boolean userProvidedContentType = originalContentType != null;
+        boolean userProvidedContent = originalContent != null && !originalContent.trim().isEmpty();
+        if (userProvidedContentType && !userProvidedContent) {
+            throw new IllegalArgumentException("Content must be provided when contentType is updated");
         }
 
+        boolean shouldUpdateContent = false;
         // If both contentType and content are provided by user, validate both
-        if (userProvidedContentType && userProvidedContent) {
+        if (userProvidedContentType) {
             // Validate contentType
             ContentTypeEnum validatedContentType = ContentTypeEnum.fromId(newRule.getContentType().getId());
-            // Find the corresponding RuleExecutor based on contentType
             RuleExecutor executor = findRuleExecutor(validatedContentType);
             if (executor == null) {
                 throw new IllegalArgumentException("No executor found for content type: " + validatedContentType);
@@ -289,6 +271,12 @@ public class RuleServiceImpl implements RuleService {
             executor.validate(newRule.getContent());
             // Both are valid, can update both
             shouldUpdateContent = true;
+        }
+
+        // Set content_args based on new rule content
+        if (shouldUpdateContent) {
+            Set<String> contentArgSet = calculateContentArgs(newRule.getContentType(), newRule.getContent());
+            newRule.setContentArgList(contentArgSet.stream().sorted().collect(Collectors.toList()));
         }
 
         // Build entity for update
@@ -852,11 +840,34 @@ public class RuleServiceImpl implements RuleService {
             if (rule == null) {
                 continue;
             }
-            String content = contentMap.getOrDefault(ruleEntity.getId(), "");
+            String content = contentMap.getOrDefault(ruleEntity.getId(), CommonConst.EMPTY_STRING);
             rule.setContent(content);
             ruleMap.put(rule.getId(), rule);
         }
         return ruleMap;
     }
+
+    /**
+     * Calculate content_args string based on content type and content.
+     * This method extracts parameter names from rule content and returns them as comma-separated string.
+     *
+     * @param contentType the content type enum
+     * @param content     the rule content to analyze
+     * @return comma-separated string of parameter names, or empty string if none found
+     */
+    private Set<String> calculateContentArgs(@NotNull ContentTypeEnum contentType, @NotBlank String content) {
+        RuleExecutor executor = findRuleExecutor(contentType);
+        if (executor == null) {
+            throw new IllegalStateException("No executor found for content type: " + contentType);
+        }
+
+        Set<String> argSet = executor.extractArgs(content);
+        if (argSet == null || argSet.isEmpty()) {
+            return Collections.emptySet();
+        }
+
+        return argSet;
+    }
+
 }
 

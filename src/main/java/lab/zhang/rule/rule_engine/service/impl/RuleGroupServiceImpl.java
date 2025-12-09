@@ -342,7 +342,7 @@ public class RuleGroupServiceImpl implements RuleGroupService {
                 .build();
 
         // Create rule in database (status will be set to OFFLINE by createRule)
-        ruleService.doCreateRule(newRule, currentTime);
+        ruleService.createRuleAt(newRule, currentTime);
         Long newRuleId = newRule.getId();
 
         // Create record in table x for new rule (same group and event, ratio = 0)

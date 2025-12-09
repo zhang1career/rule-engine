@@ -742,17 +742,17 @@ class RuleExecutionEngineSpec extends Specification {
                 return result1
             } else {
                 // Verify that lastResult from rule1 is available
-                assert ctx.getVariable("lastResult") == result1
-                assert ctx.getVariable("rule:1:result") == result1
+                assert ctx.getArgument("lastResult") == result1
+                assert ctx.getArgument("rule:1:result") == result1
                 return result2
             }
         }
         result == result2
 
         and: "context should contain all rule results"
-        context.getVariable("lastResult") == result2
-        context.getVariable("rule:1:result") == result1
-        context.getVariable("rule:2:result") == result2
+        context.getArgument("lastResult") == result2
+        context.getArgument("rule:1:result") == result1
+        context.getArgument("rule:2:result") == result2
     }
 
     def "test execute - should return null TypedValue when no rule executed"() {

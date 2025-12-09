@@ -3,6 +3,26 @@ server:
   servlet:
     context-path: /
 
+# Rule engine configuration
+rule:
+  engine:
+    # Environment type: DEV (development), TEST (test), GRAY (gray) or PRODUCTION (production)
+    environment: TEST
+    # Kafka configuration
+    kafka:
+      topic: rule.eval.result
+  content:
+    cache:
+      # Enable/disable rule content caching
+      enabled: ${RULE_CONTENT_CACHE_ENABLED:true}
+  eval:
+    cache:
+      capacity: ${RULE_EVAL_CACHE_CAPACITY:10000}
+      ttl: ${RULE_EVAL_CACHE_TTL:60}
+      key:
+        length: ${RULE_EVAL_CACHE_KEY_LENGTH:32}
+
+# Spring Boot configuration
 spring:
   application:
     name: rule-engine
@@ -46,35 +66,18 @@ mybatis-plus:
       logic-not-delete-value: 0
   mapper-locations: classpath*:/mapper/**/*.xml
 
-# Rule engine configuration
-rule:
-  engine:
-    # Environment type: DEV (development environment), TEST (test environment), GRAY (gray environment) or PRODUCTION (production environment)
-    environment: TEST
-    # RabbitMQ configuration
-    rabbitmq:
-      exchange: rule.engine.exchange
-      routing-key: rule.eval.result
-    # Kafka configuration
-    kafka:
-      topic: rule.eval.result
-  content:
-    cache:
-      # Enable/disable rule content caching
-      enabled: ${RULE_CONTENT_CACHE_ENABLED:true}
-
 # Logging configuration
 logging:
   level:
     root: INFO
-    lab.zhang.rule: DEBUG
+    lab.zhang.rule: INFO
     # Database operation logs
     com.baomidou.mybatisplus: INFO
     org.springframework.jdbc: INFO
     # Redis operation logs
     org.springframework.data.redis: INFO
   pattern:
-    console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
+    console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{0} - %msg%n"
   # File output configuration
   file:
     name: logs/rule-engine.log

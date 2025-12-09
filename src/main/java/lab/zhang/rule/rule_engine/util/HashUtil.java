@@ -1,9 +1,14 @@
 package lab.zhang.rule.rule_engine.util;
 
+import lab.zhang.rule.rule_engine.constant.CommonConst;
+import org.bouncycastle.crypto.digests.Blake3Digest;
+
+import java.nio.charset.StandardCharsets;
+
 /**
  * Hash utility class
- * Provides murmur-hash algorithm for user ID hashing
- * 
+ * Provides murmur-hash and Blake3 algorithms for various hashing needs
+ *
  * @author Rongjin Zhang
  */
 public class HashUtil {
@@ -121,6 +126,37 @@ public class HashUtil {
             int result = (Math.abs(hashCode) % range) + min;
             return result;
         }
+    }
+
+    /**
+     * Blake3 hash function
+     *
+     * @param data the data to hash (as string)
+     * @param hashLength the desired hash length in bytes (1-32)
+     * @return hash value as hex string
+     * @throws IllegalArgumentException if hashLength is invalid
+     */
+    public static String blake3Hash(String data, int hashLength) {
+        if (data == null) {
+            data = CommonConst.EMPTY_STRING;
+        }
+        if (hashLength < 1 || hashLength > 128) {
+            throw new IllegalArgumentException("Hash length must be between 1 and 128 bytes");
+        }
+
+        Blake3Digest digest = new Blake3Digest(hashLength * 8); // Convert bytes to bits
+        byte[] inputBytes = data.getBytes(StandardCharsets.UTF_8);
+        digest.update(inputBytes, 0, inputBytes.length);
+
+        byte[] hashBytes = new byte[hashLength];
+        digest.doFinal(hashBytes, 0);
+
+        // Convert to hex string
+        StringBuilder sb = new StringBuilder();
+        for (byte b : hashBytes) {
+            sb.append(String.format("%02x", b & 0xff));
+        }
+        return sb.toString();
     }
 }
 

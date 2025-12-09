@@ -41,7 +41,13 @@ public class RuleEntity extends BaseEntity {
      */
     @TableField("content_type")
     private Integer contentType;
-    
+
+    /**
+     * Rule content arguments (comma-separated parameter names)
+     */
+    @TableField("content_args")
+    private String contentArgs;
+
     /**
      * Rule status ID (enumeration ID, stored in database)
      */

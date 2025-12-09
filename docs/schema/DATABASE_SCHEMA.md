@@ -23,9 +23,10 @@ Stores basic rule information (excluding ruleContent) and rule status.
 CREATE TABLE `rule` (
   `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT 'Rule ID, primary key',
   `name` VARCHAR(255) NOT NULL DEFAULT '' COMMENT 'Rule name',
+  `description` VARCHAR(500) NOT NULL DEFAULT '' COMMENT 'Rule description',
   `content_type` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Rule content type ID: 0=EXPRESSION, 1=API_QUERY, 2=SQL_QUERY, 3=SCRIPT',
+  `content_args` VARCHAR(1000) DEFAULT '' COMMENT 'Rule content arguments, comma-separated list of parameter names',
   `rule_status` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Rule status ID: 0=OFFLINE, 1=TEST, 2=GRAY, 3=ONLINE',
-  `description` VARCHAR(500) DEFAULT '' COMMENT 'Rule description',
   `ct` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Create time, UNIX timestamp in seconds',
   `ut` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Update time, UNIX timestamp in seconds',
   PRIMARY KEY (`id`),

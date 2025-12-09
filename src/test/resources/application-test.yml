@@ -1,11 +1,17 @@
-# Test environment configuration
-# Note: Set to GRAY to allow AB_TEST rules to execute in integration tests
+# Rule engine configuration
 rule:
   engine:
     environment: GRAY
   content:
     cache:
-      enabled: true
+      # Enable/disable rule content caching
+      enabled: ${RULE_CONTENT_CACHE_ENABLED:true}
+  eval:
+    cache:
+      capacity: ${RULE_EVAL_CACHE_CAPACITY:10000}
+      ttl: ${RULE_EVAL_CACHE_TTL:60}
+      key:
+        length: ${RULE_EVAL_CACHE_KEY_LENGTH:32}
 
 spring:
   datasource:

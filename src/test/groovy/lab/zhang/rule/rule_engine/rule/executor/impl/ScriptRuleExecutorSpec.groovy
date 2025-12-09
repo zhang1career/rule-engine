@@ -37,7 +37,7 @@ class ScriptRuleExecutorSpec extends Specification {
         context.arguments = arguments ?: [:]
         if (contextVariables != null) {
             contextVariables.each { key, value ->
-                context.setVariable(key, value)
+                context.putArgument(key, value)
             }
         }
 
@@ -85,5 +85,31 @@ class ScriptRuleExecutorSpec extends Specification {
             "undefined syntax error",
             "return invalid expression"
         ]
+    }
+
+    @Unroll
+    def "test extractArgs - should extract variable names from Groovy script - scriptContent: #scriptContent, expectedArgs: #expectedArgs"() {
+        when: "extract arguments from script"
+        def result = executor.extractArgs(scriptContent)
+
+        then: "should return correct argument set"
+        result == expectedArgs as Set
+
+        where:
+        scriptContent                               | expectedArgs
+        "return amount > 1000"                      | ["amount"]
+        "return amount > 1000 && age >= 18"         | ["amount", "age"]
+        "return userId == 123L && eventId == 1001"  | ["userId", "eventId"]
+        "return lastResult == true"                 | ["lastResult"]
+        """
+        def discount = 0.0
+        if (amount > 5000) {
+            discount = 0.1
+        }
+        return discount
+        """                                         | ["amount"]
+        "return context.userId == 123L"             | ["context"]
+        "return true"                               | []
+        ""                                          | []
     }
 }

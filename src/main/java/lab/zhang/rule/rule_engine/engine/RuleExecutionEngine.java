@@ -1,6 +1,8 @@
 package lab.zhang.rule.rule_engine.engine;
 
+import lab.zhang.rule.rule_engine.cache.EvalCacheService;
 import lab.zhang.rule.rule_engine.common.TypedValue;
+import lab.zhang.rule.rule_engine.constant.CommonConst;
 import lab.zhang.rule.rule_engine.enums.ContentTypeEnum;
 import lab.zhang.rule.rule_engine.enums.ValueTypeEnum;
 import lab.zhang.rule.rule_engine.executor.RuleExecutor;
@@ -14,9 +16,7 @@ import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
 import javax.annotation.PostConstruct;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 /**
  * Rule execution engine
@@ -35,6 +35,9 @@ public class RuleExecutionEngine {
     @Autowired
     @Lazy
     private RuleGroupService ruleGroupService;
+
+    @Autowired
+    private EvalCacheService evalCacheService;
 
     /**
      * Rule executor mapping (RuleTypeEnum -> RuleExecutor)
@@ -96,8 +99,8 @@ public class RuleExecutionEngine {
                 // Execute rule
                 lastResult = executeRule(ruleToExecute, context);
                 // Store rule execution result in context for subsequent rules
-                context.setVariable("lastResult", lastResult);
-                context.setVariable("rule:" + ruleToExecute.getId() + ":result", lastResult);
+                context.putArgument("lastResult", lastResult);
+                context.putArgument("rule:" + ruleToExecute.getId() + ":result", lastResult);
                 if (log.isDebugEnabled()) {
                     log.debug("Rule executed: ruleId={}, result={}", ruleToExecute.getId(), lastResult);
                 }
@@ -140,7 +143,61 @@ public class RuleExecutionEngine {
             throw new RuntimeException("No executor found for rule type: " + rule.getContentType());
         }
 
-        return executor.execute(rule, context);
+        // Try to get result from cache first
+        if (rule.getContentArgList() != null && !rule.getContentArgList().isEmpty()) {
+            List<String> argValues = extractArgValues(rule, context);
+            TypedValue cachedResult = evalCacheService.get(rule, argValues);
+            if (cachedResult != null) {
+                if (log.isDebugEnabled()) {
+                    log.debug("Cache hit for rule {} with args {}", rule.getId(), argValues);
+                }
+                return cachedResult;
+            }
+        }
+
+        // Execute rule
+        TypedValue result = executor.execute(rule, context);
+
+        // Cache the result if we have arg values
+        if (rule.getContentArgList() != null && !rule.getContentArgList().isEmpty()) {
+            List<String> argValues = extractArgValues(rule, context);
+            evalCacheService.put(rule, argValues, result);
+            if (log.isDebugEnabled()) {
+                log.debug("Cached result for rule {} with args {}", rule.getId(), argValues);
+            }
+        }
+
+        return result;
+    }
+
+    /**
+     * Extract argument values from context based on rule's contentArgList
+     * null value is treated as empty string
+     *
+     * @param rule    the rule
+     * @param context execution context
+     * @return List of argument values in order
+     */
+    private List<String> extractArgValues(Rule rule, RuleExecutionContext context) {
+        if (rule.getContentArgList() == null || rule.getContentArgList().isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        List<String> argValueList = new ArrayList<>();
+        Map<String, TypedValue> variableMap = context.getVariables();
+
+        for (String argName : rule.getContentArgList()) {
+            TypedValue argTypedValue = variableMap.get(argName);
+            if (argTypedValue == null) {
+                throw new IllegalStateException("Argument value not found in context: " + argName);
+            }
+            argValueList.add(argTypedValue.getValue() != null
+                    ? argTypedValue.getValue().toString()
+                    : CommonConst.EMPTY_STRING);
+        }
+        // todo: consider including rule version in cache key if needed
+
+        return argValueList;
     }
 
     /**

@@ -60,7 +60,7 @@ class ExpressionRuleExecutorSpec extends Specification {
 
         def context = new RuleExecutionContext()
         if (contextVarName != null && contextVarValue != null) {
-            context.setVariable(contextVarName, contextVarValue)
+            context.putArgument(contextVarName, contextVarValue)
         }
 
         when: "execute rule"
@@ -123,5 +123,25 @@ class ExpressionRuleExecutorSpec extends Specification {
         "99.99"        | [:]                                                                    | ValueTypeEnum.DECIMAL
         "'hello'"      | [:]                                                                    | ValueTypeEnum.STRING
         "amount > 100" | ["amount": new TypedValue(200.0, ValueTypeEnum.DECIMAL)] | ValueTypeEnum.BOOLEAN
+    }
+
+    @Unroll
+    def "test extractArgs - should extract variable names from expression - expression: #expression, expectedArgs: #expectedArgs"() {
+        when: "extract arguments from expression"
+        def result = executor.extractArgs(expression)
+
+        then: "should return correct argument set"
+        result == expectedArgs as Set
+
+        where:
+        expression                          | expectedArgs
+        "amount > 1000"                     | ["amount"]
+        "amount > 1000 && age >= 18"        | ["amount", "age"]
+        "userId == 123L && eventId == 1001" | ["userId", "eventId"]
+        "lastResult == true"                | ["lastResult"]
+        "amount * 0.1"                      | ["amount"]
+        "true"                              | []
+        "100 > 50"                          | []
+        ""                                  | []
     }
 }

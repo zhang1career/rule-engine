@@ -9,8 +9,13 @@ import lab.zhang.rule.rule_engine.executor.RuleExecutor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.jdbc.core.JdbcTemplate;
 
+import javax.validation.constraints.NotBlank;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * SQL query rule executor
@@ -70,7 +75,32 @@ public class SqlQueryRuleExecutor implements RuleExecutor {
         // Note: More comprehensive SQL validation could be added here,
         // but for now we just check that it starts with SELECT
     }
-    
+
+    @Override
+    public Set<String> extractArgs(@NotBlank String content) {
+        Set<String> args = new HashSet<>();
+
+        // Pattern for named parameters: :param
+        Pattern namedParamPattern = Pattern.compile(":([a-zA-Z_][a-zA-Z0-9_]*)");
+        Matcher namedParamMatcher = namedParamPattern.matcher(content);
+        while (namedParamMatcher.find()) {
+            args.add(namedParamMatcher.group(1));
+        }
+
+        // Pattern for ${param} format (variable substitution)
+        Pattern dollarBracePattern = Pattern.compile("\\$\\{([^}]+)\\}");
+        Matcher dollarBraceMatcher = dollarBracePattern.matcher(content);
+        while (dollarBraceMatcher.find()) {
+            args.add(dollarBraceMatcher.group(1));
+        }
+
+        // Note: Position parameters (?) are not extracted as they don't have names
+        // Pattern questionMarkPattern = Pattern.compile("\\?");
+        // This would be complex to handle since we can't determine parameter names
+
+        return args;
+    }
+
     /**
      * Convert result to TypedValue
      */

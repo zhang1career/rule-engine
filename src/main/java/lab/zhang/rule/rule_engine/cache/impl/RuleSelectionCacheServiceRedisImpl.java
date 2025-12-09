@@ -1,7 +1,7 @@
 package lab.zhang.rule.rule_engine.cache.impl;
 
 import lab.zhang.rule.rule_engine.cache.RuleSelectionCacheService;
-import lab.zhang.rule.rule_engine.constant.RedisConst;
+import lab.zhang.rule.rule_engine.constant.CacheConst;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -27,7 +27,7 @@ import java.util.concurrent.TimeUnit;
  */
 @Slf4j
 @Service
-public class RuleSelectionCacheServiceImpl implements RuleSelectionCacheService {
+public class RuleSelectionCacheServiceRedisImpl implements RuleSelectionCacheService {
 
     @Qualifier("redisTemplateStringObject")
     @Autowired
@@ -68,9 +68,9 @@ public class RuleSelectionCacheServiceImpl implements RuleSelectionCacheService 
         String cacheKey = buildCacheKey(userId, eventId);
         try {
             redisTemplate.opsForHash().put(cacheKey, groupId, ruleId);
-            redisTemplate.expire(cacheKey, RedisConst.SELECTED_RULE_TTL, TimeUnit.SECONDS);
+            redisTemplate.expire(cacheKey, CacheConst.SELECTED_RULE_TTL, TimeUnit.SECONDS);
             if (log.isDebugEnabled()) {
-                log.debug("[cache_sel] cache put: key={}, groupId={}, ruleId={}, expireSeconds={}", cacheKey, groupId, ruleId, RedisConst.SELECTED_RULE_TTL);
+                log.debug("[cache_sel] cache put: key={}, groupId={}, ruleId={}, expireSeconds={}", cacheKey, groupId, ruleId, CacheConst.SELECTED_RULE_TTL);
             }
         } catch (Exception e) {
             log.error("[cache_sel] error putting cache value for key: {}, groupId: {}, ruleId: {}", cacheKey, groupId, ruleId, e);
@@ -87,7 +87,7 @@ public class RuleSelectionCacheServiceImpl implements RuleSelectionCacheService 
      * @return cache key
      */
     private String buildCacheKey(Long userId, Integer eventId) {
-        return RedisConst.SELECTED_RULE_KEY + userId + ":" + eventId;
+        return CacheConst.SELECTED_RULE_KEY + userId + ":" + eventId;
     }
 }
 

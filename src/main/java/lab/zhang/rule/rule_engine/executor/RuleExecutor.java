@@ -6,6 +6,7 @@ import lab.zhang.rule.rule_engine.model.Rule;
 import lab.zhang.rule.rule_engine.model.RuleExecutionContext;
 
 import javax.validation.constraints.NotBlank;
+import java.util.Set;
 
 /**
  * Rule executor interface
@@ -38,4 +39,14 @@ public interface RuleExecutor {
      * @throws IllegalArgumentException if content is invalid
      */
     void validate(@NotBlank String content);
+
+    /**
+     * Extract argument names from rule content
+     * This method analyzes the rule content and extracts all parameter names
+     * that the rule expects as input arguments.
+     *
+     * @param content rule content to analyze
+     * @return set of argument names used in the rule content
+     */
+    Set<String> extractArgs(@NotBlank String content);
 }

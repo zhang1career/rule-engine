@@ -14,6 +14,7 @@ import lab.zhang.rule.rule_engine.model.RuleExecutionContext;
 import lab.zhang.rule.rule_engine.pojo.dto.EvalDTO;
 import lab.zhang.rule.rule_engine.service.EvalService;
 import lab.zhang.rule.rule_engine.service.KafkaService;
+import lab.zhang.rule.rule_engine.cache.EvalCacheService;
 import lab.zhang.rule.rule_engine.util.HashUtil;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -39,6 +40,9 @@ public class EvalServiceImpl implements EvalService {
 
     @Autowired
     private KafkaService kafkaService;
+
+    @Autowired
+    private EvalCacheService evalCacheService;
 
 
     @Override
