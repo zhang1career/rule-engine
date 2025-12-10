@@ -40,9 +40,10 @@ The converter automatically:
    - `string` → `STRING`
    - `boolean` → `BOOLEAN`
    - `object` → `OBJECT`
+   - `array` → `ARRAY` (with element type information)
 7. **Generates default rules**: Creates default generation methods based on:
-   - Field names (e.g., `userId` → increment, `eventId` → fixed)
-   - Field types (e.g., INTEGER → random_int, DECIMAL → random_float)
+   - Field names (e.g., `userId` → increment, `eventId` → random_int)
+   - Field types (e.g., INTEGER → random_int, DECIMAL → random_float, ARRAY → array)
    - Example values from Swagger
 
 ## Generated Configuration Structure
@@ -71,6 +72,20 @@ request_schema:
         method: "increment"
         start: 1000000
         step: 1
+    tags:
+      type: "ARRAY"
+      required: false
+      description: "List of tags"
+      element:
+        type: "STRING"
+        generation:
+          method: "random_text"
+          length: 10
+          charset: "alphanumeric"
+      generation:
+        method: "array"
+        min_length: 1
+        max_length: 5
     # ... more fields
 ```
 
@@ -132,6 +147,54 @@ After conversion, you should review and customize:
      --concurrent 10 \
      --total 1000
    ```
+
+## Array Type Support
+
+The converter supports array types with the following features:
+
+1. **Array of Primitives**: Arrays of integers, strings, booleans, etc.
+   ```yaml
+   tags:
+     type: "ARRAY"
+     element:
+       type: "STRING"
+       generation:
+         method: "random_text"
+         length: 10
+     generation:
+       method: "array"
+       min_length: 1
+       max_length: 5
+   ```
+
+2. **Array of Objects**: Arrays of complex objects with nested properties
+   ```yaml
+   items:
+     type: "ARRAY"
+     element:
+       type: "OBJECT"
+       fields:
+         id:
+           type: "INTEGER"
+           generation:
+             method: "increment"
+             start: 1
+         name:
+           type: "STRING"
+           generation:
+             method: "random_text"
+             length: 20
+     generation:
+       method: "array"
+       min_length: 2
+       max_length: 10
+   ```
+
+3. **Array Generation Methods**:
+   - `method: "array"`: Generates an array with random length
+   - `min_length`: Minimum number of elements (default: 1)
+   - `max_length`: Maximum number of elements (default: 5)
+   - Element generation follows the `element` configuration
 
 ## Limitations
 

@@ -115,7 +115,7 @@ class SwaggerToConfigConverter:
             "string": "STRING",
             "boolean": "BOOLEAN",
             "object": "OBJECT",
-            "array": "OBJECT"  # Arrays are treated as objects in our config
+            "array": "ARRAY"
         }
         return type_mapping.get(swagger_type, "STRING")
     
@@ -192,6 +192,12 @@ class SwaggerToConfigConverter:
                     "length": 50,
                     "charset": "alphanumeric"
                 }
+        elif field_type == "ARRAY":
+            return {
+                "method": "array",
+                "min_length": 1,
+                "max_length": 5
+            }
         
         # Default fallback
         return {
@@ -213,6 +219,57 @@ class SwaggerToConfigConverter:
         prop_type = prop_schema.get("type", "string")
         format_type = prop_schema.get("format")
         config_type = self._map_swagger_type_to_config_type(prop_type, format_type)
+        
+        # Handle array type
+        if prop_type == "array":
+            items_schema = prop_schema.get("items", {})
+            # Build field config
+            field_config = {
+                "type": config_type,
+                "required": prop_name in required_fields,
+                "description": prop_schema.get("description", "")
+            }
+            # Convert items schema to element config
+            if "$ref" in items_schema:
+                ref_path = items_schema["$ref"].split("/")
+                ref_schema_name = ref_path[-1]
+                ref_schema = self._get_schema(ref_schema_name)
+                if ref_schema:
+                    # For array of objects, convert the referenced schema
+                    if ref_schema.get("type") == "object":
+                        field_config["element"] = self._convert_schema_property("element", ref_schema, [])
+                    else:
+                        # For array of primitives with $ref, extract type
+                        items_type = ref_schema.get("type", "string")
+                        items_format = ref_schema.get("format")
+                        element_type = self._map_swagger_type_to_config_type(items_type, items_format)
+                        field_config["element"] = {
+                            "type": element_type,
+                            "generation": self._get_default_generation_method(element_type, "element", ref_schema)
+                        }
+            elif "type" in items_schema:
+                # Direct type definition
+                items_type = items_schema.get("type", "string")
+                items_format = items_schema.get("format")
+                element_type = self._map_swagger_type_to_config_type(items_type, items_format)
+                element_config = {
+                    "type": element_type
+                }
+                # For object items, recursively convert
+                if items_type == "object":
+                    element_config = self._convert_schema_property("element", items_schema, [])
+                else:
+                    element_config["generation"] = self._get_default_generation_method(element_type, "element", items_schema)
+                field_config["element"] = element_config
+            else:
+                # Fallback: assume string array
+                field_config["element"] = {
+                    "type": "STRING",
+                    "generation": self._get_default_generation_method("STRING", "element", {})
+                }
+            # Add array generation method
+            field_config["generation"] = self._get_default_generation_method(config_type, prop_name, prop_schema)
+            return field_config
         
         # Check if this is an object with nested structure
         has_nested_structure = False

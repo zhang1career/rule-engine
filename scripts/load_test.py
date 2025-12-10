@@ -39,6 +39,12 @@ from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 import yaml
 
+# Import shared data generator
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).parent))
+from mock_data_generator import MockDataGeneratorBase
+
 
 class LoadTestResult:
     """Load test result statistics"""
@@ -136,113 +142,8 @@ class LoadTestResult:
         return 0.0
 
 
-class TestDataGenerator:
+class TestDataGenerator(MockDataGeneratorBase):
     """Generate test data based on configuration file"""
-    
-    def __init__(self, config_path: str):
-        """Initialize generator with configuration file"""
-        self.config_path = config_path
-        self.config = self._load_config()
-        self.counters = {}
-    
-    def _load_config(self) -> Optional[Dict[str, Any]]:
-        """Load configuration from YAML file"""
-        config_file = Path(self.config_path)
-        if not config_file.exists():
-            return None
-        
-        try:
-            with open(config_file, 'r', encoding='utf-8') as f:
-                return yaml.safe_load(f)
-        except Exception as e:
-            print(f"[WARN] Failed to load config file {self.config_path}: {e}")
-            return None
-    
-    def _get_counter(self, field_name: str, start: int = 0, step: int = 1) -> int:
-        """Get and increment counter for increment method"""
-        if field_name not in self.counters:
-            self.counters[field_name] = start
-        else:
-            self.counters[field_name] += step
-        return self.counters[field_name]
-    
-    def _generate_field_value(self, field_config: Dict[str, Any], context: Dict[str, Any] = None) -> Any:
-        """Generate value for a single field based on its configuration"""
-        if context is None:
-            context = {}
-        
-        gen_config = field_config.get("generation", {})
-        method = gen_config.get("method", "fixed")
-        
-        if method == "fixed":
-            return gen_config.get("value")
-        elif method == "increment":
-            start = gen_config.get("start", 0)
-            step = gen_config.get("step", 1)
-            field_name = field_config.get("name", "unknown")
-            return self._get_counter(field_name, start, step)
-        elif method == "random_int":
-            min_val = gen_config.get("min", 0)
-            max_val = gen_config.get("max", 100)
-            return random.randint(min_val, max_val)
-        elif method == "random_float":
-            min_val = gen_config.get("min", 0.0)
-            max_val = gen_config.get("max", 100.0)
-            precision = gen_config.get("precision", 2)
-            value = random.uniform(min_val, max_val)
-            return round(value, precision)
-        elif method == "random_choice":
-            values = gen_config.get("values", [])
-            if not values:
-                return None
-            return random.choice(values)
-        elif method == "template":
-            template = gen_config.get("template", "")
-            result = template
-            for key, value in context.items():
-                result = result.replace(f"{{{key}}}", str(value))
-            return result
-        elif method == "list":
-            values = gen_config.get("values", [])
-            if not values:
-                return None
-            field_name = field_config.get("name", "unknown")
-            index = self.counters.get(field_name, 0) % len(values)
-            self.counters[field_name] = index + 1
-            return values[index]
-        else:
-            raise ValueError(f"Unsupported generation method: {method}")
-    
-    def _generate_typed_value(self, field_config: Dict[str, Any], value: Any) -> Dict[str, Any]:
-        """Generate TypedValue structure for arguments fields"""
-        field_type = field_config.get("type", "STRING")
-        type_mapping = {
-            "INTEGER": "INTEGER",
-            "LONG": "LONG",
-            "DECIMAL": "DECIMAL",
-            "BOOLEAN": "BOOLEAN",
-            "STRING": "STRING",
-            "OBJECT": "OBJECT"
-        }
-        api_type = type_mapping.get(field_type, "STRING")
-        return {
-            "value": value,
-            "type": api_type
-        }
-    
-    def _generate_nested_fields(self, fields_config: Dict[str, Any], context: Dict[str, Any] = None) -> Dict[str, Any]:
-        """Generate nested fields (like arguments)"""
-        if context is None:
-            context = {}
-        
-        result = {}
-        for field_name, field_config in fields_config.items():
-            value = self._generate_field_value(field_config, context)
-            if field_config.get("type") in ["INTEGER", "LONG", "DECIMAL", "BOOLEAN", "STRING", "OBJECT"]:
-                result[field_name] = self._generate_typed_value(field_config, value)
-            else:
-                result[field_name] = value
-        return result
     
     def generate(self, user_id: Optional[int] = None, event_id: Optional[int] = None, trace_id: Optional[int] = None) -> Dict:
         """Generate test data, optionally override specific fields"""
@@ -250,13 +151,8 @@ class TestDataGenerator:
             # Fallback to default generation if config not available
             return self._generate_default(user_id or 1000000, event_id or 1001, trace_id or 1000000)
         
-        schema = self.config.get("request_schema", {})
-        fields_config = schema.get("fields", {})
-        
-        result = {}
+        # Build context with provided values
         context = {}
-        
-        # Override with provided values if any
         if user_id is not None:
             context["userId"] = user_id
         if event_id is not None:
@@ -264,47 +160,34 @@ class TestDataGenerator:
         if trace_id is not None:
             context["traceId"] = trace_id
         
-        # Generate root level fields
-        for field_name, field_config in fields_config.items():
-            if field_name == "arguments":
-                arguments_config = field_config.get("fields", {})
-                result[field_name] = self._generate_nested_fields(arguments_config, context)
-            else:
-                # Use provided value if available, otherwise generate
-                if field_name in context:
-                    value = context[field_name]
-                else:
-                    value = self._generate_field_value(field_config, context)
-                result[field_name] = value
-                context[field_name] = value
-        
-        return result
+        # Use shared generation logic
+        return self._generate_from_schema(context)
     
     def _generate_default(self, user_id: int, event_id: int, trace_id: int) -> Dict:
         """Default generation method (fallback)"""
-    return {
-        "userId": user_id,
-        "eventId": event_id,
-        "traceId": trace_id,
-        "arguments": {
-            "amount": {
-                "value": round(random.uniform(100.0, 10000.0), 2),
-                "type": "DECIMAL"
-            },
-            "age": {
-                "value": random.randint(18, 80),
-                "type": "INTEGER"
-            },
-            "isVip": {
-                "value": random.choice([True, False]),
-                "type": "BOOLEAN"
-            },
-            "name": {
-                "value": f"User_{user_id}",
-                "type": "STRING"
+        return {
+            "userId": user_id,
+            "eventId": event_id,
+            "traceId": trace_id,
+            "arguments": {
+                "amount": {
+                    "value": round(random.uniform(100.0, 10000.0), 2),
+                    "type": "DECIMAL"
+                },
+                "age": {
+                    "value": random.randint(18, 80),
+                    "type": "INTEGER"
+                },
+                "isVip": {
+                    "value": random.choice([True, False]),
+                    "type": "BOOLEAN"
+                },
+                "name": {
+                    "value": f"User_{user_id}",
+                    "type": "STRING"
+                }
             }
         }
-    }
 
 
 # Global generator instance
