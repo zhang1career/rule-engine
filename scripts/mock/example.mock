@@ -91,16 +91,3 @@ request_schema:
           generation:
             method: "template"
             template: "User_{userId}"
-
-# Generation Method Reference
-# Supported generation methods:
-#   - fixed: Use a fixed value
-#   - increment: Increment from start value with step
-#   - random_int: Random integer between min and max
-#   - random_float: Random float between min and max with precision
-#   - random_choice: Random selection from a list of values
-#   - template: String template with variable substitution (e.g., "User_{userId}")
-#   - list: Sequential selection from a list (cycles through)
-</contents>
-</xai:function_call ><xai:function_call name="run_terminal_cmd">
-<parameter name="command">python3 load_test_eval.py --config scripts/config/load_test_eval_config.yaml --concurrent 1 --total 1

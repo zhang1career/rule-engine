@@ -745,7 +745,7 @@ components:
       properties:
         itemType:
           type: integer
-          description: Item type ID (enumeration ID: 0=RULE, 1=RULE_GROUP)
+          description: "Item type ID (enumeration ID: 0=RULE, 1=RULE_GROUP)"
           enum: [0, 1]
           example: 0
         itemId:
@@ -769,7 +769,7 @@ components:
       properties:
         itemType:
           type: integer
-          description: Item type ID (enumeration ID: 0=RULE, 1=RULE_GROUP)
+          description: "Item type ID (enumeration ID: 0=RULE, 1=RULE_GROUP)"
           enum: [0, 1]
           example: 0
         itemId:
@@ -816,7 +816,7 @@ components:
           example: "检查金额是否大于1000"
         contentType:
           type: integer
-          description: Rule content type ID (enumeration ID: 0=EXPRESSION, 1=API_QUERY, 2=SQL_QUERY, 3=SCRIPT)
+          description: "Rule content type ID (enumeration ID: 0=EXPRESSION, 1=API_QUERY, 2=SQL_QUERY, 3=SCRIPT)"
           enum: [0, 1, 2, 3]
           example: 0
         content:
@@ -825,7 +825,7 @@ components:
           example: "amount > 1000"
         ruleStatus:
           type: integer
-          description: Rule status ID (enumeration ID: 0=OFFLINE, 1=TEST, 2=GRAY, 3=AB_TEST, 4=FULL)
+          description: "Rule status ID (enumeration ID: 0=OFFLINE, 1=TEST, 2=GRAY, 3=AB_TEST, 4=FULL)"
           enum: [0, 1, 2, 3, 4]
           example: 0
         ruleGroupId:
@@ -857,7 +857,7 @@ components:
           example: "检查金额是否大于1000"
         contentType:
           type: integer
-          description: Rule content type ID (required, enumeration ID: 0=EXPRESSION, 1=API_QUERY, 2=SQL_QUERY, 3=SCRIPT)
+          description: "Rule content type ID (required, enumeration ID: 0=EXPRESSION, 1=API_QUERY, 2=SQL_QUERY, 3=SCRIPT)"
           enum: [0, 1, 2, 3]
           example: 0
         content:
@@ -885,12 +885,12 @@ components:
           example: "更新后的描述"
         contentType:
           type: integer
-          description: Rule content type ID (optional, enumeration ID: 0=EXPRESSION, 1=API_QUERY, 2=SQL_QUERY, 3=SCRIPT)
+          description: "Rule content type ID (optional, enumeration ID: 0=EXPRESSION, 1=API_QUERY, 2=SQL_QUERY, 3=SCRIPT)"
           enum: [0, 1, 2, 3]
           example: 0
         ruleStatus:
           type: integer
-          description: Rule status ID (optional, enumeration ID: 0=OFFLINE, 1=TEST, 2=GRAY, 3=AB_TEST, 4=FULL)
+          description: "Rule status ID (optional, enumeration ID: 0=OFFLINE, 1=TEST, 2=GRAY, 3=AB_TEST, 4=FULL)"
           enum: [0, 1, 2, 3, 4]
           example: 4
         content:
@@ -1061,7 +1061,7 @@ components:
       properties:
         itemType:
           type: integer
-          description: Execution item type ID (enumeration ID: 0=RULE, 1=RULE_GROUP)
+          description: "Execution item type ID (enumeration ID: 0=RULE, 1=RULE_GROUP)"
           enum: [0, 1]
           example: 0
         itemId:

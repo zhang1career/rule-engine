@@ -23,13 +23,13 @@ pip install -r scripts/requirements.txt
 
 ```bash
 # Default parameters: 10 concurrent, 1000 requests
-python3 scripts/load_test_eval.py
+python3 scripts/load_test.py
 
 # Specify URL and concurrency
-python3 scripts/load_test_eval.py --url http://localhost:8080/api/eval --concurrent 20 --total 5000
+python3 scripts/load_test.py --url http://localhost:8080/api/eval --concurrent 20 --total 5000
 
 # Load test based on duration (run for 60 seconds)
-python3 scripts/load_test_eval.py --concurrent 50 --duration 60 --total 0
+python3 scripts/load_test.py --concurrent 50 --duration 60 --total 0
 ```
 
 ### Parameter Description
@@ -47,25 +47,25 @@ python3 scripts/load_test_eval.py --concurrent 50 --duration 60 --total 0
 #### 1. Quick Load Test (100 concurrent, 10000 requests)
 
 ```bash
-python3 scripts/load_test_eval.py --concurrent 100 --total 10000
+python3 scripts/load_test.py --concurrent 100 --total 10000
 ```
 
 #### 2. Continuous Load Test (50 concurrent, run for 5 minutes)
 
 ```bash
-python3 scripts/load_test_eval.py --concurrent 50 --duration 300 --total 0
+python3 scripts/load_test.py --concurrent 50 --duration 300 --total 0
 ```
 
 #### 3. Low Concurrency Load Test (test stability)
 
 ```bash
-python3 scripts/load_test_eval.py --concurrent 5 --total 1000 --interval 100
+python3 scripts/load_test.py --concurrent 5 --total 1000 --interval 100
 ```
 
 #### 4. Specify Event ID and User ID Range
 
 ```bash
-python3 scripts/load_test_eval.py --event-id 1002 --user-id-start 2000000 --concurrent 20 --total 2000
+python3 scripts/load_test.py --event-id 1002 --user-id-start 2000000 --concurrent 20 --total 2000
 ```
 
 ## Load Test Report Description
