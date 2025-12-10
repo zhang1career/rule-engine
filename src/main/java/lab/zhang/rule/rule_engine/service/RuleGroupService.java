@@ -1,7 +1,6 @@
 package lab.zhang.rule.rule_engine.service;
 
 import lab.zhang.rule.rule_engine.model.Rule;
-import lab.zhang.rule.rule_engine.model.RuleExecutionContext;
 import lab.zhang.rule.rule_engine.model.RuleGroup;
 import lab.zhang.rule.rule_engine.pojo.dto.RuleDTO;
 
@@ -80,16 +79,6 @@ public interface RuleGroupService {
      * @throws IllegalArgumentException if rule not found or rule not in any group
      */
     Rule copyRuleInGroup(Long ruleId, RuleDTO ruleDTO);
-
-    /**
-     * Select one rule from rule group based on probability distribution
-     * Uses cached selection if available, otherwise uses pseudo-random selection based on userHash
-     *
-     * @param group   the rule group
-     * @param context the rule execution context (contains userHash in arguments)
-     * @return the selected rule, or null if no rule should be executed
-     */
-    Rule selectRuleFromGroup(RuleGroup group, RuleExecutionContext context);
 
 }
 

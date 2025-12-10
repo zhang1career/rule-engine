@@ -638,7 +638,8 @@ public class RuleServiceImpl implements RuleService {
             }
             // Put selected rule_id into array at exe_order position
             try {
-                setExecutionQueue(arrangementListInGroup, selectedRuleId, executionItemIds);
+                Integer exeOrder = arrangementListInGroup.get(0).getExeOrder();
+                executionItemIds[exeOrder] = selectedRuleId;
             } catch (IllegalStateException e) {
                 throw new IllegalStateException(e.getMessage() + ", group=" + groupId);
             }
@@ -722,39 +723,6 @@ public class RuleServiceImpl implements RuleService {
                     userHashInt, totalRatio);
         }
         return null;
-    }
-
-
-    /**
-     * Set execution item into execution queue
-     * It is NOT thread safe, should be called in single-threaded context
-     *
-     * @param arrangementListInGroup arrangements in the group
-     * @param selectedItemId         the selected rule ID
-     * @param executionQueue         the execution queue
-     */
-    private void setExecutionQueue(List<ExecutionArrangement> arrangementListInGroup,
-                                   Long selectedItemId,
-                                   Long[] executionQueue) {
-        Integer index = arrangementListInGroup.get(0).getExeOrder();
-        if (index == null || index < 0 || index >= executionQueue.length) {
-            throw new IllegalStateException("[drawRule] invalid exe_order");
-        }
-        for (ExecutionArrangement arrangement : arrangementListInGroup) {
-            if (!arrangement.getRuleId().equals(selectedItemId)) {
-                continue;
-            }
-            Integer exeOrder = arrangement.getExeOrder();
-            if (exeOrder == null || !exeOrder.equals(index)) {
-                throw new IllegalStateException("[drawRule] exe_order mismatch for selected rule");
-            }
-            executionQueue[index] = selectedItemId;
-            break;
-        }
-        // validate that selected rule was placed
-        if (executionQueue[index] == null || !executionQueue[index].equals(selectedItemId)) {
-            throw new IllegalStateException("[drawRule] selected rule not placed in ruleIds array");
-        }
     }
 
 

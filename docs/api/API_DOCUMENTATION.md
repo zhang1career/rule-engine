@@ -631,7 +631,7 @@ curl -X DELETE http://localhost:8080/api/rule-groups/10000001
 
 **Call Example**:
 ```bash
-curl -X POST http://localhost:8080/api/evalRequest \
+curl -X POST http://localhost:8080/api/eval \
   -H "Content-Type: application/json" \
   -d '{
     "userId": 123456,

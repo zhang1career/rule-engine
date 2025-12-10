@@ -140,64 +140,6 @@ public class RuleGroup extends BaseModel implements Serializable {
         return rules != null && rules.containsKey(ruleId);
     }
 
-    /**
-     * Draws a random rule based on probability distribution.
-     *
-     * <p>Given a hash integer in range [1, 100], selects a rule based on A/B test ratios.
-     * Rules are selected in the order of rule IDs (sorted).
-     *
-     * <p>If hashInt exceeds the total ratio, returns null (group is skipped).
-     *
-     * @param hashInt the hash integer in range [1, 100]
-     * @return the selected rule, or null if no rule should be executed
-     */
-    public Rule drawRandomRule(int hashInt) {
-        if (rules == null || rules.isEmpty()) {
-            return null;
-        }
-
-        // Calculate total ratio
-        int totalRatio = rules.values().stream()
-                .mapToInt(pair -> pair != null && pair.getRight() != null ? pair.getRight() : 0)
-                .sum();
-
-        if (totalRatio <= 0) {
-            return null;
-        }
-
-        // If hashInt exceeds total ratio, skip the group
-        if (hashInt > totalRatio) {
-            return null;
-        }
-
-        // Select rule based on probability distribution
-        // Sort rule IDs to ensure consistent ordering
-        List<Long> sortedRuleIds = rules.keySet().stream()
-                .sorted()
-                .collect(Collectors.toList());
-
-        int cumulativeRatio = 0;
-        for (Long ruleId : sortedRuleIds) {
-            Pair<Rule, Integer> pair = rules.get(ruleId);
-            if (pair == null) {
-                continue;
-            }
-            int ratio = pair.getRight() != null ? pair.getRight() : 0;
-            cumulativeRatio += ratio;
-            if (hashInt <= cumulativeRatio) {
-                return pair.getLeft();
-            }
-        }
-
-        // Should not reach here, but return the last rule as fallback
-        if (!sortedRuleIds.isEmpty()) {
-            Long lastRuleId = sortedRuleIds.get(sortedRuleIds.size() - 1);
-            Pair<Rule, Integer> lastPair = rules.get(lastRuleId);
-            return lastPair != null ? lastPair.getLeft() : null;
-        }
-
-        return null;
-    }
 
     @Override
     public boolean equals(Object o) {

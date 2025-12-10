@@ -9,7 +9,6 @@ import lab.zhang.rule.rule_engine.enums.RuleStatusEnum;
 import lab.zhang.rule.rule_engine.mapper.ExecutionArrangementMapper;
 import lab.zhang.rule.rule_engine.mapper.RuleGroupMapper;
 import lab.zhang.rule.rule_engine.model.Rule;
-import lab.zhang.rule.rule_engine.model.RuleExecutionContext;
 import lab.zhang.rule.rule_engine.model.RuleGroup;
 import lab.zhang.rule.rule_engine.pojo.dto.RuleDTO;
 import lab.zhang.rule.rule_engine.service.RuleGroupService;
@@ -29,8 +28,6 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.stream.Collectors;
-
-import static lab.zhang.rule.rule_engine.constant.EvalArgumentConst.ARG_USER_HASH_INT;
 
 /**
  * Rule group service implementation
@@ -368,79 +365,5 @@ public class RuleGroupServiceImpl implements RuleGroupService {
         }
 
         return newRule;
-    }
-
-    /**
-     * Select one rule from rule group based on probability distribution.
-     * Uses cache to ensure consistent rule selection for the same user-event-group combination.
-     * Cache key format: rule:gw:abt:{userId}:{eventId}:{groupId}
-     * Since there can be multiple rule groups for a single event, the cache records
-     * which specific rule was selected from each rule group.
-     *
-     * @param group   the rule group to select from
-     * @param context the rule execution context (contains userId, eventId, and userHash)
-     * @return the selected rule ID, or 0L if no rule should be executed
-     */
-    @Override
-    public Rule selectRuleFromGroup(RuleGroup group, RuleExecutionContext context) {
-        // Get userId and EventId
-        Long userId = context.getUserId();
-        Integer eventId = context.getEventId();
-
-        // Check cache first
-        Long cachedRuleId = ruleSelectionCacheService.get(userId, eventId, group.getId());
-        if (cachedRuleId != null && isCachedABTestRule(cachedRuleId, group)) {
-            Rule cachedRule = group.getRules().get(cachedRuleId).getLeft();
-            if (log.isDebugEnabled()) {
-                log.debug("Using cached rule selection: userId={}, eventId={}, groupId={}, ruleId={}",
-                        userId, eventId, group.getId(), cachedRuleId);
-            }
-            return cachedRule;
-        }
-
-        // Get hashInt from context (calculated during context construction)
-        Integer userHashInt = (Integer) context.getArgument(ARG_USER_HASH_INT).getValue();
-        // Use drawRandomRule to select rule based on probability distribution
-        Rule selectedRule = group.drawRandomRule(userHashInt);
-        if (selectedRule == null) {
-            log.warn("Rule group skipped: groupId={}, hashInt={}", group.getId(), userHashInt);
-            return null;
-        }
-
-        // Cache the selection for this user-event-group combination
-        ruleSelectionCacheService.put(userId, eventId, group.getId(), selectedRule.getId());
-
-        // Load rule content after rule selection
-        if (log.isDebugEnabled()) {
-            log.debug("Rule selected from group: groupId={}, ruleId={}, userHashInt={}", group.getId(), selectedRule.getId(), userHashInt);
-        }
-        return selectedRule;
-    }
-
-    /**
-     * Check if a cached a/b test rule is valid
-     * Validates by checking if the rule exists in the group's rules map.
-     * If it exists in the map, it means the rule is valid and in AB_TEST status
-     * (loadRulesMapForGroup already filters out non-ONLINE rules).
-     *
-     * @param cachedRuleId the cached rule ID
-     * @param group        the rule group (rules map must be loaded)
-     * @return true if the cached rule is valid, false otherwise
-     */
-    private boolean isCachedABTestRule(Long cachedRuleId, RuleGroup group) {
-        if (group.getRules() == null || !group.getRules().containsKey(cachedRuleId)) {
-            log.warn("Cached rule not found in group's rules map: groupId={}, ruleId={}", group.getId(), cachedRuleId);
-            return false;
-        }
-
-        Pair<Rule, Integer> ruleRatioPair = group.getRules().get(cachedRuleId);
-        if (ruleRatioPair == null || ruleRatioPair.getLeft() == null) {
-            log.warn("Cached rule pair is null in group's rules map: groupId={}, ruleId={}", group.getId(), cachedRuleId);
-            return false;
-        }
-
-        Rule cachedRule = ruleRatioPair.getLeft();
-
-        return cachedRule.getRuleStatus() == RuleStatusEnum.ONLINE;
     }
 }

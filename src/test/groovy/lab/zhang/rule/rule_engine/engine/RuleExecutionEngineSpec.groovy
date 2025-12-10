@@ -193,148 +193,6 @@ class RuleExecutionEngineSpec extends Specification {
     }
 
     @Unroll
-    def "test execute rule sequence - A/B test rule group probability distribution - rule1Ratio: #rule1Ratio, rule2Ratio: #rule2Ratio"() {
-        given: "prepare execution items"
-
-        and: "prepare A/B test rule group with real RuleGroupServiceImpl"
-        def realRuleService = Mock(RuleService)
-        // Note: GreRelationMapper is no longer used
-        def realRuleSelectionCacheService = Mock(RuleSelectionCacheService)
-        def realRuleGroupService = new RuleGroupServiceImpl()
-        realRuleGroupService.ruleService = realRuleService
-        // Note: GreRelationMapper is no longer used
-        realRuleGroupService.ruleSelectionCacheService = realRuleSelectionCacheService
-
-        engine.ruleGroupService = realRuleGroupService
-
-        def rule1 = Rule.builder()
-                .id(1L)
-                .contentType(ContentTypeEnum.EXPRESSION)
-                .ruleStatus(RuleStatusEnum.ONLINE)
-                .build()
-        def rule2 = Rule.builder()
-                .id(2L)
-                .contentType(ContentTypeEnum.EXPRESSION)
-                .ruleStatus(RuleStatusEnum.ONLINE)
-                .build()
-
-        def ruleGroup = RuleGroup.builder()
-                .id(100L)
-                .rules([1L: Pair.of(rule1, rule1Ratio),
-                        2L: Pair.of(rule2, rule2Ratio)])
-                .build()
-
-        // Mock ruleService to return rules
-        _ * realRuleService.getRuleById(1L) >> rule1
-        _ * realRuleService.getRuleById(2L) >> rule2
-        _ * realRuleService.getExecutionItemsByEventId(1001, _) >> [ExecutionItem.forRule(ruleGroup.getRules().values().first().left, null)]
-
-        // Mock ruleGroupRuleMapper to return relation entities with ab_test_ratio
-        def relation1 = new ExecutionArrangementEntity ()
-        relation1.setGroupId(100L)
-        relation1.setRuleId(1L)
-        relation1.setAbRatio(rule1Ratio)
-
-        def relation2 = new ExecutionArrangementEntity()
-        relation2.setGroupId(100L)
-        relation2.setRuleId(2L)
-        relation2.setAbRatio(rule2Ratio)
-
-        // Mock selectOne: return relation based on ruleId being queried
-        // Since selectRuleFromGroup queries rules in the order of group.getRuleIds() ([1L, 2L]),
-        // we use a simple counter that resets every 2 calls (one for each rule)
-        def selectOneCallCount = 0
-        _ * executionArrangementMapper.selectOne(_) >> {
-            selectOneCallCount++
-            // Each selectRuleFromGroup call queries both rules, so we alternate
-            if (selectOneCallCount % 2 == 1) {
-                return relation1  // Odd calls: ruleId=1
-            } else {
-                return relation2  // Even calls: ruleId=2
-            }
-        }
-
-        when: "run multiple times to test probability distribution"
-        def totalRuns = 1000
-        def rule1Count = 0
-        def rule2Count = 0
-        def skippedCount = 0
-
-        // Mock cache service: always return null (cache miss) to test probability distribution
-        _ * realRuleSelectionCacheService.get(_, _, _) >> null
-        _ * realRuleSelectionCacheService.put(_, _, _, _) >> { /* cache the selection */ }
-
-        totalRuns.times { i ->
-            def context = new RuleExecutionContext(1000L + i, 1001, 9999L, [:])
-            // Set userHash and userHashInt in arguments (normally done by EvalServiceImpl)
-            def userHash = HashUtil.murmurHash3(context.getUserId().toString())
-            context.putArgument(ARG_USER_HASH, new TypedValue(userHash, ValueTypeEnum.STRING))
-            int userHashInt = HashUtil.hashToIntRange(userHash, 1, 100)
-            context.putArgument(EvalArgumentConst.ARG_USER_HASH_INT, new TypedValue(userHashInt, ValueTypeEnum.INTEGER))
-
-            def selectedRule = realRuleGroupService.selectRuleFromGroup(ruleGroup, context)
-
-            if (selectedRule != null && selectedRule.getId() == 1L) {
-                rule1Count++
-            } else if (selectedRule != null && selectedRule.getId() == 2L) {
-                rule2Count++
-            } else {
-                skippedCount++
-            }
-        }
-
-        and: "verify cache works: same userId and eventId should return same rule"
-        // Mock cache to return cached ruleId for second call
-        def cachedRuleId = 1L
-        realRuleSelectionCacheService.get(9999L, 1001, 100L) >>> [null, cachedRuleId] // First call: cache miss, second call: cache hit
-        
-        def cacheContext1 = new RuleExecutionContext(9999L, 1001, 9999L, [:])
-        def cacheUserHash1 = HashUtil.murmurHash3(cacheContext1.getUserId().toString())
-        cacheContext1.putArgument(ARG_USER_HASH, new TypedValue(cacheUserHash1, ValueTypeEnum.STRING))
-        int cacheUserHashInt1 = HashUtil.hashToIntRange(cacheUserHash1, 1, 100)
-        cacheContext1.putArgument(EvalArgumentConst.ARG_USER_HASH_INT, new TypedValue(cacheUserHashInt1, ValueTypeEnum.INTEGER))
-        def cacheFirstSelection = realRuleGroupService.selectRuleFromGroup(ruleGroup, cacheContext1)
-
-        def cacheContext2 = new RuleExecutionContext(9999L, 1001, 9999L, [:])
-        def cacheUserHash2 = HashUtil.murmurHash3(cacheContext2.getUserId().toString())
-        cacheContext2.putArgument(ARG_USER_HASH, new TypedValue(cacheUserHash2, ValueTypeEnum.STRING))
-        int cacheUserHashInt2 = HashUtil.hashToIntRange(cacheUserHash2, 1, 100)
-        cacheContext2.putArgument(EvalArgumentConst.ARG_USER_HASH_INT, new TypedValue(cacheUserHashInt2, ValueTypeEnum.INTEGER))
-        def cacheSecondSelection = realRuleGroupService.selectRuleFromGroup(ruleGroup, cacheContext2)
-
-        then: "probability distribution should be close to expected ratios"
-        def totalRatio = rule1Ratio + rule2Ratio
-        def expectedRule1Percent = totalRatio > 0 ? (rule1Ratio * 100.0 / totalRatio) : 0
-        def expectedRule2Percent = totalRatio > 0 ? (rule2Ratio * 100.0 / totalRatio) : 0
-        def expectedSkippedPercent = totalRatio < 100 ? ((100 - totalRatio) * 100.0 / 100) : 0
-
-        def actualRule1Percent = (rule1Count * 100.0 / totalRuns)
-        def actualRule2Percent = (rule2Count * 100.0 / totalRuns)
-        def actualSkippedPercent = (skippedCount * 100.0 / totalRuns)
-
-        // Allow 5% tolerance
-        def tolerance = 5.0
-
-        if (totalRatio > 0) {
-            Math.abs(actualRule1Percent - expectedRule1Percent as double) < tolerance
-            Math.abs(actualRule2Percent - expectedRule2Percent as double) < tolerance
-        }
-        if (totalRatio < 100) {
-            Math.abs(actualSkippedPercent - expectedSkippedPercent as double) < tolerance
-        }
-
-        // Verify cache works: same userId and eventId should return same rule
-        cacheFirstSelection == cacheSecondSelection // Should be same due to cache
-
-        where:
-        rule1Ratio | rule2Ratio
-        50         | 30
-        30         | 20
-        40         | 40
-        10         | 10
-    }
-
-    @Unroll
     def "test execute rule sequence - early break - resultValue: #resultValue, resultType: #resultType, shouldBreak: #shouldBreak"() {
         given: "prepare rules and execution context"
         def rule1 = new Rule(
@@ -496,8 +354,6 @@ class RuleExecutionEngineSpec extends Specification {
         1 * ruleService.getExecutionItemsByEventId(1001, _) >> executionItems
         // Execute rule1
         1 * ruleExecutor.execute(rule1, context) >> result1
-        // Rule group selection is handled in RuleServiceImpl, not here
-        0 * ruleGroupService.selectRuleFromGroup(_, _)
 
         // Conditionally mock based on selectedRule
         (selectedRule != null && selectedRule.getId() == 2L ? 1 : 0) * ruleExecutor.execute(rule2, context) >> result2
@@ -546,7 +402,6 @@ class RuleExecutionEngineSpec extends Specification {
         // RuleExecutionEngine just skips null rules and continues
         1 * ruleService.getExecutionItemsByEventId(1001, _) >> executionItems
         1 * ruleExecutor.execute(rule1, context) >> result1
-        0 * ruleGroupService.selectRuleFromGroup(_, _)
         result == result1
     }
 
@@ -586,7 +441,6 @@ class RuleExecutionEngineSpec extends Specification {
         then: "should skip null rule and continue with next rule"
         1 * ruleService.getExecutionItemsByEventId(1001, _) >> executionItems
         1 * ruleExecutor.execute(rule1, context) >> result1
-        0 * ruleGroupService.selectRuleFromGroup(_, _)
         1 * ruleExecutor.execute(rule2, context) >> result2
         result == result2
     }
@@ -624,7 +478,6 @@ class RuleExecutionEngineSpec extends Specification {
         then: "should skip rule group selection when userId is missing"
         1 * ruleService.getExecutionItemsByEventId(1001, _) >> executionItems
         1 * ruleExecutor.execute(rule1, context) >> result1
-        0 * ruleGroupService.selectRuleFromGroup(_, _)
         result == result1
     }
 
@@ -662,7 +515,6 @@ class RuleExecutionEngineSpec extends Specification {
         then: "should skip rule group selection when eventId is missing"
         1 * ruleService.getExecutionItemsByEventId(1001, _) >> executionItems
         1 * ruleExecutor.execute(rule1, context) >> result1
-        0 * ruleGroupService.selectRuleFromGroup(_, _)
         result == result1
     }
 
@@ -700,7 +552,6 @@ class RuleExecutionEngineSpec extends Specification {
         then: "should skip rule group selection when userHash is missing"
         1 * ruleService.getExecutionItemsByEventId(1001, _) >> executionItems
         1 * ruleExecutor.execute(rule1, context) >> result1
-        0 * ruleGroupService.selectRuleFromGroup(_, _)
         result == result1
     }
 
@@ -781,7 +632,6 @@ class RuleExecutionEngineSpec extends Specification {
 
         then: "should return null TypedValue when no rule executed"
         1 * ruleService.getExecutionItemsByEventId(1001, _) >> executionItems
-        0 * ruleGroupService.selectRuleFromGroup(_, _)
         0 * ruleExecutor.execute(_, _)
         result != null
         result.getType() == ValueTypeEnum.OBJECT
@@ -902,7 +752,6 @@ class RuleExecutionEngineSpec extends Specification {
         then: "should skip rule group selection when userHash value is null"
         1 * ruleService.getExecutionItemsByEventId(1001, _) >> executionItems
         1 * ruleExecutor.execute(rule1, context) >> result1
-        0 * ruleGroupService.selectRuleFromGroup(_, _)
         result == result1
     }
 
