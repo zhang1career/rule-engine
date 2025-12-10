@@ -53,11 +53,8 @@ class SwaggerToConfigConverter:
         servers = self.swagger.get("servers", [])
         if servers and len(servers) > 0:
             base = servers[0].get("url", "")
-            # Remove /api if present at the end
-            if base.endswith("/api"):
-                base = base[:-4]
             return base
-        return "http://localhost:8080"
+        return "http://localhost:8080/api"
     
     def _get_schema(self, schema_name: str) -> Optional[Dict[str, Any]]:
         """Get schema definition from Swagger"""
@@ -123,14 +120,11 @@ class SwaggerToConfigConverter:
         return type_mapping.get(swagger_type, "STRING")
     
     def _get_default_generation_method(self, field_type: str, field_name: str, schema_prop: Dict[str, Any]) -> Dict[str, Any]:
-        """Generate default generation method based on field type and name"""
-        # Check for example value first
-        if "example" in schema_prop:
-            return {
-                "method": "fixed",
-                "value": schema_prop["example"]
-            }
+        """Generate default generation method based on field type and name
         
+        For mock data generation, we prioritize random generation methods over fixed values
+        to generate diverse test data. Example values from Swagger are ignored.
+        """
         # Generate based on field name patterns
         field_lower = field_name.lower()
         
@@ -138,18 +132,20 @@ class SwaggerToConfigConverter:
             if "user" in field_lower:
                 return {
                     "method": "increment",
-                    "start": 1000000,
+                    "start": 6000001,
                     "step": 1
                 }
             elif "event" in field_lower:
+                # Use random_int for eventId to generate diverse test data
                 return {
-                    "method": "fixed",
-                    "value": 1001
+                    "method": "random_int",
+                    "min": 60000001,
+                    "max": 60002000
                 }
             elif "trace" in field_lower:
                 return {
                     "method": "increment",
-                    "start": 1000000,
+                    "start": 6000001,
                     "step": 1
                 }
             else:
@@ -184,10 +180,17 @@ class SwaggerToConfigConverter:
                     "method": "template",
                     "template": f"{field_name}_{{userId}}"
                 }
+            elif "description" in field_lower or "content" in field_lower:
+                return {
+                    "method": "random_text",
+                    "length": 100,
+                    "charset": "alphanumeric"
+                }
             else:
                 return {
-                    "method": "random_choice",
-                    "values": ["value1", "value2", "value3"]
+                    "method": "random_text",
+                    "length": 50,
+                    "charset": "alphanumeric"
                 }
         
         # Default fallback
@@ -211,13 +214,25 @@ class SwaggerToConfigConverter:
         format_type = prop_schema.get("format")
         config_type = self._map_swagger_type_to_config_type(prop_type, format_type)
         
+        # Check if this is an object with nested structure
+        has_nested_structure = False
+        if prop_type == "object":
+            has_nested_structure = (
+                "additionalProperties" in prop_schema or 
+                "properties" in prop_schema
+            )
+        
         # Build field config
         field_config = {
             "type": config_type,
             "required": prop_name in required_fields,
-            "description": prop_schema.get("description", ""),
-            "generation": self._get_default_generation_method(config_type, prop_name, prop_schema)
+            "description": prop_schema.get("description", "")
         }
+        
+        # Only add generation method for non-nested objects
+        # Nested objects (with additionalProperties or properties) should use fields instead
+        if not has_nested_structure:
+            field_config["generation"] = self._get_default_generation_method(config_type, prop_name, prop_schema)
         
         # Handle nested objects (like arguments with TypedValue)
         if prop_type == "object":
@@ -425,8 +440,9 @@ Note:
         converter.convert_all(args.output_dir)
         
         print(f"\n[INFO] You can now use these configuration files:")
-        print(f"  python3 scripts/load_test_eval.py --config scripts/mock/<filename>.mock --concurrent 10 --total 1000")
-    
+        print(f"  python3 scripts/insert_data.py --config scripts/mock/<filename>.mock --count 1000 --output scripts/out/mock_data.json")
+        print(f"  python3 scripts/load_test.py --config scripts/mock/<filename>.mock --concurrent 10 --total 1000")
+
     except Exception as e:
         print(f"[ERROR] Conversion failed: {type(e).__name__}: {e}")
         import traceback

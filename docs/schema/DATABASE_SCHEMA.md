@@ -86,6 +86,7 @@ CREATE TABLE `x` (
   `ct` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Create time, UNIX timestamp in seconds',
   `ut` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Update time, UNIX timestamp in seconds',
   PRIMARY KEY (`event_id`, `rule_id`),
+  KEY `idx_rule` (`rule_id`, `group_id`),
   KEY `idx_group` (`group_id`)
 ) DEFAULT CHARSET=utf8mb4 COMMENT='Event-rule/group relation table';
 ```

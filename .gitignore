@@ -47,3 +47,9 @@ logs/
 
 # Enviroment
 .env*
+
+# Scripts
+scripts/mock/
+!scripts/mock/README.md
+!scripts/mock/example.mock
+scripts/out/
