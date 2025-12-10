@@ -319,6 +319,72 @@ class SwaggerToConfigConverter:
         
         return field_config
     
+    def _extract_path_variables(self, path: str) -> List[str]:
+        """Extract path variable names from path (e.g., /events/{eventId}/items -> [eventId])
+        
+        Args:
+            path: Path string that may contain path variables like {eventId}
+            
+        Returns:
+            List of path variable names (without braces)
+        """
+        import re
+        pattern = r'\{(\w+)\}'
+        matches = re.findall(pattern, path)
+        return matches
+    
+    def _get_path_parameters(self, path_info: Dict[str, Any], method: str) -> Dict[str, Dict[str, Any]]:
+        """Get path parameters from Swagger path definition
+        
+        Args:
+            path_info: Swagger path info dictionary
+            method: HTTP method (get, post, put, etc.)
+            
+        Returns:
+            Dictionary mapping parameter names to their schema definitions
+        """
+        method_info = path_info.get(method.lower(), {})
+        parameters = method_info.get("parameters", [])
+        
+        # Also check path-level parameters
+        path_parameters = path_info.get("parameters", [])
+        all_parameters = path_parameters + parameters
+        
+        path_params = {}
+        for param in all_parameters:
+            param_in = param.get("in")
+            if param_in == "path":
+                param_name = param.get("name")
+                param_schema = param.get("schema", {})
+                if param_name:
+                    path_params[param_name] = param_schema
+        
+        return path_params
+    
+    def _generate_path_variable_config(self, var_name: str, param_schema: Dict[str, Any]) -> Dict[str, Any]:
+        """Generate mock generation config for a path variable
+        
+        Args:
+            var_name: Path variable name (e.g., eventId)
+            param_schema: Swagger parameter schema
+            
+        Returns:
+            Field config dictionary for path variable
+        """
+        param_type = param_schema.get("type", "string")
+        format_type = param_schema.get("format")
+        config_type = self._map_swagger_type_to_config_type(param_type, format_type)
+        
+        field_config = {
+            "type": config_type,
+            "required": True
+        }
+        
+        # Generate default generation method based on variable name and type
+        field_config["generation"] = self._get_default_generation_method(config_type, var_name, param_schema)
+        
+        return field_config
+    
     def _generate_example_argument_fields(self, arguments_schema: Dict[str, Any]) -> Dict[str, Any]:
         """Generate example argument fields for arguments object"""
         # Check if there's an example in the schema
@@ -398,6 +464,33 @@ class SwaggerToConfigConverter:
         # Get summary for filename
         summary = method_info.get("summary", f"{method.upper()} {path}")
         
+        # Extract path variables and get their definitions from Swagger
+        path_variables_list = self._extract_path_variables(path)
+        path_parameters = self._get_path_parameters(path_info, method)
+        
+        # Build path_variables config
+        path_variables_config = {}
+        for var_name in path_variables_list:
+            if var_name in path_parameters:
+                # Use Swagger parameter definition
+                param_schema = path_parameters[var_name]
+                path_variables_config[var_name] = self._generate_path_variable_config(var_name, param_schema)
+            else:
+                # Fallback: generate default config based on variable name
+                # Assume it's a LONG if it ends with "Id", otherwise STRING
+                if var_name.lower().endswith("id"):
+                    path_variables_config[var_name] = {
+                        "type": "LONG",
+                        "required": True,
+                        "generation": self._get_default_generation_method("LONG", var_name, {})
+                    }
+                else:
+                    path_variables_config[var_name] = {
+                        "type": "STRING",
+                        "required": True,
+                        "generation": self._get_default_generation_method("STRING", var_name, {})
+                    }
+        
         # Build API config
         api_config = {
             "name": f"{summary} API",
@@ -411,6 +504,10 @@ class SwaggerToConfigConverter:
             },
             "timeout": 30
         }
+        
+        # Add path_variables if any exist
+        if path_variables_config:
+            api_config["path_variables"] = path_variables_config
         
         # Build request schema
         properties = schema.get("properties", {})

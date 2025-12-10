@@ -9,6 +9,7 @@ configuration files, which is used by both mock_data.py and load_test.py.
 """
 
 import random
+import re
 import yaml
 from typing import Dict, Any, List, Optional
 from pathlib import Path
@@ -220,12 +221,96 @@ class MockDataGeneratorBase:
             
             # Check if this field should be wrapped in TypedValue structure
             # (for arguments fields)
-            if field_config.get("type") in ["INTEGER", "LONG", "DECIMAL", "BOOLEAN", "STRING", "OBJECT"]:
+            if field_config.get("isTypedValue", False) is True:
                 result[field_name] = self._generate_typed_value(field_config, value)
             else:
                 result[field_name] = value
         
         return result
+    
+    def _extract_path_variables(self, url: str) -> List[str]:
+        """Extract path variable names from URL (e.g., {eventId} -> eventId)
+        
+        Args:
+            url: URL string that may contain path variables like {eventId}
+            
+        Returns:
+            List of path variable names (without braces)
+        """
+        pattern = r'\{(\w+)\}'
+        matches = re.findall(pattern, url)
+        return matches
+    
+    def _generate_path_variables(self, context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        """Generate values for path variables based on configuration
+        
+        Args:
+            context: Optional context dictionary with pre-set field values
+            
+        Returns:
+            Dictionary mapping path variable names to their generated values
+        """
+        if self.config is None:
+            return {}
+        
+        if context is None:
+            context = {}
+        
+        api_config = self.config.get("api", {})
+        path_variables_config = api_config.get("path_variables", {})
+        
+        path_variables = {}
+        for var_name, var_config in path_variables_config.items():
+            if var_name in context:
+                # Use provided value if available
+                path_variables[var_name] = context[var_name]
+            else:
+                # Generate value based on configuration
+                value = self._generate_field_value(var_config, context)
+                path_variables[var_name] = value
+                # Add to context for template substitution
+                context[var_name] = value
+        
+        return path_variables
+    
+    def _replace_path_variables(self, url: str, path_variables: Dict[str, Any]) -> str:
+        """Replace path variables in URL with generated values
+        
+        Args:
+            url: URL string with path variables like {eventId}
+            path_variables: Dictionary mapping variable names to values
+            
+        Returns:
+            URL with path variables replaced
+        """
+        result = url
+        for var_name, var_value in path_variables.items():
+            result = result.replace(f"{{{var_name}}}", str(var_value))
+        return result
+    
+    def get_resolved_url(self, context: Optional[Dict[str, Any]] = None) -> str:
+        """Get URL with path variables replaced
+        
+        Args:
+            context: Optional context dictionary with pre-set field values
+            
+        Returns:
+            URL with path variables replaced
+        """
+        if self.config is None:
+            return ""
+        
+        api_config = self.config.get("api", {})
+        url = api_config.get("full_url", "")
+        
+        if not url:
+            return ""
+        
+        # Generate path variables
+        path_variables = self._generate_path_variables(context)
+        
+        # Replace path variables in URL
+        return self._replace_path_variables(url, path_variables)
     
     def _generate_from_schema(self, context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """Generate data from request_schema
@@ -247,6 +332,10 @@ class MockDataGeneratorBase:
         
         if context is None:
             context = {}
+        
+        # Generate path variables first and add to context
+        path_variables = self._generate_path_variables(context)
+        context.update(path_variables)
         
         result = {}
         

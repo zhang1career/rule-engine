@@ -5,7 +5,6 @@ import lab.zhang.rule.rule_engine.entity.RuleGroupEntity;
 import lab.zhang.rule.rule_engine.model.Rule;
 import lab.zhang.rule.rule_engine.model.RuleGroup;
 import lab.zhang.rule.rule_engine.pojo.dto.RuleGroupDTO;
-import lab.zhang.rule.rule_engine.pojo.qo.RuleGroupQO;
 import org.apache.commons.lang3.tuple.Pair;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
@@ -61,33 +60,6 @@ public interface RuleGroupStructMapper {
      */
     @Mapping(target = "ruleRatios", ignore = true)
     RuleGroupDTO modelToDTOInternal(RuleGroup group);
-
-    /**
-     * Convert RuleGroupQO to RuleGroup model
-     * Converts ruleRatios map to rules map, with Rule objects set to null (to be loaded separately)
-     *
-     * @param qo RuleGroupQO containing rule ratios
-     * @return RuleGroup model
-     */
-    default RuleGroup qoToModel(RuleGroupQO qo) {
-        if (qo == null) {
-            return null;
-        }
-        RuleGroup group = new RuleGroup();
-        if (qo.getRuleRatios() == null || qo.getRuleRatios().isEmpty()) {
-            group.setRules(Collections.emptyMap());
-            return group;
-        }
-        Map<Long, Pair<Rule, Integer>> rulesMap = new HashMap<>();
-        for (Map.Entry<Long, Integer> entry : qo.getRuleRatios().entrySet()) {
-            Long ruleId = entry.getKey();
-            Integer ratio = entry.getValue() != null ? entry.getValue() : 0;
-            // Rule object will be loaded separately when needed
-            rulesMap.put(ruleId, Pair.of(null, ratio));
-        }
-        group.setRules(rulesMap);
-        return group;
-    }
 
     /**
      * Convert RuleGroupEntity to RuleGroup model

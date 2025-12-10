@@ -1,6 +1,7 @@
 package lab.zhang.rule.rule_engine.validation
 
 import lab.zhang.rule.rule_engine.pojo.qo.RuleGroupQO
+import lab.zhang.rule.rule_engine.pojo.qo.RuleRatioQO
 import spock.lang.Specification
 import spock.lang.Unroll
 
@@ -26,8 +27,11 @@ class ValidRuleRatiosValidatorSpec extends Specification {
     @Unroll
     def "test ValidRuleRatios validation - valid ratios: #ratios"() {
         given: "create RuleGroupQO with valid ratios"
+        def ratioList = ratios.collect { ruleId, ratio ->
+            RuleRatioQO.builder().ruleId(ruleId).ratio(ratio).build()
+        }
         def qo = RuleGroupQO.builder()
-                .ruleRatios(ratios)
+                .ruleRatios(ratioList)
                 .build()
 
         when: "validate"
@@ -51,8 +55,11 @@ class ValidRuleRatiosValidatorSpec extends Specification {
     @Unroll
     def "test ValidRuleRatios validation - invalid ratios (sum > 100): #ratios"() {
         given: "create RuleGroupQO with invalid ratios (sum > 100)"
+        def ratioList = ratios.collect { ruleId, ratio ->
+            RuleRatioQO.builder().ruleId(ruleId).ratio(ratio).build()
+        }
         def qo = RuleGroupQO.builder()
-                .ruleRatios(ratios)
+                .ruleRatios(ratioList)
                 .build()
 
         when: "validate"
@@ -75,8 +82,11 @@ class ValidRuleRatiosValidatorSpec extends Specification {
     @Unroll
     def "test ValidRuleRatios validation - invalid ratios (ratio < 0): #ratios"() {
         given: "create RuleGroupQO with invalid ratios (ratio < 0)"
+        def ratioList = ratios.collect { ruleId, ratio ->
+            RuleRatioQO.builder().ruleId(ruleId).ratio(ratio).build()
+        }
         def qo = RuleGroupQO.builder()
-                .ruleRatios(ratios)
+                .ruleRatios(ratioList)
                 .build()
 
         when: "validate"
@@ -99,8 +109,11 @@ class ValidRuleRatiosValidatorSpec extends Specification {
     @Unroll
     def "test ValidRuleRatios validation - invalid ratios (ratio > 100): #ratios"() {
         given: "create RuleGroupQO with invalid ratios (ratio > 100)"
+        def ratioList = ratios.collect { ruleId, ratio ->
+            RuleRatioQO.builder().ruleId(ruleId).ratio(ratio).build()
+        }
         def qo = RuleGroupQO.builder()
-                .ruleRatios(ratios)
+                .ruleRatios(ratioList)
                 .build()
 
         when: "validate"
@@ -123,8 +136,11 @@ class ValidRuleRatiosValidatorSpec extends Specification {
     @Unroll
     def "test ValidRuleRatios validation - null ratio: #ratios"() {
         given: "create RuleGroupQO with null ratio"
+        def ratioList = ratios.collect { ruleId, ratio ->
+            RuleRatioQO.builder().ruleId(ruleId).ratio(ratio).build()
+        }
         def qo = RuleGroupQO.builder()
-                .ruleRatios(ratios)
+                .ruleRatios(ratioList)
                 .build()
 
         when: "validate"
@@ -145,16 +161,17 @@ class ValidRuleRatiosValidatorSpec extends Specification {
 
     def "test ValidRuleRatios validation - null ruleId"() {
         given: "create RuleGroupQO with null ruleId"
-        def ratios1 = new HashMap<Long, Integer>()
-        ratios1.put(null, 50)
+        def ratios1 = [RuleRatioQO.builder().ruleId(null).ratio(50).build()]
         
-        def ratios2 = new HashMap<Long, Integer>()
-        ratios2.put(null, 50)
-        ratios2.put(2L, 50)
+        def ratios2 = [
+            RuleRatioQO.builder().ruleId(null).ratio(50).build(),
+            RuleRatioQO.builder().ruleId(2L).ratio(50).build()
+        ]
         
-        def ratios3 = new HashMap<Long, Integer>()
-        ratios3.put(1L, 50)
-        ratios3.put(null, 50)
+        def ratios3 = [
+            RuleRatioQO.builder().ruleId(1L).ratio(50).build(),
+            RuleRatioQO.builder().ruleId(null).ratio(50).build()
+        ]
 
         when: "validate"
         def qo1 = RuleGroupQO.builder().ruleRatios(ratios1).build()
@@ -195,10 +212,10 @@ class ValidRuleRatiosValidatorSpec extends Specification {
         rulesViolations.any { it.message.contains("cannot be empty") || it.message.contains("Rules cannot be empty") }
     }
 
-    def "test ValidRuleRatios validation - empty map"() {
+    def "test ValidRuleRatios validation - empty list"() {
         given: "create RuleGroupQO with empty rules"
         def qo = RuleGroupQO.builder()
-                .ruleRatios([:])
+                .ruleRatios([])
                 .build()
 
         when: "validate"

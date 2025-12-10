@@ -588,7 +588,7 @@ public class RuleServiceImpl implements RuleService {
                 .mapToInt(entity -> entity.getExeOrder() != null ? entity.getExeOrder() : 0)
                 .max()
                 .orElse(-1);
-        if (maxExeOrder < 0 || maxExeOrder != (arrangementList.size() - 1)) {
+        if (maxExeOrder < (arrangementList.size() - 1)) {
             throw new IllegalStateException("Invalid exe_order values for eventId: " + eventId);
         }
 

@@ -336,10 +336,14 @@ def run_load_test(
     if not url and api_config.get("full_url"):
         url = api_config["full_url"]
     
+    # Try to get resolved URL (with path variables) for display
+    generator = get_data_generator(config_path)
+    display_url = generator.get_resolved_url() or url
+    
     print(f"\n{'='*60}")
     print(f"Eval API Load Test")
     print(f"{'='*60}")
-    print(f"URL: {url}")
+    print(f"URL: {display_url}")
     print(f"Concurrent: {concurrent}")
     print(f"Total Requests: {total if total > 0 else 'Unlimited'}")
     print(f"Duration: {duration}s" if duration > 0 else "")
@@ -367,6 +371,9 @@ def run_load_test(
     user_id_counter = user_id_start
     trace_id_counter = 1000000
     
+    # Get generator instance for path variable resolution
+    generator = get_data_generator(config_path)
+    
     def worker():
         """Worker thread function"""
         try:
@@ -381,7 +388,11 @@ def run_load_test(
             data = generate_test_data(local_user_id, event_id, local_trace_id, config_path)
             print(f"[DEBUG] Generated test data for userId={local_user_id}")
 
-            success, response_time, error = send_request(session, url, data)
+            # Resolve URL with path variables replaced
+            # Path variables are already generated in data, so we can use them for context
+            resolved_url = generator.get_resolved_url(context=data) or url
+
+            success, response_time, error = send_request(session, resolved_url, data)
             result.add_result(success, response_time, error)
 
             print(f"[DEBUG] Worker completed for userId={local_user_id}, success={success}")

@@ -157,7 +157,7 @@ java -jar target/rule-engine-0.7.0-SNAPSHOT.jar
 ### 4. Test Interface
 
 ```bash
-curl -X POST http://localhost:8080/rule/evalRequest \
+curl -X POST http://localhost:8080/rule/eval \
   -H "Content-Type: application/json" \
   -d '{
     "userId": 123456789,

@@ -77,7 +77,7 @@ public class RuleExecutionEngine {
         // Get execution items (rules) directly
         List<ExecutionItem> executionItemList = ruleService.getExecutionItemsByEventId(eventId != null ? eventId.intValue() : null, context);
         if (executionItemList.isEmpty()) {
-            log.warn("No execution items found for eventId: {}, returning null result", eventId);
+            log.warn("[eval] no execution items found for eventId: {}, returning null result", eventId);
             return TypedValue.nullValue();
         }
 

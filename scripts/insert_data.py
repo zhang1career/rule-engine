@@ -20,10 +20,10 @@ Usage:
     python3 scripts/mock_data.py --config scripts/mock/some.mock --count 100
     
     # Save JSON data to file (still sends requests)
-    python3 scripts/mock_data.py --config scripts/mock/some.mock --count 10 --output mock_data.json
+    python3 scripts/mock_data.py --config scripts/mock/some.mock --count 10 --output scripts/out/mock_data.json
     
     # Only generate JSON without sending requests (for testing)
-    python3 scripts/mock_data.py --config scripts/mock/some.mock --count 10 --no-request --output mock_data.json
+    python3 scripts/mock_data.py --config scripts/mock/some.mock --count 10 --no-request --output scripts/out/mock_data.json
 """
 
 import argparse
@@ -78,7 +78,11 @@ class MockDataGenerator(MockDataGeneratorBase):
     def send_request(self, data: Dict[str, Any]) -> Tuple[bool, Optional[Dict[str, Any]], Optional[str]]:
         """Send HTTP request to API endpoint with generated data"""
         api_info = self.get_api_info()
-        url = api_info.get("full_url")
+        # Use resolved URL with path variables replaced
+        url = self.get_resolved_url()
+        if not url:
+            # Fallback to original full_url if path variable resolution fails
+            url = api_info.get("full_url")
         method = api_info.get("method", "POST").upper()
         headers = api_info.get("headers", {})
         timeout = api_info.get("timeout", 30)
@@ -153,7 +157,8 @@ The JSON data is used as request payload. It's only saved to file if --output is
     try:
         generator = MockDataGenerator(args.config)
         api_info = generator.get_api_info()
-        url = api_info.get("full_url", "N/A")
+        # Show resolved URL (with path variables replaced) if available
+        url = generator.get_resolved_url() or api_info.get("full_url", "N/A")
         method = api_info.get("method", "POST")
         
         print(f"[INFO] Configuration: {args.config}")
