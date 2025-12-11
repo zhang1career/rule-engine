@@ -2,6 +2,7 @@ package lab.zhang.rule.rule_engine.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
+import lab.zhang.rule.rule_engine.cache.EventRulesCacheService;
 import lab.zhang.rule.rule_engine.config.RuleStatusConfig;
 import lab.zhang.rule.rule_engine.constant.CommonConst;
 import lab.zhang.rule.rule_engine.entity.EventEntity;
@@ -52,6 +53,9 @@ public class EventServiceImpl implements EventService {
 
     @Autowired
     private RuleStatusConfig ruleStatusConfig;
+
+    @Autowired(required = false)
+    private EventRulesCacheService eventRulesCacheService;
 
     @Override
     public List<Event> getAllEvents() {
@@ -151,11 +155,27 @@ public class EventServiceImpl implements EventService {
         // Delete event
         eventMapper.deleteById(eventId);
 
+        // Invalidate cache
+        if (eventRulesCacheService != null) {
+            eventRulesCacheService.invalidate(eventId);
+        }
+
         log.info("Event deleted: eventId={}", eventId);
     }
 
     @Override
     public List<ExecutionArrangement> getExecutionItems(@NotNull Integer eventId) {
+        // Try to get from cache first
+        if (eventRulesCacheService != null) {
+            List<ExecutionArrangement> cached = eventRulesCacheService.get(eventId);
+            if (cached != null) {
+                if (log.isDebugEnabled()) {
+                    log.debug("[cache_x] cache hit for eventId={}", eventId);
+                }
+                return cached;
+            }
+        }
+
         // Get allowed rule statuses
         Set<RuleStatusEnum> allowedStatusSet = ruleStatusConfig.getEvalAvailableRuleStatuses();
         List<Integer> allowedStatusIdList = allowedStatusSet.stream()
@@ -174,9 +194,19 @@ public class EventServiceImpl implements EventService {
             return Collections.emptyList();
         }
 
-        return entityList.stream()
+        List<ExecutionArrangement> arrangements = entityList.stream()
                 .map(executionArrangementStructMapper::entityToModel)
                 .collect(Collectors.toList());
+
+        // Put into cache
+        if (eventRulesCacheService != null) {
+            eventRulesCacheService.put(eventId, arrangements);
+            if (log.isDebugEnabled()) {
+                log.debug("[cache_x] cache put for eventId={}, size={}", eventId, arrangements.size());
+            }
+        }
+
+        return arrangements;
     }
 
     @Override
@@ -252,6 +282,11 @@ public class EventServiceImpl implements EventService {
             arrangementWrapper.eq(ExecutionArrangementEntity::getEventId, eventId)
                     .eq(ExecutionArrangementEntity::getRuleId, ruleId);
             executionArrangementMapper.delete(arrangementWrapper);
+        }
+
+        // Invalidate cache after updating execution arrangements
+        if (eventRulesCacheService != null) {
+            eventRulesCacheService.invalidate(eventId);
         }
 
         if (log.isDebugEnabled()) {

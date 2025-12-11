@@ -11,6 +11,12 @@ rule:
     # Kafka configuration
     kafka:
       topic: rule.eval.result
+  event-rules:
+    cache:
+      # Enable/disable event-rules caching
+      enabled: ${RULE_EVENT_RULES_CACHE_ENABLED:true}
+      capacity: ${RULE_EVENT_RULES_CACHE_CAPACITY:1000}
+      ttl: ${RULE_EVENT_RULES_CACHE_TTL:60}
   content:
     cache:
       # Enable/disable rule content caching
@@ -72,6 +78,16 @@ spring:
           max-idle: 8
           min-idle: 0
           max-wait: -1
+
+  # Database connection pool configuration (HikariCP)
+  datasource:
+    hikari:
+      maximum-pool-size: ${DB_POOL_MAX_SIZE:20}
+      minimum-idle: ${DB_POOL_MIN_IDLE:5}
+      connection-timeout: ${DB_POOL_CONNECTION_TIMEOUT:3000}
+      idle-timeout: ${DB_POOL_IDLE_TIMEOUT:600000}
+      max-lifetime: ${DB_POOL_MAX_LIFETIME:1800000}
+      leak-detection-threshold: ${DB_POOL_LEAK_DETECTION_THRESHOLD:60000}
 
 # MyBatis Plus configuration
 mybatis-plus:

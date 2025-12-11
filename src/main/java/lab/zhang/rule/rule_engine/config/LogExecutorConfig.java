@@ -12,7 +12,7 @@ import java.util.concurrent.Executor;
 import java.util.concurrent.ThreadPoolExecutor;
 
 /**
- * Log async executor configuration
+ * Log executor configuration
  * 
  * @author Rongjin Zhang
  */
@@ -20,7 +20,10 @@ import java.util.concurrent.ThreadPoolExecutor;
 @Configuration
 @EnableAsync
 @EnableScheduling
-public class LogAsyncExecutorConfig {
+public class LogExecutorConfig {
+
+    @Value("${rule.log.async.enabled:true}")
+    private boolean isAsyncEnabled;
 
     @Value("${rule.log.async.thread-pool-size:10}")
     private int threadPoolSize;
@@ -29,10 +32,20 @@ public class LogAsyncExecutorConfig {
     private int queueCapacity;
 
     /**
-     * Thread pool executor for async eval log writing
+     * Executor for eval log writing
+     * When isEnabled=true: returns a thread pool executor for async execution
+     * When isEnabled=false: returns a synchronous executor that runs tasks in the calling thread
+     *
+     * @return Executor instance
      */
-    @Bean(name = "logAsnycExecutor")
-    public Executor logAsnycExecutor() {
+    @Bean(name = "logExecutor")
+    public Executor logAsyncExecutor() {
+        if (!isAsyncEnabled) {
+            log.info("[init] log sync executor initialized");
+            // Return a synchronous executor that executes tasks in the calling thread
+            return Runnable::run;
+        }
+
         ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
         executor.setCorePoolSize(threadPoolSize);
         executor.setMaxPoolSize(threadPoolSize * 2);
@@ -42,7 +55,7 @@ public class LogAsyncExecutorConfig {
         executor.setWaitForTasksToCompleteOnShutdown(true);
         executor.setAwaitTerminationSeconds(60);
         executor.initialize();
-        log.info("[init] log executor initialized: corePoolSize={}, maxPoolSize={}, queueCapacity={}",
+        log.info("[init] log async executor initialized: corePoolSize={}, maxPoolSize={}, queueCapacity={}",
                 threadPoolSize, threadPoolSize * 2, queueCapacity);
         return executor;
     }

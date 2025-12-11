@@ -52,7 +52,7 @@ public class EvalServiceImpl implements EvalService {
 
         TypedValue result = ruleExecutionEngine.execute(request.getEventId(), context, trace);
 
-        saveLogAsync(request, trace);
+        saveLog(request, trace);
 
         sendMessage(request, result);
 
@@ -88,20 +88,20 @@ public class EvalServiceImpl implements EvalService {
      * @param request eval request
      * @param trace execution trace
      */
-    @Async("logAsyncExecutor")
-    public void saveLogAsync(EvalRequest request, ExecutionTrace trace) {
+    @Async("logExecutor")
+    public void saveLog(EvalRequest request, ExecutionTrace trace) {
         try {
             EvalLogEntity evalLog = buildEvalLogEntity(request, trace);
             evalLogService.addLog(evalLog);
             if (log.isDebugEnabled()) {
-                log.debug("Eval log added to batch: traceId={}, eventId={}, userId={}",
+                log.debug("[eval] eval_log added to batch: traceId={}, eventId={}, userId={}",
                         request.getTraceId(), request.getEventId(), request.getUserId());
             }
         } catch (JsonProcessingException e) {
             log.error("[eval] failed to serialize ExecutionTrace to JSON: {}", e.getMessage(), e);
         } catch (Exception e) {
             // Database write failure does not affect main flow, only log
-            log.error("[eval] failed to add eval log to batch: {}", e.getMessage(), e);
+            log.error("[eval] failed to add eval_log to batch: {}", e.getMessage(), e);
         }
     }
 

@@ -2,6 +2,7 @@ package lab.zhang.rule.rule_engine.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
+import lab.zhang.rule.rule_engine.cache.EventRulesCacheService;
 import lab.zhang.rule.rule_engine.cache.RuleContentCacheService;
 import lab.zhang.rule.rule_engine.cache.RuleSelectionCacheService;
 import lab.zhang.rule.rule_engine.constant.CommonConst;
@@ -75,6 +76,9 @@ public class RuleServiceImpl implements RuleService {
 
     @Autowired(required = false)
     private RuleContentCacheService ruleContentCacheService;
+
+    @Autowired(required = false)
+    private EventRulesCacheService eventRulesCacheService;
 
     @Value("${rule.content.cache.enabled:true}")
     private boolean ruleContentCacheEnabled;
@@ -298,6 +302,26 @@ public class RuleServiceImpl implements RuleService {
             ruleContentMapper.updateById(contentEntity);
         }
 
+        // Invalidate execution arrangement cache if rule status changed
+        // This is because rule status affects which rules are included in execution arrangements
+        if (eventRulesCacheService != null) {
+            LambdaQueryWrapper<ExecutionArrangementEntity> arrangementQuery = new LambdaQueryWrapper<>();
+            arrangementQuery.eq(ExecutionArrangementEntity::getRuleId, newRule.getId());
+            List<ExecutionArrangementEntity> arrangementList = executionArrangementMapper.selectList(arrangementQuery);
+            if (arrangementList != null && !arrangementList.isEmpty()) {
+                Set<Integer> eventIdSet = arrangementList.stream()
+                        .map(ExecutionArrangementEntity::getEventId)
+                        .filter(Objects::nonNull)
+                        .collect(Collectors.toSet());
+                for (Integer eventId : eventIdSet) {
+                    eventRulesCacheService.invalidate(eventId);
+                }
+                if (log.isDebugEnabled()) {
+                    log.debug("Invalidated execution arrangement cache for {} events after rule update", eventIdSet.size());
+                }
+            }
+        }
+
         log.info("Rule updated: ruleId={}, ruleName={}, status={}",
                 newEntity.getId(), newEntity.getName(), newRule.getRuleStatus());
     }
@@ -328,10 +352,31 @@ public class RuleServiceImpl implements RuleService {
         // Delete rule entity
         ruleMapper.deleteById(ruleId);
 
+        // Get all event IDs associated with this rule before deleting
+        LambdaQueryWrapper<ExecutionArrangementEntity> arrangementQuery = new LambdaQueryWrapper<>();
+        arrangementQuery.eq(ExecutionArrangementEntity::getRuleId, ruleId);
+        List<ExecutionArrangementEntity> arrangementList = executionArrangementMapper.selectList(arrangementQuery);
+        Set<Integer> eventIdSet = arrangementList != null
+                ? arrangementList.stream()
+                .map(ExecutionArrangementEntity::getEventId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet())
+                : Collections.emptySet();
+
         // Delete execution event relations for this rule
         LambdaQueryWrapper<ExecutionArrangementEntity> arrangementWrapper = new LambdaQueryWrapper<>();
         arrangementWrapper.eq(ExecutionArrangementEntity::getRuleId, ruleId);
         executionArrangementMapper.delete(arrangementWrapper);
+
+        // Invalidate cache for all affected events
+        if (eventRulesCacheService != null && !eventIdSet.isEmpty()) {
+            for (Integer eventId : eventIdSet) {
+                eventRulesCacheService.invalidate(eventId);
+            }
+            if (log.isDebugEnabled()) {
+                log.debug("Invalidated execution arrangement cache for {} events after rule deletion", eventIdSet.size());
+            }
+        }
 
         log.info("Rule deleted: ruleId={}, ruleName={}", ruleId, rule.getName());
     }
