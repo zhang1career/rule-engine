@@ -34,6 +34,10 @@ rule:
       ttl: ${RULE_EVAL_CACHE_TTL:60}
       key:
         length: ${RULE_EVAL_CACHE_KEY_LENGTH:32}
+    reactive:
+      # Enable reactive non-blocking eval endpoint
+      # Endpoint: POST /api/eval/reactive
+      enabled: ${RULE_EVAL_REACTIVE_ENABLED:true}
   cache:
     warmup:
       # Enable/disable cache warmup on startup

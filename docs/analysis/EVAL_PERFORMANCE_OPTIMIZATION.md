@@ -155,21 +155,19 @@ public ObjectMapper optimizedObjectMapper() {
 - On application startup, load top N events' execution arrangements
 - Pre-load frequently used rules
 
-#### 3.2 Parallel Rule Execution (if applicable)
-**Action**: Execute independent rules in parallel
+#### 3.2 Parallel Rule Execution
+**Status**: ❌ **Not Recommended - Deferred**
 
-**Benefits**:
-- Reduce total execution time for multi-rule scenarios
-- Improve throughput
+**Reason**:
+- Rules must execute sequentially based on `exe_order` field
+- Each rule execution result is stored in context for subsequent rules to use
+- Early termination mechanism (`shouldBreakExecution`) requires sequential execution
+- Parallel execution would break the execution flow and context dependency chain
+- Implementation complexity would be very high with minimal benefit
 
-**Note**: Only if rules are truly independent (no dependencies)
-
-**Implementation**:
-```java
-List<CompletableFuture<TypedValue>> futures = executionItemList.stream()
-    .map(item -> CompletableFuture.supplyAsync(() -> executeRule(...), executor))
-    .collect(Collectors.toList());
-```
+**Alternative Consideration**:
+- Parallel processing at request level (async non-blocking interface) is a better approach
+- See section 3.5 for async non-blocking interface implementation
 
 #### 3.3 Response Compression
 **Action**: Enable HTTP response compression
@@ -198,6 +196,74 @@ server:
 -XX:+ParallelRefProcEnabled
 -Xms2g -Xmx4g
 ```
+
+#### 3.5 Async Non-blocking Interface
+**Action**: Implement async non-blocking HTTP interface for eval requests
+
+**Benefits**:
+- Improve server throughput by handling more concurrent requests
+- Better resource utilization (thread pool efficiency)
+- Reduce thread blocking, allowing more requests to be processed simultaneously
+- Expected QPS improvement: 50-200% (depending on I/O wait time)
+
+**Feasibility Analysis**:
+✅ **Highly Feasible** - This is a better alternative to parallel rule execution
+
+**Why it works**:
+- Each `/api/eval` request is independent
+- No shared state between requests
+- Rules within a request still execute sequentially (unchanged)
+- Only the request handling becomes async, not rule execution
+
+**Implementation Options**:
+
+**Option 1: Spring WebFlux (Reactive)**
+- Use `Mono`/`Flux` for reactive programming
+- Requires refactoring to reactive stack
+- Better for high concurrency scenarios
+
+**Option 2: CompletableFuture (Async Servlet)**
+- Use `@Async` with `CompletableFuture` return type
+- Minimal code changes
+- Works with existing Spring MVC stack
+
+**Option 3: DeferredResult (Spring MVC)**
+- Use `DeferredResult` for async response
+- Good for long-running operations
+- Requires manual thread management
+
+**Recommended Implementation (Option 2 - CompletableFuture)**:
+```java
+@PostMapping("/async")
+public CompletableFuture<ResponseEntity<EvalResultDTO>> evalAsync(
+        @RequestBody EvalRequestQO qo) {
+    return CompletableFuture.supplyAsync(() -> {
+        EvalRequest request = evalStructMapper.qoToModel(qo);
+        EvalResult evalResult = evalService.eval(request);
+        return ResponseEntity.ok(
+            new EvalResultDTO(evalResult.getResult(), evalResult.getBriefSteps())
+        );
+    }, evalExecutor);
+}
+```
+
+**Configuration**:
+- Create dedicated thread pool for eval requests
+- Configure pool size based on expected load
+- Use bounded queue to prevent memory issues
+
+**Trade-offs**:
+- ✅ Better throughput for concurrent requests
+- ✅ Better resource utilization
+- ⚠️ Slightly more complex error handling
+- ⚠️ Client needs to handle async responses (or use sync wrapper)
+
+**Migration Strategy**:
+1. Keep existing `/api/eval` endpoint (synchronous)
+2. Add new `/api/eval/async` endpoint (asynchronous)
+3. Monitor usage and performance
+4. Gradually migrate clients to async endpoint
+5. Eventually deprecate sync endpoint if needed
 
 ### Priority 4: Monitoring and Profiling
 
@@ -241,7 +307,7 @@ server:
    - JVM tuning
 
 4. **Long-term** (Month 3+):
-   - Parallel rule execution (if applicable)
+   - Async non-blocking interface (see ASYNC_NON_BLOCKING_EVAL.md)
    - Response compression
    - Advanced profiling
 
