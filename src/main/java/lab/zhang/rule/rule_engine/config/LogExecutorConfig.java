@@ -2,6 +2,7 @@ package lab.zhang.rule.rule_engine.config;
 
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.scheduling.annotation.EnableAsync;
@@ -22,9 +23,6 @@ import java.util.concurrent.ThreadPoolExecutor;
 @EnableScheduling
 public class LogExecutorConfig {
 
-    @Value("${rule.log.async.enabled:true}")
-    private boolean isAsyncEnabled;
-
     @Value("${rule.log.async.thread-pool-size:10}")
     private int threadPoolSize;
 
@@ -32,20 +30,14 @@ public class LogExecutorConfig {
     private int queueCapacity;
 
     /**
-     * Executor for eval log writing
-     * When isEnabled=true: returns a thread pool executor for async execution
-     * When isEnabled=false: returns a synchronous executor that runs tasks in the calling thread
+     * Async executor for eval log writing
+     * Only created when rule.log.async.enabled=true (default)
      *
-     * @return Executor instance
+     * @return ThreadPoolTaskExecutor instance for async execution
      */
     @Bean(name = "logExecutor")
+    @ConditionalOnProperty(name = "rule.log.async.enabled", havingValue = "true", matchIfMissing = true)
     public Executor logAsyncExecutor() {
-        if (!isAsyncEnabled) {
-            log.info("[init] log sync executor initialized");
-            // Return a synchronous executor that executes tasks in the calling thread
-            return Runnable::run;
-        }
-
         ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
         executor.setCorePoolSize(threadPoolSize);
         executor.setMaxPoolSize(threadPoolSize * 2);
@@ -58,6 +50,21 @@ public class LogExecutorConfig {
         log.info("[init] log async executor initialized: corePoolSize={}, maxPoolSize={}, queueCapacity={}",
                 threadPoolSize, threadPoolSize * 2, queueCapacity);
         return executor;
+    }
+
+    /**
+     * Synchronous executor for eval log writing
+     * Only created when rule.log.async.enabled=false
+     * This executor executes tasks synchronously in the calling thread
+     *
+     * @return Synchronous Executor instance
+     */
+    @Bean(name = "logExecutor")
+    @ConditionalOnProperty(name = "rule.log.async.enabled", havingValue = "false")
+    public Executor logSyncExecutor() {
+        log.info("[init] log sync executor initialized (async disabled)");
+        // Return a synchronous executor that executes tasks in the calling thread
+        return Runnable::run;
     }
 }
 

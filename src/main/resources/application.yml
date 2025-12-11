@@ -2,6 +2,13 @@ server:
   port: 8080
   servlet:
     context-path: /
+  compression:
+    # Enable HTTP response compression
+    enabled: ${SERVER_COMPRESSION_ENABLED:true}
+    # MIME types to compress
+    mime-types: ${SERVER_COMPRESSION_MIME_TYPES:application/json,application/xml,text/html,text/xml,text/plain}
+    # Minimum response size to trigger compression (bytes)
+    min-response-size: ${SERVER_COMPRESSION_MIN_RESPONSE_SIZE:1024}
 
 # Rule engine configuration
 rule:
@@ -27,6 +34,14 @@ rule:
       ttl: ${RULE_EVAL_CACHE_TTL:60}
       key:
         length: ${RULE_EVAL_CACHE_KEY_LENGTH:32}
+  cache:
+    warmup:
+      # Enable/disable cache warmup on startup
+      enabled: ${RULE_CACHE_WARMUP_ENABLED:true}
+      # Maximum number of events to warm up
+      event-limit: ${RULE_CACHE_WARMUP_EVENT_LIMIT:100}
+      # Maximum number of rules to warm up
+      rule-limit: ${RULE_CACHE_WARMUP_RULE_LIMIT:1000}
   log:
     async:
       # Enable async log writing
