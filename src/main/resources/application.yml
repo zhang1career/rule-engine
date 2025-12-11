@@ -21,6 +21,21 @@ rule:
       ttl: ${RULE_EVAL_CACHE_TTL:60}
       key:
         length: ${RULE_EVAL_CACHE_KEY_LENGTH:32}
+  log:
+    async:
+      # Enable async log writing
+      enabled: ${RULE_LOG_ASYNC_ENABLED:true}
+      # Thread pool size for async log writing
+      thread-pool-size: ${RULE_LOG_ASYNC_THREAD_POOL_SIZE:10}
+      # Queue capacity for async log writing
+      queue-capacity: ${RULE_LOG_ASYNC_QUEUE_CAPACITY:1000}
+    batch:
+      # Enable batch log insertion
+      enabled: ${RULE_LOG_BATCH_ENABLED:true}
+      # Batch size for log insertion
+      batch-size: ${RULE_LOG_BATCH_SIZE:100}
+      # Flush interval in milliseconds
+      flush-interval-ms: ${RULE_LOG_BATCH_FLUSH_INTERVAL_MS:1000}
 
 # Spring Boot configuration
 spring:

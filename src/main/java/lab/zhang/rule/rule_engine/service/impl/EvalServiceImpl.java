@@ -8,15 +8,16 @@ import lab.zhang.rule.rule_engine.engine.ExecutionTrace;
 import lab.zhang.rule.rule_engine.engine.RuleExecutionEngine;
 import lab.zhang.rule.rule_engine.entity.EvalLogEntity;
 import lab.zhang.rule.rule_engine.enums.ValueTypeEnum;
-import lab.zhang.rule.rule_engine.mapper.EvalLogMapper;
 import lab.zhang.rule.rule_engine.model.EvalRequest;
 import lab.zhang.rule.rule_engine.model.EvalResult;
 import lab.zhang.rule.rule_engine.model.RuleExecutionContext;
+import lab.zhang.rule.rule_engine.service.EvalLogService;
 import lab.zhang.rule.rule_engine.service.EvalService;
 import lab.zhang.rule.rule_engine.service.KafkaService;
 import lab.zhang.rule.rule_engine.util.HashUtil;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
 /**
@@ -35,7 +36,7 @@ public class EvalServiceImpl implements EvalService {
     private ObjectMapper objectMapper;
 
     @Autowired
-    private EvalLogMapper evalLogMapper;
+    private EvalLogService evalLogService;
 
     @Autowired
     private KafkaService kafkaService;
@@ -43,19 +44,15 @@ public class EvalServiceImpl implements EvalService {
 
     @Override
     public EvalResult eval(EvalRequest request) {
-        log.info("Eval request received: userId={}, eventId={}, arguments={}, traceId={}",
-                request.getUserId(), request.getEventId(), request.getArguments(), request.getTraceId());
-
         ExecutionTrace trace = new ExecutionTrace(request);
-
         RuleExecutionContext context = buildContext(request);
 
         extendArguments(request, context);
-        log.info("Extended arguments: {}", context.getArguments());
+        log.info("[eval] extended arguments={}", context.getArguments());
 
         TypedValue result = ruleExecutionEngine.execute(request.getEventId(), context, trace);
 
-        saveLog(request, trace);
+        saveLogAsync(request, trace);
 
         sendMessage(request, result);
 
@@ -84,36 +81,58 @@ public class EvalServiceImpl implements EvalService {
         }
     }
 
-    private void saveLog(EvalRequest request, ExecutionTrace trace) {
-        // Write ExecutionTrace to database
+    /**
+     * Save eval log asynchronously using batch service
+     * This method is called asynchronously to avoid blocking the main execution flow
+     *
+     * @param request eval request
+     * @param trace execution trace
+     */
+    @Async("logAsyncExecutor")
+    public void saveLogAsync(EvalRequest request, ExecutionTrace trace) {
         try {
-            EvalLogEntity evalLog = new EvalLogEntity();
-            evalLog.setTraceId(request.getTraceId());
-            evalLog.setEventId(request.getEventId());
-            evalLog.setUserId(request.getUserId());
-
-            // Serialize arguments to JSON string
-            if (trace.getArguments() != null) {
-                String argumentsJson = objectMapper.writeValueAsString(trace.getArguments());
-                evalLog.setArguments(argumentsJson);
+            EvalLogEntity evalLog = buildEvalLogEntity(request, trace);
+            evalLogService.addLog(evalLog);
+            if (log.isDebugEnabled()) {
+                log.debug("Eval log added to batch: traceId={}, eventId={}, userId={}",
+                        request.getTraceId(), request.getEventId(), request.getUserId());
             }
-
-            // Serialize steps to JSON string
-            if (trace.getSteps() != null) {
-                String stepsJson = objectMapper.writeValueAsString(trace.getSteps());
-                evalLog.setSteps(stepsJson);
-            }
-
-            evalLog.setTimeOnCreate();
-            evalLogMapper.insert(evalLog);
-            log.info("Eval log saved to database: traceId={}, eventId={}, userId={}",
-                    request.getTraceId(), request.getEventId(), request.getUserId());
         } catch (JsonProcessingException e) {
-            log.error("Failed to serialize ExecutionTrace to JSON: {}", e.getMessage(), e);
+            log.error("[eval] failed to serialize ExecutionTrace to JSON: {}", e.getMessage(), e);
         } catch (Exception e) {
             // Database write failure does not affect main flow, only log
-            log.error("Failed to save eval log to database: {}", e.getMessage(), e);
+            log.error("[eval] failed to add eval log to batch: {}", e.getMessage(), e);
         }
+    }
+
+    /**
+     * Build EvalLogEntity from request and trace
+     *
+     * @param request eval request
+     * @param trace execution trace
+     * @return EvalLogEntity
+     * @throws JsonProcessingException if JSON serialization fails
+     */
+    private EvalLogEntity buildEvalLogEntity(EvalRequest request, ExecutionTrace trace) throws JsonProcessingException {
+        EvalLogEntity evalLog = new EvalLogEntity();
+        evalLog.setTraceId(request.getTraceId());
+        evalLog.setEventId(request.getEventId());
+        evalLog.setUserId(request.getUserId());
+
+        // Serialize arguments to JSON string
+        if (trace.getArguments() != null) {
+            String argumentsJson = objectMapper.writeValueAsString(trace.getArguments());
+            evalLog.setArguments(argumentsJson);
+        }
+
+        // Serialize steps to JSON string
+        if (trace.getSteps() != null) {
+            String stepsJson = objectMapper.writeValueAsString(trace.getSteps());
+            evalLog.setSteps(stepsJson);
+        }
+
+        evalLog.setTimeOnCreate();
+        return evalLog;
     }
 
     private void sendMessage(EvalRequest request, TypedValue result) {

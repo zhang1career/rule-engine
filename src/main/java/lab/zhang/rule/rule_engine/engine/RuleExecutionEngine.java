@@ -8,7 +8,6 @@ import lab.zhang.rule.rule_engine.enums.ValueTypeEnum;
 import lab.zhang.rule.rule_engine.executor.RuleExecutor;
 import lab.zhang.rule.rule_engine.model.Rule;
 import lab.zhang.rule.rule_engine.model.RuleExecutionContext;
-import lab.zhang.rule.rule_engine.service.RuleGroupService;
 import lab.zhang.rule.rule_engine.service.RuleService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -31,10 +30,6 @@ public class RuleExecutionEngine {
     @Autowired
     @Lazy
     private RuleService ruleService;
-
-    @Autowired
-    @Lazy
-    private RuleGroupService ruleGroupService;
 
     @Autowired
     private EvalCacheService evalCacheService;
@@ -71,8 +66,10 @@ public class RuleExecutionEngine {
      * @return execution result
      */
     public TypedValue execute(Long eventId, RuleExecutionContext context, ExecutionTrace trace) {
-        log.info("[eval] Starting rule execution: eventId={}, userId={}, traceId={}",
-                eventId, context.getUserId(), context.getTraceId());
+        if (log.isDebugEnabled()) {
+            log.debug("[eval] execution param: eventId={}, userId={}, traceId={}",
+                    eventId, context.getUserId(), context.getTraceId());
+        }
 
         // Get execution items (rules) directly
         List<ExecutionItem> executionItemList = ruleService.getExecutionItemsByEventId(eventId != null ? eventId.intValue() : null, context);
@@ -87,7 +84,7 @@ public class RuleExecutionEngine {
         for (ExecutionItem item : executionItemList) {
             Rule ruleToExecute = item.getRule();
             if (ruleToExecute == null) {
-                log.warn("Skipping execution item with null rule: item={}",  item);
+                log.warn("[eval] skipping execution item with null rule: item={}",  item);
                 continue;
             }
 
@@ -102,7 +99,7 @@ public class RuleExecutionEngine {
                 context.putArgument("lastResult", lastResult);
                 context.putArgument("rule:" + ruleToExecute.getId() + ":result", lastResult);
                 if (log.isDebugEnabled()) {
-                    log.debug("Rule executed: ruleId={}, result={}", ruleToExecute.getId(), lastResult);
+                    log.debug("[eval] rule executed: ruleId={}, result={}", ruleToExecute.getId(), lastResult);
                 }
 
                 // Record execution step (only executed rules are recorded)
@@ -112,11 +109,11 @@ public class RuleExecutionEngine {
                 // Determine whether to break early based on rule's internal logic
                 boolean breakEarly = shouldBreakExecution(ruleToExecute, lastResult);
                 if (breakEarly) {
-                    log.info("Breaking execution after rule: ruleId={}", ruleToExecute.getId());
+                    log.info("[eval] break execution after rule: ruleId={}", ruleToExecute.getId());
                     break;
                 }
             } catch (Exception e) {
-                log.error("Rule execution failed: ruleId={}, error={}", ruleToExecute.getId(), e.getMessage(), e);
+                log.error("[eval] execution failed: ruleId={}, error={}", ruleToExecute.getId(), e.getMessage(), e);
                 // Record execution step even if execution failed
                 step.setErrmsg(e.getMessage());
                 trace.addStep(step);
@@ -125,11 +122,13 @@ public class RuleExecutionEngine {
         }
 
         if (lastResult == null) {
-            log.warn("No rule executed, returning null result");
+            log.warn("[eval] no rule executed");
             lastResult = TypedValue.nullValue();
         }
 
-        log.info("Rule execution completed: eventId={}, result={}", eventId, lastResult);
+        if (log.isDebugEnabled()) {
+            log.debug("[eval] execution completed: eventId={}, result={}", eventId, lastResult);
+        }
         return lastResult;
     }
 

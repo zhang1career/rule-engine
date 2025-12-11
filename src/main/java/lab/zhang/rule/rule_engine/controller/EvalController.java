@@ -27,7 +27,7 @@ public class EvalController {
 
     @Autowired
     private EvalService evalService;
-    
+
     @Autowired
     private EvalStructMapper evalStructMapper;
 
@@ -40,8 +40,7 @@ public class EvalController {
     @PostMapping
     public ResponseEntity<EvalResultDTO> eval(
             @RequestBody EvalRequestQO qo) {
-        log.info("Received eval request: userId={}, eventId={}, traceId={}",
-                qo.getUserId(), qo.getEventId(), qo.getTraceId());
+        log.info("[eval] eval param: userId={}, eventId={}, traceId={}", qo.getUserId(), qo.getEventId(), qo.getTraceId());
 
         EvalRequest request = evalStructMapper.qoToModel(qo);
         EvalResult evalResult = evalService.eval(request);

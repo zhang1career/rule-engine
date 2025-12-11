@@ -45,7 +45,7 @@
 
 **Implementation**:
 ```java
-@Async("evalLogExecutor")
+@Async("logAsyncExecutor")
 public void saveLogAsync(EvalRequest request, ExecutionTrace trace) {
     // Existing saveLog logic
 }

@@ -5,7 +5,6 @@ import lab.zhang.rule.rule_engine.constant.CacheConst;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
-import org.springframework.data.redis.core.HashOperations;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 
@@ -41,14 +40,14 @@ public class RuleSelectionCacheServiceRedisImpl implements RuleSelectionCacheSer
         }
         String cacheKey = buildCacheKey(userId, eventId);
         try {
-            HashOperations<String, Long, Long> hashOps = redisTemplate.opsForHash();
-            Long ruleId = hashOps.get(cacheKey, groupId);
-            if (ruleId == null) {
+            Object valueObj = redisTemplate.opsForHash().get(cacheKey, String.valueOf(groupId));
+            if (valueObj == null) {
                 if (log.isDebugEnabled()) {
                     log.debug("[cache_sel] cache miss: key={}, groupId={}", cacheKey, groupId);
                 }
                 return null;
             }
+            Long ruleId = Long.valueOf(valueObj.toString());
             if (log.isDebugEnabled()) {
                 log.debug("[cache_sel] cache hit: key={}, groupId={}, ruleId={}", cacheKey, groupId, ruleId);
             }
@@ -67,7 +66,7 @@ public class RuleSelectionCacheServiceRedisImpl implements RuleSelectionCacheSer
         }
         String cacheKey = buildCacheKey(userId, eventId);
         try {
-            redisTemplate.opsForHash().put(cacheKey, groupId, ruleId);
+            redisTemplate.opsForHash().put(cacheKey, String.valueOf(groupId), ruleId);
             redisTemplate.expire(cacheKey, CacheConst.SELECTED_RULE_TTL, TimeUnit.SECONDS);
             if (log.isDebugEnabled()) {
                 log.debug("[cache_sel] cache put: key={}, groupId={}, ruleId={}, expireSeconds={}", cacheKey, groupId, ruleId, CacheConst.SELECTED_RULE_TTL);
