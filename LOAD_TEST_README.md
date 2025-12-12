@@ -263,7 +263,22 @@ python3 scripts/insert_data.py --config scripts/mock/update_rule_group.mock --co
 
 # 3. 测试
 
-查看[mock文件](scripts/mock/execute_rule_evaluation.mock)，确认arguments中的字段都是isTypedValue=true.
+查看[mock文件](scripts/mock/execute_rule_evaluation.mock)，确认:
+- `headers_generation`中有`X-Request-Id`字段的生成规则.
+- `arguments`中的字段都是`TypedValue`结构：`isTypedValue=true`.
+- 调用异步接口：`full_url: http://localhost:8080/api/eval/reactive`
+
+```yaml
+api:
+  headers_generation:
+    X-Request-Id:
+      type: INTEGER
+      required: true
+      generation:
+        method: random_int
+        min: 10000000000000000000
+        max: 18446744073709551615
+```
 
 生成测试数据：
 
