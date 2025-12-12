@@ -13,27 +13,6 @@ rule:
       key:
         length: ${RULE_EVAL_CACHE_KEY_LENGTH:32}
 
-spring:
-  datasource:
-    url: jdbc:mysql://127.0.0.1:3306/rule_engine_test?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai&createDatabaseIfNotExist=true&allowMultiQueries=true
-    username: zhang
-    password: 123456
-    driver-class-name: com.mysql.cj.jdbc.Driver
-
-  # Redis configuration for tests
-  data:
-    redis:
-      host: localhost
-      port: 6379
-      database: 1  # Use database 1 for tests to avoid conflicts with main app
-      timeout: 3000
-      lettuce:
-        pool:
-          max-active: 8
-          max-idle: 8
-          min-idle: 0
-          max-wait: -1
-
 # MyBatis Plus configuration for tests
 mybatis-plus:
   configuration:

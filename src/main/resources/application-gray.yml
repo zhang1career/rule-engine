@@ -1,23 +1,7 @@
 # Gray environment configuration (pre-production/staging)
-
 rule:
   engine:
     environment: GRAY
-
-spring:
-  datasource:
-    url: jdbc:mysql://${MYSQL_HOST}:${MYSQL_PORT}/rule_engine?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai&allowMultiQueries=true
-    username: ${MYSQL_USER}
-    password: ${MYSQL_PASS}
-    driver-class-name: com.mysql.cj.jdbc.Driver
-
-  # Redis configuration for gray environment
-  data:
-    redis:
-      host: ${REDIS_HOST}
-      port: ${REDIS_PORT}
-      password: ${REDIS_PASSWORD:}
-      database: ${REDIS_DB:0}
 
 # Gray environment logging configuration
 logging:
@@ -31,5 +15,5 @@ logging:
     org.springframework.web: INFO
   # Gray environment log files
   file:
-    name: /var/log/rule-engine/rule-engine.log
+    name: /var/log/rule_engine/app.log
 

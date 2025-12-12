@@ -13,8 +13,8 @@ server:
 # Rule engine configuration
 rule:
   engine:
-    # Environment type: DEV (development), TEST (test), GRAY (gray) or PRODUCTION (production)
-    environment: TEST
+    # Environment type: TEST, GRAY or PRODUCTION
+    environment: ${RULE_ENGINE_ENV:GRAY}
     # Kafka configuration
     kafka:
       topic: rule.eval.result
@@ -75,23 +75,12 @@ spring:
     exclude:
       - org.springframework.boot.autoconfigure.amqp.RabbitAutoConfiguration
 
-  # Redis configuration
-  data:
-    redis:
-      host: localhost
-      port: 6379
-      password: # Optional, set if Redis requires password
-      database: 0
-      timeout: 3000
-      lettuce:
-        pool:
-          max-active: 8
-          max-idle: 8
-          min-idle: 0
-          max-wait: -1
-
   # Database connection pool configuration (HikariCP)
   datasource:
+    url: jdbc:mysql://${MYSQL_HOST}:${MYSQL_PORT}/rule_engine?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai&allowMultiQueries=true
+    username: ${MYSQL_USER}
+    password: ${MYSQL_PASS}
+    driver-class-name: com.mysql.cj.jdbc.Driver
     hikari:
       maximum-pool-size: ${DB_POOL_MAX_SIZE:20}
       minimum-idle: ${DB_POOL_MIN_IDLE:5}
@@ -100,9 +89,24 @@ spring:
       max-lifetime: ${DB_POOL_MAX_LIFETIME:1800000}
       leak-detection-threshold: ${DB_POOL_LEAK_DETECTION_THRESHOLD:60000}
 
+  # Redis configuration for gray environment
+  data:
+    redis:
+      host: ${REDIS_HOST}
+      port: ${REDIS_PORT}
+      password: ${REDIS_PASSWORD:}
+      database: ${REDIS_DB:0}
+      timeout: 3000
+      lettuce:
+        pool:
+          max-active: 8
+          max-idle: 8
+          min-idle: 0
+          max-wait: -1
+
   # Kafka configuration
   kafka:
-    bootstrap-servers: localhost:9093
+    bootstrap-servers: ${KAFKA_HOST}:${KAFKA_PORT:9093}
     producer:
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
       value-serializer: org.apache.kafka.common.serialization.StringSerializer
@@ -134,7 +138,7 @@ logging:
     console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{0} - %msg%n"
   # File output configuration
   file:
-    name: logs/rule-engine.log
+    name: /var/log/rule_engine/app.log
   # Logback configuration (if using logback-spring.xml, this will be overridden)
   logback:
     rollingpolicy:

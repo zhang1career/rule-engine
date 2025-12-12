@@ -27,7 +27,7 @@
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
 
         <bcprov-jdk18on.version>1.78.1</bcprov-jdk18on.version>
-        <caffeine.version>3.1.8</caffeine.version>
+        <caffeine.version>2.9.3</caffeine.version>
         <commons-lang3.version>3.18.0</commons-lang3.version>
         <eclipse-collections.version>11.1.0</eclipse-collections.version>
         <groovy.version>3.0.17</groovy.version>

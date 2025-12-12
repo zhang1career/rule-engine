@@ -17,6 +17,7 @@
 
 # Maven files
 target/
+!target/rule_engine-*.jar
 .mvn/
 mvnw
 mvnw.cmd

@@ -4,7 +4,7 @@
     <include resource="org/springframework/boot/logging/logback/defaults.xml"/>
 
     <!-- Define log directory property -->
-    <property name="LOG_DIR" value="logs"/>
+    <property name="LOG_DIR" value="${LOG_DIR:-/var/log/rule_engine}"/>
     <property name="MAX_FILE_SIZE" value="10MB"/>
     <property name="MAX_HISTORY" value="7"/>
     <property name="TOTAL_SIZE_CAP" value="1GB"/>
