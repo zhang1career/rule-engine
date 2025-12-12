@@ -2,7 +2,6 @@ package lab.zhang.rule.rule_engine.controller
 
 
 import lab.zhang.rule.rule_engine.model.Event
-import lab.zhang.rule.rule_engine.entity.ExecutionArrangementEntity
 import lab.zhang.rule.rule_engine.model.ExecutionArrangement
 import lab.zhang.rule.rule_engine.pojo.dto.EventDTO
 import lab.zhang.rule.rule_engine.pojo.dto.ExecutionArrangementDTO
@@ -37,7 +36,7 @@ class EventControllerSpec extends Specification {
         def eventEntities = []
         eventCount.times { i ->
             def entity = new Event()
-            entity.setId(10000001L + i)
+            entity.setId(10000001 + i)
             entity.setName("Event ${i + 1}")
             entity.setDescription("Description ${i + 1}")
             eventEntities.add(entity)
@@ -47,7 +46,7 @@ class EventControllerSpec extends Specification {
         def eventDTOs = []
         eventCount.times { i ->
             def dto = EventDTO.builder()
-                    .id(10000001L + i)
+                    .id(10000001 + i)
                     .name("Event ${i + 1}")
                     .description("Description ${i + 1}")
                     .build()
@@ -74,7 +73,7 @@ class EventControllerSpec extends Specification {
     def "test getEvent - eventId: #eventId"() {
         given: "prepare event entity"
         def event = new Event()
-        event.setId(eventId)
+        event.setId(eventId as Integer)
         event.setName("Test Event")
         event.setDescription("Test Description")
         
@@ -96,7 +95,7 @@ class EventControllerSpec extends Specification {
         response.body.data.id == eventId
 
         where:
-        eventId << [10000001L, 10000002L]
+        eventId << [10000001, 10000002]
     }
 
     @Unroll
@@ -109,27 +108,30 @@ class EventControllerSpec extends Specification {
         thrown(IllegalArgumentException)
 
         where:
-        eventId << [99999999L, 88888888L]
+        eventId << [99999999, 88888888]
     }
 
     @Unroll
     def "test createEvent - id: #id, name: #name, description: #description"() {
         given: "prepare event DTO"
         def eventQO = EventQO.builder()
-                .id(id)
+                .id(id as Integer)
                 .name(name)
                 .description(description)
                 .build()
 
         and: "prepare event entity"
         def event = new Event()
-        event.setId(id)
+        event.setId(id as Integer)
         event.setName(name != null ? name.trim() : "")
         event.setDescription(description != null ? description.trim() : "")
 
+        and: "mock qoToModel"
+        1 * eventStructMapper.qoToModel(eventQO) >> event
+
         and: "prepare response DTO"
         def responseDTO = EventDTO.builder()
-                .id(id)
+                .id(id as Integer)
                 .name(name != null ? name.trim() : "")
                 .description(description != null ? description.trim() : "")
                 .build()
@@ -138,7 +140,13 @@ class EventControllerSpec extends Specification {
         def response = controller.createEvent(eventQO)
 
         then: "should create event successfully"
-        1 * eventService.createEvent(id, name, description) >> event
+        1 * eventService.createEvent(_) >> { Event eventParam ->
+            assert eventParam != null
+            assert eventParam.id == id
+            assert eventParam.name == (name != null ? name.trim() : "")
+            assert eventParam.description == (description != null ? description.trim() : "")
+            event
+        }
         1 * eventStructMapper.entityToDTO(event) >> responseDTO
         response.statusCode == HttpStatus.OK
         response.body.code == 0
@@ -148,9 +156,9 @@ class EventControllerSpec extends Specification {
 
         where:
         id          | name          | description
-        10000001L   | "Event 1"     | "Description 1"
-        10000002L   | "Event 2"     | null
-        10000003L   | "  Event 3  " | "  Description 3  "
+        10000001    | "Event 1"     | "Description 1"
+        10000002    | "Event 2"     | null
+        10000003    | "  Event 3  " | "  Description 3  "
     }
 
     // Note: Validation tests are better suited for integration tests with Spring context
@@ -161,22 +169,31 @@ class EventControllerSpec extends Specification {
     def "test createEvent - duplicate id - id: #id"() {
         given: "prepare event DTO"
         def eventQO = EventQO.builder()
-                .id(id)
+                .id(id as Integer)
                 .name("Event 1")
                 .description("Description")
                 .build()
+
+        and: "mock qoToModel"
+        def event = Event.builder()
+                .id(id as Integer)
+                .name("Event 1")
+                .description("Description")
+                .build()
+        1 * eventStructMapper.qoToModel(eventQO) >> event
 
         when: "create event with duplicate id"
         controller.createEvent(eventQO)
 
         then: "should throw IllegalArgumentException"
-        1 * eventService.createEvent(id, "Event 1", "Description") >> {
-            throw new IllegalArgumentException("Event with ID ${id} already exists")
+        1 * eventService.createEvent(_) >> { Event eventParam ->
+            assert eventParam != null
+            throw new IllegalArgumentException("Event with ID ${eventParam.id} already exists")
         }
         thrown(IllegalArgumentException)
 
         where:
-        id << [10000001L, 10000002L]
+        id << [10000001, 10000002]
     }
 
     @Unroll
@@ -190,7 +207,7 @@ class EventControllerSpec extends Specification {
 
         and: "prepare updated event entity"
         def updatedEntity = new Event()
-        updatedEntity.setId(eventId)
+        updatedEntity.setId(eventId as Integer)
         updatedEntity.setName(name != null && !name.trim().isEmpty() ? name.trim() : "Old Name")
         updatedEntity.setDescription(description != null ? description.trim() : "Old Description")
 
@@ -215,11 +232,11 @@ class EventControllerSpec extends Specification {
 
         where:
         eventId     | name         | description
-        10000001L   | "New Name 1" | "New Description 1"
-        10000002L   | "New Name 2" | null
-        10000003L   | null         | "New Description 3"
-        10000004L   | null         | null
-        10000005L   | ""           | "New Description 5"
+        10000001    | "New Name 1" | "New Description 1"
+        10000002    | "New Name 2" | null
+        10000003    | null         | "New Description 3"
+        10000004    | null         | null
+        10000005    | ""           | "New Description 5"
     }
 
     // Note: Validation tests are better suited for integration tests with Spring context
@@ -244,7 +261,7 @@ class EventControllerSpec extends Specification {
         thrown(IllegalArgumentException)
 
         where:
-        eventId << [99999999L, 88888888L]
+        eventId << [99999999, 88888888]
     }
 
     @Unroll
@@ -260,7 +277,7 @@ class EventControllerSpec extends Specification {
         response.body.data == null
 
         where:
-        eventId << [10000001L, 10000002L]
+        eventId << [10000001, 10000002]
     }
 
     @Unroll
@@ -275,7 +292,7 @@ class EventControllerSpec extends Specification {
         thrown(IllegalArgumentException)
 
         where:
-        eventId << [99999999L, 88888888L]
+        eventId << [99999999, 88888888]
     }
 
     @Unroll
@@ -283,7 +300,7 @@ class EventControllerSpec extends Specification {
         given: "prepare execution items"
         def executionItems = []
         itemCount.times { i ->
-            executionItems.add(10000001L + i)
+            executionItems.add(10000001 + i)
         }
         def request = new ExecutionArrangementQO()
         request.setRules(executionItems)
@@ -302,9 +319,9 @@ class EventControllerSpec extends Specification {
 
         where:
         eventId     | itemCount
-        10000001L   | 0
-        10000001L   | 1
-        10000001L   | 3
+        10000001    | 0
+        10000001    | 1
+        10000001    | 3
     }
 
     @Unroll
@@ -322,7 +339,7 @@ class EventControllerSpec extends Specification {
         response.body.code == 0
 
         where:
-        eventId << [10000001L, 10000002L]
+        eventId << [10000001, 10000002]
     }
 
     // Note: Database existence validation is now handled by @ValidExecutionItemExists annotation
@@ -335,8 +352,8 @@ class EventControllerSpec extends Specification {
 
         where:
         eventId     | itemId
-        10000001L   | 99999999L
-        10000002L   | 88888888L
+        10000001    | 99999999L
+        10000002    | 88888888L
     }
 
     @Unroll
@@ -346,8 +363,8 @@ class EventControllerSpec extends Specification {
 
         where:
         eventId     | itemId
-        10000001L   | 99999999L
-        10000002L   | 88888888L
+        10000001    | 99999999L
+        10000002    | 88888888L
     }
 
     @Unroll
@@ -358,7 +375,7 @@ class EventControllerSpec extends Specification {
         relationCount.times { i ->
             def arrangement = new ExecutionArrangement()
             arrangement.setEventId(eventId)
-            arrangement.setRuleId(10000001L + i)
+            arrangement.setRuleId(10000001 + i)
             arrangement.setGroupId(0L)
             arrangement.setExeOrder(i)
             arrangement.setAbRatio(0)
@@ -366,7 +383,7 @@ class EventControllerSpec extends Specification {
             
             def dto = new ExecutionArrangementDTO()
             dto.setEventId(eventId)
-            dto.setRuleId(10000001L + i)
+            dto.setRuleId(10000001 + i)
             dto.setGroupId(0L)
             dto.setExeOrder(i)
             dto.setAbRatio(0)
@@ -374,10 +391,10 @@ class EventControllerSpec extends Specification {
         }
 
         when: "get execution items"
-        def response = controller.getExecutionArrangements(eventId)
+        def response = controller.getExecutionItems(eventId)
 
         then: "should return execution items"
-        1 * eventService.getExecutionArrangements(eventId) >> arrangements
+        1 * eventService.getExecutionItems(eventId) >> arrangements
         relationCount * executionArrangementStructMapper.modelToDTO(_ as ExecutionArrangement) >> { ExecutionArrangement model ->
             dtos.find { it.ruleId == model.ruleId }
         }

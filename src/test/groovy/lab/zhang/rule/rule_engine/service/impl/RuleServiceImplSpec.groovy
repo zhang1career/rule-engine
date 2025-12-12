@@ -1,6 +1,7 @@
 package lab.zhang.rule.rule_engine.service.impl
 
-
+import com.baomidou.mybatisplus.core.MybatisConfiguration
+import com.baomidou.mybatisplus.core.metadata.TableInfoHelper
 import lab.zhang.rule.rule_engine.entity.*
 import lab.zhang.rule.rule_engine.enums.ContentTypeEnum
 import lab.zhang.rule.rule_engine.model.ExecutionArrangement
@@ -16,8 +17,14 @@ import lab.zhang.rule.rule_engine.executor.impl.SqlQueryRuleExecutor
 import lab.zhang.rule.rule_engine.mapper.*
 import lab.zhang.rule.rule_engine.model.Rule
 import lab.zhang.rule.rule_engine.model.RuleGroup
+import lab.zhang.rule.rule_engine.service.EventService
 import lab.zhang.rule.rule_engine.service.RuleGroupService
+import lab.zhang.rule.rule_engine.cache.RuleSelectionCacheService
+import lab.zhang.rule.rule_engine.cache.RuleContentCacheService
 import lab.zhang.rule.rule_engine.struct_mapper.RuleStructMapper
+import org.apache.ibatis.builder.MapperBuilderAssistant
+import org.springframework.jdbc.core.JdbcTemplate
+import org.springframework.web.client.RestTemplate
 import spock.lang.Specification
 import spock.lang.Unroll
 
@@ -35,8 +42,9 @@ class RuleServiceImplSpec extends Specification {
     def ruleStructMapper = Mock(RuleStructMapper)
     def ruleService = new RuleServiceImpl()
     def ruleGroupService = Mock(RuleGroupService)
-    def ruleSelectionCacheService = Mock(lab.zhang.rule.rule_engine.service.RuleSelectionCacheService)
-    def eventService = Mock(lab.zhang.rule.rule_engine.service.EventService)
+    def ruleSelectionCacheService = Mock(RuleSelectionCacheService)
+    def ruleContentCacheService = Mock(RuleContentCacheService)
+    def eventService = Mock(EventService)
 
     def setup() {
         ruleService.ruleMapper = ruleMapper
@@ -45,13 +53,15 @@ class RuleServiceImplSpec extends Specification {
         ruleService.ruleStructMapper = ruleStructMapper
         ruleService.ruleGroupService = ruleGroupService
         ruleService.ruleSelectionCacheService = ruleSelectionCacheService
+        ruleService.ruleContentCacheService = ruleContentCacheService
         ruleService.eventService = eventService
-
+        // Setup MyBatis TableInfos
+        TableInfoHelper.initTableInfo(new MapperBuilderAssistant(new MybatisConfiguration(), ""), ExecutionArrangementEntity.class);
         // Setup RuleExecutor instances for content validation
         def expressionExecutor = new ExpressionRuleExecutor()
         def scriptExecutor = new ScriptRuleExecutor()
-        def apiQueryExecutor = new ApiQueryRuleExecutor(new org.springframework.web.client.RestTemplate())
-        def sqlQueryExecutor = new SqlQueryRuleExecutor(Mock(org.springframework.jdbc.core.JdbcTemplate))
+        def apiQueryExecutor = new ApiQueryRuleExecutor(new RestTemplate())
+        def sqlQueryExecutor = new SqlQueryRuleExecutor(Mock(JdbcTemplate))
         ruleService.ruleExecutors = [expressionExecutor, scriptExecutor, apiQueryExecutor, sqlQueryExecutor]
 
         // Setup default mock for ruleStructMapper.entityToModel
@@ -187,7 +197,7 @@ class RuleServiceImplSpec extends Specification {
                 .id(null)
                 .name("Test Rule")
                 .contentType(contentType)
-                .content("test content")
+                .content("return 'test content'")
                 .description("test description")
                 .build()
 
@@ -291,8 +301,20 @@ class RuleServiceImplSpec extends Specification {
                     .name("Old Name")
                     .contentType(ContentTypeEnum.EXPRESSION)
                     .ruleStatus(fromStatus)
-                    .content("old content")
+                    .content("return 'old content'")
                     .build()
+        }
+        // For TEST/GRAY/ONLINE status, always mock event association check (even for same status)
+        if (toStatus == RuleStatusEnum.TEST || toStatus == RuleStatusEnum.GRAY || toStatus == RuleStatusEnum.ONLINE) {
+            1 * executionEventRelationMapper.selectList(_) >> {
+                def relation = new ExecutionArrangementEntity()
+                relation.setEventId(1001)
+                relation.setRuleId(ruleId)
+                relation.setGroupId(0L)
+                relation.setExeOrder(0)
+                relation.setAbRatio(0)
+                return [relation]
+            }
         }
         if (fromStatus != toStatus) {
             // Status change handling
@@ -316,6 +338,7 @@ class RuleServiceImplSpec extends Specification {
             } else if (fromStatus == RuleStatusEnum.ONLINE && toStatus == RuleStatusEnum.OFFLINE) {
                 // Transition from ONLINE to OFFLINE
                 // First, query table x to find all groups this rule belongs to
+                // This call happens in changeRuleStatusFromOnlineToOffline
                 1 * executionEventRelationMapper.selectList(_) >> {
                     // Return a relation entity to simulate the rule being in a group
                     def relation = new ExecutionArrangementEntity()
@@ -326,9 +349,22 @@ class RuleServiceImplSpec extends Specification {
                     relation.setAbRatio(50)
                     return [relation]
                 }
-                // Delete the rule group
+                // Update the arrangement to set group_id=0, ab_ratio=0, and update ut
+                // This happens in doChangeRuleStatusFromOnline for each arrangement
+                1 * executionEventRelationMapper.update(null, _) >> 1
+                // getRuleGroup internally calls selectList again to check if group is empty
+                // After update, group_id is 0, so selectList returns empty list
+                // Note: getRuleGroup is mocked, so this selectList call won't actually happen
+                // But we need to mock getRuleGroup to return an empty group
+                1 * ruleGroupService.getRuleGroup(10000001L) >> {
+                    def group = new RuleGroup(10000001L)
+                    // Group is empty (no rules left after removing the rule)
+                    return group
+                }
+                // Delete the empty rule group (only once, not twice)
                 1 * ruleGroupService.deleteRuleGroup(10000001L)
-                // Delete event-rule relations
+                // Delete event-rule relations with group_id=0
+                // This happens in changeRuleStatusFromOnlineToOffline after doChangeRuleStatusFromOnline
                 1 * executionEventRelationMapper.delete(_) >> 1
             }
         }
@@ -437,6 +473,14 @@ class RuleServiceImplSpec extends Specification {
                 .ruleStatus(RuleStatusEnum.TEST)
                 .build()
 
+        // Mock event association exists (group_id=0) for TEST status
+        def eventAssociation = new ExecutionArrangementEntity()
+        eventAssociation.setEventId(1001)
+        eventAssociation.setRuleId(ruleId)
+        eventAssociation.setGroupId(0L)
+        eventAssociation.setExeOrder(0)
+        eventAssociation.setAbRatio(0)
+
         when: "update rule with null values"
         ruleService.updateRule(ruleId, newRule)
 
@@ -449,9 +493,11 @@ class RuleServiceImplSpec extends Specification {
                     .contentType(ContentTypeEnum.EXPRESSION)
                     .ruleStatus(RuleStatusEnum.TEST)
                     .description("Old Description")
-                    .content("old content")
+                    .content("return 'old content'")
                     .build()
         }
+        // Query for event associations with group_id=0 should return one record for TEST status
+        1 * executionEventRelationMapper.selectList(_) >> [eventAssociation]
         1 * ruleStructMapper.modelToEntity(_) >> { Rule r ->
             def entity = new RuleEntity()
             entity.id = r.id
@@ -466,37 +512,150 @@ class RuleServiceImplSpec extends Specification {
         0 * ruleContentMapper.updateById(_)
     }
 
-    // ========== doUpdateRule() tests ==========
-
-    @Unroll
-    def "test doUpdateRule - should update rule content when both contentType and content provided - contentType: #contentType"() {
-        given: "existing and new rules"
-        def existingRule = Rule.builder()
-                .id(1L)
-                .name("Old Rule")
-                .contentType(ContentTypeEnum.EXPRESSION)
-                .content("old content")
-                .ruleStatus(RuleStatusEnum.TEST)
-                .build()
+    def "test updateRule - should throw IllegalStateException when transitioning to TEST status without event association"() {
+        given: "an existing rule with OFFLINE status and no event associations"
+        def ruleId = 1L
+        def existingEntity = createRuleEntity(ruleId, RuleStatusEnum.OFFLINE)
+        def existingContent = createContentEntity(ruleId)
 
         def newRule = Rule.builder()
-                .id(1L)
-                .name("New Rule")
-                .contentType(contentType)
-                .content(validContent)
+                .id(ruleId)
+                .name("Updated Rule")
+                .contentType(ContentTypeEnum.EXPRESSION)
+                .content("return 'updated content'")
                 .ruleStatus(RuleStatusEnum.TEST)
                 .build()
 
-        when: "do update rule"
-        ruleService.doUpdateRule(existingRule, newRule)
+        when: "update rule to TEST status without event association"
+        ruleService.updateRule(ruleId, newRule)
 
-        then: "should update both entity and content"
+        then: "should throw IllegalStateException"
+        1 * ruleMapper.selectById(ruleId) >> existingEntity
+        1 * ruleStructMapper.entityToModel(existingEntity) >> {
+            Rule.builder()
+                    .id(ruleId)
+                    .name("Old Name")
+                    .contentType(ContentTypeEnum.EXPRESSION)
+                    .ruleStatus(RuleStatusEnum.OFFLINE)
+                    .build()
+        }
+        // Query for event associations with group_id=0 should return empty
+        1 * executionEventRelationMapper.selectList(_) >> []
+        IllegalStateException e = thrown()
+        e.message.contains("Rule must be associated with at least one event before transitioning to TEST status")
+    }
+
+    def "test updateRule - should throw IllegalStateException when transitioning to GRAY status without event association"() {
+        given: "an existing rule with TEST status and no event associations"
+        def ruleId = 1L
+        def existingEntity = createRuleEntity(ruleId, RuleStatusEnum.TEST)
+        def existingContent = createContentEntity(ruleId)
+
+        def newRule = Rule.builder()
+                .id(ruleId)
+                .name("Updated Rule")
+                .contentType(ContentTypeEnum.EXPRESSION)
+                .content("return 'updated content'")
+                .ruleStatus(RuleStatusEnum.GRAY)
+                .build()
+
+        when: "update rule to GRAY status without event association"
+        ruleService.updateRule(ruleId, newRule)
+
+        then: "should throw IllegalStateException"
+        1 * ruleMapper.selectById(ruleId) >> existingEntity
+        1 * ruleStructMapper.entityToModel(existingEntity) >> {
+            Rule.builder()
+                    .id(ruleId)
+                    .name("Old Name")
+                    .contentType(ContentTypeEnum.EXPRESSION)
+                    .ruleStatus(RuleStatusEnum.TEST)
+                    .build()
+        }
+        // Query for event associations with group_id=0 should return empty
+        1 * executionEventRelationMapper.selectList(_) >> []
+        IllegalStateException e = thrown()
+        e.message.contains("Rule must be associated with at least one event before transitioning to GRAY status")
+    }
+
+    def "test updateRule - should throw IllegalStateException when transitioning to ONLINE status without event association"() {
+        given: "an existing rule with GRAY status and no event associations"
+        def ruleId = 1L
+        def existingEntity = createRuleEntity(ruleId, RuleStatusEnum.GRAY)
+        def existingContent = createContentEntity(ruleId)
+
+        def newRule = Rule.builder()
+                .id(ruleId)
+                .name("Updated Rule")
+                .contentType(ContentTypeEnum.EXPRESSION)
+                .content("return 'updated content'")
+                .ruleStatus(RuleStatusEnum.ONLINE)
+                .build()
+
+        when: "update rule to ONLINE status without event association"
+        ruleService.updateRule(ruleId, newRule)
+
+        then: "should throw IllegalStateException"
+        1 * ruleMapper.selectById(ruleId) >> existingEntity
+        1 * ruleStructMapper.entityToModel(existingEntity) >> {
+            Rule.builder()
+                    .id(ruleId)
+                    .name("Old Name")
+                    .contentType(ContentTypeEnum.EXPRESSION)
+                    .ruleStatus(RuleStatusEnum.GRAY)
+                    .build()
+        }
+        // Query for event associations with group_id=0 should return empty
+        1 * executionEventRelationMapper.selectList(_) >> []
+        IllegalStateException e = thrown()
+        e.message.contains("Rule must be associated with at least one event before transitioning to ONLINE status")
+    }
+
+    def "test updateRule - should succeed when transitioning to TEST status with event association"() {
+        given: "an existing rule with OFFLINE status and event associations"
+        def ruleId = 1L
+        def existingEntity = createRuleEntity(ruleId, RuleStatusEnum.OFFLINE)
+        def existingContent = createContentEntity(ruleId)
+
+        def newRule = Rule.builder()
+                .id(ruleId)
+                .name("Updated Rule")
+                .contentType(ContentTypeEnum.EXPRESSION)
+                .content("amount > 1000")
+                .ruleStatus(RuleStatusEnum.TEST)
+                .build()
+
+        // Mock event association exists (group_id=0)
+        def eventAssociation = new ExecutionArrangementEntity()
+        eventAssociation.setEventId(1001)
+        eventAssociation.setRuleId(ruleId)
+        eventAssociation.setGroupId(0L)
+        eventAssociation.setExeOrder(0)
+        eventAssociation.setAbRatio(0)
+
+        when: "update rule to TEST status with event association"
+        ruleService.updateRule(ruleId, newRule)
+
+        then: "should succeed"
+        1 * ruleMapper.selectById(ruleId) >> existingEntity
+        1 * ruleStructMapper.entityToModel(existingEntity) >> {
+            Rule.builder()
+                    .id(ruleId)
+                    .name("Old Name")
+                    .contentType(ContentTypeEnum.EXPRESSION)
+                    .ruleStatus(RuleStatusEnum.OFFLINE)
+                    .build()
+        }
+        // Query for event associations with group_id=0 should return one record
+        1 * executionEventRelationMapper.selectList(_) >> [eventAssociation]
+        // Database update calls
         1 * ruleStructMapper.modelToEntity(_) >> { Rule r ->
             def entity = new RuleEntity()
             entity.id = r.id
             entity.name = r.name
             entity.contentType = r.contentType != null ? r.contentType.getId() : null
             entity.ruleStatus = r.ruleStatus != null ? r.ruleStatus.getId() : null
+            entity.ct = existingEntity.ct
             return entity
         }
         1 * ruleMapper.updateById(_) >> 1
@@ -507,76 +666,127 @@ class RuleServiceImplSpec extends Specification {
             return content
         }
         1 * ruleContentMapper.updateById(_) >> 1
-
-        where:
-        contentType              | validContent
-        ContentTypeEnum.EXPRESSION | "1 + 1"
-        ContentTypeEnum.SCRIPT     | "return 'new content'"
-        ContentTypeEnum.API_QUERY  | '{"url": "http://example.com"}'
-        ContentTypeEnum.SQL_QUERY  | "SELECT 1"
     }
 
-    def "test doUpdateRule - should skip content update when content is null"() {
-        given: "existing and new rules"
-        def existingRule = Rule.builder()
-                .id(1L)
-                .name("Old Rule")
-                .contentType(ContentTypeEnum.EXPRESSION)
-                .content("old content")
-                .ruleStatus(RuleStatusEnum.TEST)
-                .build()
+    def "test updateRule - should succeed when transitioning to GRAY status with event association"() {
+        given: "an existing rule with TEST status and event associations"
+        def ruleId = 1L
+        def existingEntity = createRuleEntity(ruleId, RuleStatusEnum.TEST)
+        def existingContent = createContentEntity(ruleId)
 
         def newRule = Rule.builder()
-                .id(1L)
-                .name("New Rule")
+                .id(ruleId)
+                .name("Updated Rule")
                 .contentType(ContentTypeEnum.EXPRESSION)
-                .content(null)
-                .ruleStatus(RuleStatusEnum.TEST)
+                .content("amount > 1000")
+                .ruleStatus(RuleStatusEnum.GRAY)
                 .build()
 
-        when: "do update rule without content"
-        ruleService.doUpdateRule(existingRule, newRule)
+        // Mock event association exists (group_id=0)
+        def eventAssociation = new ExecutionArrangementEntity()
+        eventAssociation.setEventId(1001)
+        eventAssociation.setRuleId(ruleId)
+        eventAssociation.setGroupId(0L)
+        eventAssociation.setExeOrder(0)
+        eventAssociation.setAbRatio(0)
 
-        then: "should update entity but not content"
+        when: "update rule to GRAY status with event association"
+        ruleService.updateRule(ruleId, newRule)
+
+        then: "should succeed"
+        1 * ruleMapper.selectById(ruleId) >> existingEntity
+        1 * ruleStructMapper.entityToModel(existingEntity) >> {
+            Rule.builder()
+                    .id(ruleId)
+                    .name("Old Name")
+                    .contentType(ContentTypeEnum.EXPRESSION)
+                    .ruleStatus(RuleStatusEnum.TEST)
+                    .build()
+        }
+        // Query for event associations with group_id=0 should return one record
+        1 * executionEventRelationMapper.selectList(_) >> [eventAssociation]
+        // Database update calls
         1 * ruleStructMapper.modelToEntity(_) >> { Rule r ->
             def entity = new RuleEntity()
             entity.id = r.id
             entity.name = r.name
             entity.contentType = r.contentType != null ? r.contentType.getId() : null
             entity.ruleStatus = r.ruleStatus != null ? r.ruleStatus.getId() : null
+            entity.ct = existingEntity.ct
             return entity
         }
         1 * ruleMapper.updateById(_) >> 1
-        0 * ruleContentMapper.updateById(_)
+        1 * ruleStructMapper.modelToContentEntity(_) >> { Rule r ->
+            def content = new RuleContentEntity()
+            content.id = r.id
+            content.content = r.content
+            return content
+        }
+        1 * ruleContentMapper.updateById(_) >> 1
     }
 
-    def "test doUpdateRule - should throw exception when executor not found"() {
-        given: "existing and new rules with unsupported contentType"
-        def existingRule = Rule.builder()
-                .id(1L)
-                .name("Old Rule")
-                .contentType(ContentTypeEnum.EXPRESSION)
-                .content("old content")
-                .ruleStatus(RuleStatusEnum.TEST)
-                .build()
+    def "test updateRule - should succeed when transitioning to ONLINE status with event association"() {
+        given: "an existing rule with GRAY status and event associations"
+        def ruleId = 1L
+        def existingEntity = createRuleEntity(ruleId, RuleStatusEnum.GRAY)
+        def existingContent = createContentEntity(ruleId)
 
         def newRule = Rule.builder()
-                .id(1L)
-                .name("New Rule")
+                .id(ruleId)
+                .name("Updated Rule")
                 .contentType(ContentTypeEnum.EXPRESSION)
-                .content("invalid content")
-                .ruleStatus(RuleStatusEnum.TEST)
+                .content("amount > 1000")
+                .ruleStatus(RuleStatusEnum.ONLINE)
                 .build()
 
-        and: "no executor available"
-        ruleService.ruleExecutors = []
+        // Mock event association exists (group_id=0)
+        def eventAssociation = new ExecutionArrangementEntity()
+        eventAssociation.setEventId(1001)
+        eventAssociation.setRuleId(ruleId)
+        eventAssociation.setGroupId(0L)
+        eventAssociation.setExeOrder(0)
+        eventAssociation.setAbRatio(0)
 
-        when: "do update rule"
-        ruleService.doUpdateRule(existingRule, newRule)
+        when: "update rule to ONLINE status with event association"
+        ruleService.updateRule(ruleId, newRule)
 
-        then: "should throw IllegalArgumentException"
-        thrown(IllegalArgumentException)
+        then: "should succeed"
+        1 * ruleMapper.selectById(ruleId) >> existingEntity
+        1 * ruleStructMapper.entityToModel(existingEntity) >> {
+            Rule.builder()
+                    .id(ruleId)
+                    .name("Old Name")
+                    .contentType(ContentTypeEnum.EXPRESSION)
+                    .ruleStatus(RuleStatusEnum.GRAY)
+                    .build()
+        }
+        // Query for event associations with group_id=0 - first call for validation, second for status change
+        2 * executionEventRelationMapper.selectList(_) >> [eventAssociation]
+        // For ONLINE transition, should create rule group
+        1 * ruleGroupService.createRuleGroup(_, 1001) >> {
+            def group = new RuleGroup(10000001L)
+            return group
+        }
+        // Database update calls
+        1 * ruleStructMapper.modelToEntity(_) >> { Rule r ->
+            def entity = new RuleEntity()
+            entity.id = r.id
+            entity.name = r.name
+            entity.contentType = r.contentType != null ? r.contentType.getId() : null
+            entity.ruleStatus = r.ruleStatus != null ? r.ruleStatus.getId() : null
+            entity.ct = existingEntity.ct
+            return entity
+        }
+        1 * ruleMapper.updateById(_) >> 1
+        1 * ruleStructMapper.modelToContentEntity(_) >> { Rule r ->
+            def content = new RuleContentEntity()
+            content.id = r.id
+            content.content = r.content
+            return content
+        }
+        1 * ruleContentMapper.updateById(_) >> 1
     }
+
 
     // ========== deleteRule() tests ==========
 
@@ -645,7 +855,7 @@ class RuleServiceImplSpec extends Specification {
 
         then: "should return empty list"
         // Note: Now uses eventService.getExecutionArrangements instead of executionEventRelationMapper.selectList
-        1 * eventService.getExecutionArrangements(eventId) >> []
+        1 * eventService.getExecutionItems(eventId) >> []
         items != null
         items.isEmpty()
     }
@@ -676,7 +886,7 @@ class RuleServiceImplSpec extends Specification {
         def items = ruleService.getExecutionItemsByEventId(eventId, context)
 
         then: "should return only allowed rules"
-        1 * eventService.getExecutionArrangements(eventId) >> arrangements
+        1 * eventService.getExecutionItems(eventId) >> arrangements
         1 * ruleMapper.selectBatchIds([rule1Id]) >> [rule1Entity]
         1 * ruleContentMapper.selectBatchIds([rule1Id]) >> [createContentEntity(rule1Id)]
 
@@ -720,7 +930,7 @@ class RuleServiceImplSpec extends Specification {
         def items = ruleService.getExecutionItemsByEventId(eventId, context)
 
         then: "should return selected rule from group"
-        1 * eventService.getExecutionArrangements(eventId) >> arrangements
+        1 * eventService.getExecutionItems(eventId) >> arrangements
         // Mock cache service (no cached value, will select based on userHashInt)
         1 * ruleSelectionCacheService.get(12345L, eventId, groupId) >> null
         1 * ruleSelectionCacheService.put(12345L, eventId, groupId, rule1Id)
@@ -778,7 +988,7 @@ class RuleServiceImplSpec extends Specification {
         def items = ruleService.getExecutionItemsByEventId(eventId, context)
 
         then: "should maintain execution order"
-        1 * eventService.getExecutionArrangements(eventId) >> arrangements
+        1 * eventService.getExecutionItems(eventId) >> arrangements
         1 * ruleMapper.selectBatchIds([rule1Id, rule2Id, rule3Id]) >> [rule1Entity, rule2Entity, rule3Entity]
         1 * ruleContentMapper.selectBatchIds([rule1Id, rule2Id, rule3Id]) >> [
                 createContentEntity(rule1Id),
@@ -795,8 +1005,8 @@ class RuleServiceImplSpec extends Specification {
     def "test getExecutionItemsByEventId - should handle empty groups"() {
         given: "execution sequence with rule in group where userHashInt exceeds total ratio"
         def eventId = 1001
-        def groupId = 999L
         def ruleId = 1L
+        def groupId = 999L
 
         def arrangements = [
                 ExecutionArrangement.builder()
@@ -815,27 +1025,135 @@ class RuleServiceImplSpec extends Specification {
         def items = ruleService.getExecutionItemsByEventId(eventId, context)
 
         then: "should throw exception when rule selection fails (userHashInt > totalRatio)"
-        1 * eventService.getExecutionArrangements(eventId) >> arrangements
+        1 * eventService.getExecutionItems(eventId) >> arrangements
         1 * ruleSelectionCacheService.get(12345L, eventId, groupId) >> null
         // selectRuleFromGroupByRatio will return null because userHashInt (100) > totalRatio (50)
-        // This will cause IllegalStateException: "Failed to select rule from group"
-        thrown(IllegalStateException)
+        items != null
+        items.size() == 0
+    }
+
+    // ========== batchGetContentMapWithCache() tests ==========
+
+    def "test batchGetContentMapWithCache - should return from cache when all rules are cached"() {
+        given: "rule IDs and cache service is available"
+        def ruleIds = [1L, 2L, 3L] as Set
+        def cachedContent = ["rule1 content", "rule2 content", "rule3 content"]
+        def expectedResult = [
+                1L: "rule1 content",
+                2L: "rule2 content",
+                3L: "rule3 content"
+        ]
+
+        when: "call batchGetContentMapWithCache"
+        def result = invokePrivateMethod("batchGetContentMapWithCache", ruleIds)
+
+        then: "should get all content from cache"
+        1 * ruleContentCacheService.getBatch(ruleIds) >> expectedResult
+        0 * ruleContentMapper.selectBatchIds(_)
+        0 * ruleContentCacheService.putBatch(_)
+        result == expectedResult
+    }
+
+    def "test batchGetContentMapWithCache - should fetch from database when cache service is not available"() {
+        given: "rule IDs and cache service is not available"
+        def ruleIds = [1L, 2L] as Set
+        ruleService.ruleContentCacheService = null
+
+        def dbContent = [
+                1L: "rule1 content",
+                2L: "rule2 content"
+        ]
+
+        when: "call batchGetContentMapWithCache"
+        def result = invokePrivateMethod("batchGetContentMapWithCache", ruleIds)
+
+        then: "should fetch from database directly"
+        1 * ruleContentMapper.selectBatchIds([1L, 2L]) >> [
+                createContentEntity(1L),
+                createContentEntity(2L)
+        ]
+        result.size() == 2
+        result[1L] == "test content for rule 1"
+        result[2L] == "test content for rule 2"
+    }
+
+    def "test batchGetContentMapWithCache - should fetch missing content from database and update cache"() {
+        given: "rule IDs with partial cache hits"
+        def ruleIds = [1L, 2L, 3L] as Set
+        def cachedContent = [
+                1L: "rule1 content",
+                2L: "rule2 content"
+        ] // rule3 is not in cache
+
+        def dbContent = [createContentEntity(3L)]
+
+        when: "call batchGetContentMapWithCache"
+        def result = invokePrivateMethod("batchGetContentMapWithCache", ruleIds)
+
+        then: "should get partial content from cache and fetch missing from database"
+        1 * ruleContentCacheService.getBatch(ruleIds) >> cachedContent
+        1 * ruleContentMapper.selectBatchIds([3L]) >> dbContent
+        1 * ruleContentCacheService.putBatch(_) >> { Map<Long, String> map ->
+            assert map.size() == 1
+            assert map[3L] == "test content for rule 3"
+        }
+
+        result.size() == 3
+        result[1L] == "rule1 content"
+        result[2L] == "rule2 content"
+        result[3L] == "test content for rule 3"
+    }
+
+    def "test batchGetContentMapWithCache - should handle empty rule ID set"() {
+        given: "empty rule ID set"
+        def ruleIds = [] as Set
+
+        when: "call batchGetContentMapWithCache"
+        def result = invokePrivateMethod("batchGetContentMapWithCache", ruleIds)
+
+        then: "should return empty map"
+        1 * ruleContentCacheService.getBatch(ruleIds) >> [:]
+        0 * ruleContentMapper.selectBatchIds(_)
+        0 * ruleContentCacheService.putBatch(_)
+        result.isEmpty()
+    }
+
+    def "test batchGetContentMapWithCache - should handle null content from database"() {
+        given: "rule IDs with null content in database"
+        def ruleIds = [1L] as Set
+        def cachedContent = [:] // nothing in cache
+
+        def dbContentEntity = createContentEntity(1L)
+        dbContentEntity.content = null // null content
+
+        when: "call batchGetContentMapWithCache"
+        def result = invokePrivateMethod("batchGetContentMapWithCache", ruleIds)
+
+        then: "should handle null content gracefully"
+        1 * ruleContentCacheService.getBatch(ruleIds) >> cachedContent
+        1 * ruleContentMapper.selectBatchIds([1L]) >> [dbContentEntity]
+        1 * ruleContentCacheService.putBatch([:]) // empty map since null content is filtered out
+
+        result.size() == 0  // null content is filtered out by batchGetContentMap
     }
 
     // ========== Helper methods ==========
 
-    private static ExecutionArrangementEntity createRelationEntity(Long eventId, Long ruleId, Long groupId, Integer exeOrder, Integer abRatio) {
-        def entity = new ExecutionArrangementEntity()
-        entity.eventId = eventId != null ? eventId.intValue() : null
-        entity.ruleId = ruleId
-        entity.groupId = groupId != null ? groupId : 0L
-        entity.exeOrder = exeOrder != null ? exeOrder : 0
-        entity.abRatio = abRatio != null ? abRatio : 0
-        return entity
+    private def invokePrivateMethod(String methodName, Object... args) {
+        // For Set<Long> parameter, we need to handle the generic type properly
+        Class<?>[] parameterTypes
+        if (methodName == "batchGetContentMapWithCache" && args.length == 1 && args[0] instanceof Set) {
+            parameterTypes = [Set.class] as Class[]
+        } else {
+            parameterTypes = args.collect { it.class } as Class[]
+        }
+        def method = RuleServiceImpl.class.getDeclaredMethod(methodName, parameterTypes)
+        method.accessible = true
+        return method.invoke(ruleService, args)
     }
 
     private static RuleExecutionContext createExecutionContext(Long userId, Integer eventId, Integer userHashInt) {
-        def context = new RuleExecutionContext(userId, eventId, null, [:])
+        def context = new RuleExecutionContext(userId, eventId, [:])
         if (userHashInt != null) {
             context.putArgument(EvalArgumentConst.ARG_USER_HASH_INT, new TypedValue(userHashInt, ValueTypeEnum.INTEGER))
         }

@@ -13,6 +13,7 @@
                 content_type = #{item.contentType},
                 rule_status = #{item.ruleStatus},
                 description = #{item.description},
+                content_args = #{item.contentArgs},
                 ut = #{item.ut},
                 ct = #{item.ct}
             </set>

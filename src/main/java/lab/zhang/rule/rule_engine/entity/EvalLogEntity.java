@@ -7,28 +7,30 @@ import com.baomidou.mybatisplus.annotation.TableName;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 
+import java.math.BigInteger;
+
 /**
  * Eval log entity for database
- * 
+ *
  * @author Rongjin Zhang
  */
 @EqualsAndHashCode(callSuper = true)
 @Data
 @TableName("eval_log")
 public class EvalLogEntity extends BaseEntity {
-    
+
     /**
      * Eval log ID (primary key)
      * Auto-increment starting from 10,000,000
      */
     @TableId(type = IdType.AUTO)
     private Long id;
-    
+
     /**
      * Business request trace ID
      */
     @TableField("trace_id")
-    private Long traceId;
+    private BigInteger traceId;
 
     /**
      * Event ID

@@ -1,12 +1,13 @@
 package lab.zhang.rule.rule_engine.struct_mapper;
 
+import lab.zhang.rule.rule_engine.constant.CommonConst;
 import lab.zhang.rule.rule_engine.entity.RuleContentEntity;
 import lab.zhang.rule.rule_engine.entity.RuleEntity;
 import lab.zhang.rule.rule_engine.enums.RuleStatusEnum;
 import lab.zhang.rule.rule_engine.pojo.dto.RuleDTO;
 import lab.zhang.rule.rule_engine.pojo.qo.RuleQO;
 import lab.zhang.rule.rule_engine.model.Rule;
-import lab.zhang.rule.rule_engine.util.TimeUtil;
+import lab.zhang.rule.rule_engine.util.StrUtil;
 import org.mapstruct.AfterMapping;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
@@ -39,12 +40,20 @@ public interface RuleStructMapper {
         
         Rule rule = Rule.builder()
                 .id(entity.getId())
-                .name(entity.getName() != null ? entity.getName() : "")
-                .description(entity.getDescription() != null ? entity.getDescription() : "")
+                .name(entity.getName() != null ? entity.getName() : CommonConst.EMPTY_STRING)
+                .description(entity.getDescription() != null ? entity.getDescription() : CommonConst.EMPTY_STRING)
                 .contentType(entity.getContentTypeEnum())
-                .content("")
+                .content(CommonConst.EMPTY_STRING)
                 .ruleStatus(entity.getRuleStatusEnum())
                 .build();
+
+        // Convert contentArgs to contentArgList
+        if (entity.getContentArgs() != null && !entity.getContentArgs().trim().isEmpty()) {
+            String[] args = entity.getContentArgs().split(",");
+            rule.setContentArgList(java.util.Arrays.asList(args));
+        } else {
+            rule.setContentArgList(java.util.Collections.emptyList());
+        }
         
         // Convert ct (UNIX timestamp in seconds) to createTime (Date)
         if (entity.getCt() != null) {
@@ -87,12 +96,13 @@ public interface RuleStructMapper {
     @Mapping(target = "id", ignore = true)
     @Mapping(target = "name", source = "name")
     @Mapping(target = "description", source = "description")
+    @Mapping(target = "ruleStatusEnum", ignore = true)
+    @Mapping(target = "contentTypeEnum", ignore = true)
+    @Mapping(target = "contentArgs", ignore = true)
     @Mapping(target = "contentType", expression = "java(rule.getContentType().getId())")
     @Mapping(target = "ruleStatus", expression = "java(rule.getRuleStatus() != null ? rule.getRuleStatus().getId() : null)")
     @Mapping(target = "ct", expression = "java(rule.getCreateTime() != null ? rule.getCreateTimeInTimestamp() : 0)")
     @Mapping(target = "ut", expression = "java(rule.getUpdateTime() != null ? rule.getUpdateTimeInTimestamp() : 0)")
-    @Mapping(target = "contentTypeEnum", ignore = true)
-    @Mapping(target = "ruleStatusEnum", ignore = true)
     RuleEntity modelToEntity(Rule rule);
 
     /**
@@ -105,22 +115,9 @@ public interface RuleStructMapper {
     @AfterMapping
     default void applyModelToEntity(@MappingTarget RuleEntity entity, Rule rule) {
         if (rule == null) {
-            // Return empty RuleEntity instead of null
-            if (entity.getName() == null) {
-                entity.setName("");
-            }
-            if (entity.getDescription() == null) {
-                entity.setDescription("");
-            }
             return;
         }
 
-        // Set name and description with null handling
-        entity.setName(rule.getName() != null ? rule.getName() : "");
-        entity.setDescription(rule.getDescription() != null ? rule.getDescription() : "");
-
-        // Set enum fields using entity's setter methods
-        entity.setContentTypeEnum(rule.getContentType());
         // Set default status to OFFLINE if not provided
         if (rule.getRuleStatus() == null) {
             entity.setRuleStatusEnum(RuleStatusEnum.OFFLINE);
@@ -128,14 +125,15 @@ public interface RuleStructMapper {
             entity.setRuleStatusEnum(rule.getRuleStatus());
         }
 
-        // Set time fields (UNIX timestamp in seconds)
-        long currentTime = TimeUtil.getCurrentTime();
-        if (entity.getId() == null) {
-            // New entity, set create time
-            entity.setCt((int) currentTime);
+        // Set enum fields using entity's setter methods
+        entity.setContentTypeEnum(rule.getContentType());
+
+        // Convert contentArgList to contentArgs (comma-separated string)
+        if (rule.getContentArgList() != null && !rule.getContentArgList().isEmpty()) {
+            entity.setContentArgs(StrUtil.implode(rule.getContentArgList()));
+        } else {
+            entity.setContentArgs(CommonConst.EMPTY_STRING);
         }
-        // Always set update time
-        entity.setUt((int) currentTime);
     }
 
     /**

@@ -2,6 +2,10 @@ package lab.zhang.rule.rule_engine.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
+import lab.zhang.rule.rule_engine.cache.EventRulesCacheService;
+import lab.zhang.rule.rule_engine.cache.RuleContentCacheService;
+import lab.zhang.rule.rule_engine.cache.RuleSelectionCacheService;
+import lab.zhang.rule.rule_engine.constant.CommonConst;
 import lab.zhang.rule.rule_engine.engine.ExecutionItem;
 import lab.zhang.rule.rule_engine.entity.ExecutionArrangementEntity;
 import lab.zhang.rule.rule_engine.entity.RuleContentEntity;
@@ -18,16 +22,18 @@ import lab.zhang.rule.rule_engine.model.RuleExecutionContext;
 import lab.zhang.rule.rule_engine.model.RuleGroup;
 import lab.zhang.rule.rule_engine.service.EventService;
 import lab.zhang.rule.rule_engine.service.RuleGroupService;
-import lab.zhang.rule.rule_engine.service.RuleSelectionCacheService;
 import lab.zhang.rule.rule_engine.service.RuleService;
 import lab.zhang.rule.rule_engine.struct_mapper.RuleStructMapper;
+import lab.zhang.rule.rule_engine.util.TimeUtil;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import javax.validation.constraints.NotBlank;
 import javax.validation.constraints.NotEmpty;
 import javax.validation.constraints.NotNull;
 import java.util.*;
@@ -68,6 +74,15 @@ public class RuleServiceImpl implements RuleService {
     @Autowired(required = false)
     private RuleSelectionCacheService ruleSelectionCacheService;
 
+    @Autowired(required = false)
+    private RuleContentCacheService ruleContentCacheService;
+
+    @Autowired(required = false)
+    private EventRulesCacheService eventRulesCacheService;
+
+    @Value("${rule.content.cache.enabled:true}")
+    private boolean ruleContentCacheEnabled;
+
 
     @Override
     public List<Rule> getAllRules() {
@@ -105,7 +120,7 @@ public class RuleServiceImpl implements RuleService {
         if (contentEntity != null && contentEntity.getContent() != null) {
             rule.setContent(contentEntity.getContent());
         } else {
-            rule.setContent("");
+            rule.setContent(CommonConst.EMPTY_STRING);
         }
 
         return rule;
@@ -113,10 +128,24 @@ public class RuleServiceImpl implements RuleService {
 
 
     @Override
-    public void doCreateRule(Rule rule, long currentTimeSeconds) {
+    @Transactional
+    public void createRule(Rule rule) {
+        createRuleAt(rule, 0);
+    }
+
+    @Override
+    @Transactional
+    public void createRuleAt(Rule rule, long currentTimeSeconds) {
         // Set default status to OFFLINE if not provided
         if (rule.getRuleStatus() == null) {
             rule.setRuleStatus(RuleStatusEnum.OFFLINE);
+        }
+        // Set content_args based on the rule content
+        if (rule.getContent() != null) {
+            Set<String> contentArgSet = calculateContentArgs(rule.getContentType(), rule.getContent());
+            rule.setContentArgList(contentArgSet.stream().sorted().collect(Collectors.toList()));
+        } else {
+            rule.setContentArgList(Collections.emptyList());
         }
 
         RuleEntity ruleEntity = ruleStructMapper.modelToEntity(rule);
@@ -144,14 +173,11 @@ public class RuleServiceImpl implements RuleService {
         contentEntity.setId(ruleId);
         contentEntity.setTimeOnCreate();
         ruleContentMapper.insert(contentEntity);
+        // Update content_args based on the rule content
+        ruleMapper.updateById(ruleEntity);
 
         log.info("Rule created: ruleId={}, ruleName={}, status=OFFLINE",
                 ruleEntity.getId(), ruleEntity.getName());
-    }
-
-    @Override
-    public void createRule(Rule rule) {
-        doCreateRule(rule, 0);
     }
 
     @Override
@@ -178,9 +204,19 @@ public class RuleServiceImpl implements RuleService {
                             oldStatus, newStatus, oldStatus, oldStatus.getAllowedTargetStatuses()));
         }
 
+        // Validate that rule must be associated with at least one event before transitioning to TEST/GRAY/ONLINE status
+        if (newStatus == RuleStatusEnum.TEST || newStatus == RuleStatusEnum.GRAY || newStatus == RuleStatusEnum.ONLINE) {
+            LambdaQueryWrapper<ExecutionArrangementEntity> arrangementQuery = new LambdaQueryWrapper<>();
+            arrangementQuery.eq(ExecutionArrangementEntity::getRuleId, ruleId);
+            List<ExecutionArrangementEntity> arrangementList = executionArrangementMapper.selectList(arrangementQuery);
+            if (arrangementList == null || arrangementList.isEmpty()) {
+                throw new IllegalStateException("Rule must be associated with at least one event before transitioning to " + newStatus + " status");
+            }
+        }
+
         // Handle rule status change
         if (oldStatus != newStatus) {
-            changeRuleStatus(existingRule, newRule);
+            changeRuleStatusAboutOnline(existingRule, newRule);
         }
 
         newRule.setId(existingRule.getId());
@@ -205,24 +241,9 @@ public class RuleServiceImpl implements RuleService {
         // Use doUpdateRule to perform the actual database update
         // Pass original user-provided values to determine if validation is needed
         // If originalContentType is null, pass a special marker to indicate "called from updateRule but user didn't provide"
-        doUpdateRule(existingRule, newRule, originalContentType, originalContent, true);
+        doUpdateRule(existingRule, newRule, originalContentType, originalContent);
     }
 
-    /**
-     * Update rule in database without handling status change logic.
-     * This is a pure database update method that does not trigger status change handlers.
-     *
-     * @param existingRule the existing rule
-     * @param newRule      the new rule data
-     * @throws IllegalArgumentException if rule not found
-     */
-    @Override
-    @Transactional
-    public void doUpdateRule(Rule existingRule, Rule newRule) {
-        // Call the overloaded method with null original values and fromUpdateRule=false
-        // This indicates direct call (not from updateRule), use original logic
-        doUpdateRule(existingRule, newRule, null, null, false);
-    }
 
     /**
      * Internal method to update rule with original user-provided values.
@@ -232,35 +253,20 @@ public class RuleServiceImpl implements RuleService {
      * @param newRule             the new rule data (may have been modified by copying from existingRule)
      * @param originalContentType the original contentType provided by user (null if not provided)
      * @param originalContent     the original content provided by user (null if not provided)
-     * @param fromUpdateRule      true if called from updateRule, false if called directly
      */
-    private void doUpdateRule(Rule existingRule, Rule newRule, ContentTypeEnum originalContentType, String originalContent, boolean fromUpdateRule) {
-        // Validate contentType and content before updating
-        // Only update contentType and content if both are provided and both are valid
-        boolean shouldUpdateContent = false;
-
-        // Determine if user provided contentType and content
-        boolean userProvidedContentType;
-        boolean userProvidedContent;
-
-        if (fromUpdateRule) {
-            // Called from updateRule
-            // User provided contentType if originalContentType is not null
-            userProvidedContentType = originalContentType != null;
-            // User provided content if originalContent is not null and not empty
-            userProvidedContent = originalContent != null && !originalContent.trim().isEmpty();
-        } else {
-            // Called directly (not from updateRule), use original logic:
-            // If both contentType and content are provided, validate both
-            userProvidedContentType = newRule.getContentType() != null;
-            userProvidedContent = newRule.getContent() != null && !newRule.getContent().trim().isEmpty();
+    private void doUpdateRule(Rule existingRule, Rule newRule, ContentTypeEnum originalContentType, String originalContent) {
+        // Use the original values passed from updateRule method
+        boolean userProvidedContentType = originalContentType != null;
+        boolean userProvidedContent = originalContent != null && !originalContent.trim().isEmpty();
+        if (userProvidedContentType && !userProvidedContent) {
+            throw new IllegalArgumentException("Content must be provided when contentType is updated");
         }
 
+        boolean shouldUpdateContent = false;
         // If both contentType and content are provided by user, validate both
-        if (userProvidedContentType && userProvidedContent) {
+        if (userProvidedContentType) {
             // Validate contentType
             ContentTypeEnum validatedContentType = ContentTypeEnum.fromId(newRule.getContentType().getId());
-            // Find the corresponding RuleExecutor based on contentType
             RuleExecutor executor = findRuleExecutor(validatedContentType);
             if (executor == null) {
                 throw new IllegalArgumentException("No executor found for content type: " + validatedContentType);
@@ -269,6 +275,12 @@ public class RuleServiceImpl implements RuleService {
             executor.validate(newRule.getContent());
             // Both are valid, can update both
             shouldUpdateContent = true;
+        }
+
+        // Set content_args based on new rule content
+        if (shouldUpdateContent) {
+            Set<String> contentArgSet = calculateContentArgs(newRule.getContentType(), newRule.getContent());
+            newRule.setContentArgList(contentArgSet.stream().sorted().collect(Collectors.toList()));
         }
 
         // Build entity for update
@@ -288,6 +300,26 @@ public class RuleServiceImpl implements RuleService {
             RuleContentEntity contentEntity = ruleStructMapper.modelToContentEntity(newRule);
             contentEntity.setTimeOnUpdate();
             ruleContentMapper.updateById(contentEntity);
+        }
+
+        // Invalidate execution arrangement cache if rule status changed
+        // This is because rule status affects which rules are included in execution arrangements
+        if (eventRulesCacheService != null) {
+            LambdaQueryWrapper<ExecutionArrangementEntity> arrangementQuery = new LambdaQueryWrapper<>();
+            arrangementQuery.eq(ExecutionArrangementEntity::getRuleId, newRule.getId());
+            List<ExecutionArrangementEntity> arrangementList = executionArrangementMapper.selectList(arrangementQuery);
+            if (arrangementList != null && !arrangementList.isEmpty()) {
+                Set<Integer> eventIdSet = arrangementList.stream()
+                        .map(ExecutionArrangementEntity::getEventId)
+                        .filter(Objects::nonNull)
+                        .collect(Collectors.toSet());
+                for (Integer eventId : eventIdSet) {
+                    eventRulesCacheService.invalidate(eventId);
+                }
+                if (log.isDebugEnabled()) {
+                    log.debug("Invalidated execution arrangement cache for {} events after rule update", eventIdSet.size());
+                }
+            }
         }
 
         log.info("Rule updated: ruleId={}, ruleName={}, status={}",
@@ -320,21 +352,42 @@ public class RuleServiceImpl implements RuleService {
         // Delete rule entity
         ruleMapper.deleteById(ruleId);
 
+        // Get all event IDs associated with this rule before deleting
+        LambdaQueryWrapper<ExecutionArrangementEntity> arrangementQuery = new LambdaQueryWrapper<>();
+        arrangementQuery.eq(ExecutionArrangementEntity::getRuleId, ruleId);
+        List<ExecutionArrangementEntity> arrangementList = executionArrangementMapper.selectList(arrangementQuery);
+        Set<Integer> eventIdSet = arrangementList != null
+                ? arrangementList.stream()
+                .map(ExecutionArrangementEntity::getEventId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet())
+                : Collections.emptySet();
+
         // Delete execution event relations for this rule
-        LambdaQueryWrapper<ExecutionArrangementEntity> deleteWrapper = new LambdaQueryWrapper<>();
-        deleteWrapper.eq(ExecutionArrangementEntity::getRuleId, ruleId);
-        executionArrangementMapper.delete(deleteWrapper);
+        LambdaQueryWrapper<ExecutionArrangementEntity> arrangementWrapper = new LambdaQueryWrapper<>();
+        arrangementWrapper.eq(ExecutionArrangementEntity::getRuleId, ruleId);
+        executionArrangementMapper.delete(arrangementWrapper);
+
+        // Invalidate cache for all affected events
+        if (eventRulesCacheService != null && !eventIdSet.isEmpty()) {
+            for (Integer eventId : eventIdSet) {
+                eventRulesCacheService.invalidate(eventId);
+            }
+            if (log.isDebugEnabled()) {
+                log.debug("Invalidated execution arrangement cache for {} events after rule deletion", eventIdSet.size());
+            }
+        }
 
         log.info("Rule deleted: ruleId={}, ruleName={}", ruleId, rule.getName());
     }
 
     /**
-     * Handle rule status change and update rule groups accordingly
+     * Handle rule status about online. Change and update rule groups accordingly
      *
      * @param oldRule the old rule state
      * @param newRule the new rule state
      */
-    private void changeRuleStatus(Rule oldRule, Rule newRule) {
+    private void changeRuleStatusAboutOnline(Rule oldRule, Rule newRule) {
         RuleStatusEnum oldStatus = oldRule.getRuleStatus();
         RuleStatusEnum newStatus = newRule.getRuleStatus();
 
@@ -360,18 +413,17 @@ public class RuleServiceImpl implements RuleService {
 
     private void changeRuleStatusToOnline(Rule newRule) {
         // Get all event IDs associated with this rule (with group_id = 0, standalone rules)
-        LambdaQueryWrapper<ExecutionArrangementEntity> arrangementQueryWrapper = new LambdaQueryWrapper<>();
-        arrangementQueryWrapper.eq(ExecutionArrangementEntity::getGroupId, 0)
+        LambdaQueryWrapper<ExecutionArrangementEntity> singleArrangementWrapper = new LambdaQueryWrapper<>();
+        singleArrangementWrapper.eq(ExecutionArrangementEntity::getGroupId, 0)
                 .eq(ExecutionArrangementEntity::getRuleId, newRule.getId());
-        List<ExecutionArrangementEntity> arrangementEntityList = executionArrangementMapper.selectList(arrangementQueryWrapper);
-
-        if (arrangementEntityList == null || arrangementEntityList.isEmpty()) {
+        List<ExecutionArrangementEntity> singleArrangementEntityList = executionArrangementMapper.selectList(singleArrangementWrapper);
+        if (singleArrangementEntityList == null || singleArrangementEntityList.isEmpty()) {
             throw new IllegalArgumentException("Rule must be associated with at least one event before transitioning to ONLINE status");
         }
 
         // Create rule group for each event
-        for (ExecutionArrangementEntity arrangementEntity : arrangementEntityList) {
-            Integer eventId = arrangementEntity.getEventId();
+        for (ExecutionArrangementEntity singleArrangementEntity : singleArrangementEntityList) {
+            Integer eventId = singleArrangementEntity.getEventId();
             if (eventId == null) {
                 log.warn("Skipping arrangement with null eventId for rule {}", newRule.getId());
                 continue;
@@ -379,28 +431,28 @@ public class RuleServiceImpl implements RuleService {
             // create rule group
             RuleGroup ruleGroup = ruleGroupService.createRuleGroup(newRule, eventId);
             // update execution arrangement
-            arrangementEntity.setGroupId(ruleGroup.getId());
-            arrangementEntity.setTimeOnUpdate();
-            executionArrangementMapper.updateByPrimaryKey(arrangementEntity);
+            singleArrangementEntity.setGroupId(ruleGroup.getId());
+            singleArrangementEntity.setTimeOnUpdate();
+            executionArrangementMapper.updateByPrimaryKey(singleArrangementEntity);
         }
     }
 
     private void changeRuleStatusFromOnlineToOffline(Rule oldRule) {
         // Get all records from table x associated with this rule (with non-zero group_id)
-        LambdaQueryWrapper<ExecutionArrangementEntity> groupQueryWrapper = new LambdaQueryWrapper<>();
-        groupQueryWrapper.eq(ExecutionArrangementEntity::getRuleId, oldRule.getId())
+        LambdaQueryWrapper<ExecutionArrangementEntity> groupedArrangementWrapper = new LambdaQueryWrapper<>();
+        groupedArrangementWrapper.eq(ExecutionArrangementEntity::getRuleId, oldRule.getId())
                 .ne(ExecutionArrangementEntity::getGroupId, 0);
-        List<ExecutionArrangementEntity> relations = executionArrangementMapper.selectList(groupQueryWrapper);
+        List<ExecutionArrangementEntity> relations = executionArrangementMapper.selectList(groupedArrangementWrapper);
 
         if (relations != null && !relations.isEmpty()) {
             doChangeRuleStatusFromOnline(relations);
         }
 
         // Delete all event-rule associations (with group_id = 0)
-        LambdaQueryWrapper<ExecutionArrangementEntity> eventDeleteWrapper = new LambdaQueryWrapper<>();
-        eventDeleteWrapper.eq(ExecutionArrangementEntity::getRuleId, oldRule.getId())
-                .eq(ExecutionArrangementEntity::getGroupId, 0);
-        executionArrangementMapper.delete(eventDeleteWrapper);
+        LambdaQueryWrapper<ExecutionArrangementEntity> singleArrangementWrapper = new LambdaQueryWrapper<>();
+        singleArrangementWrapper.eq(ExecutionArrangementEntity::getGroupId, 0)
+                .eq(ExecutionArrangementEntity::getRuleId, oldRule.getId());
+        executionArrangementMapper.delete(singleArrangementWrapper);
     }
 
     /**
@@ -412,10 +464,10 @@ public class RuleServiceImpl implements RuleService {
     private void changeRuleStatusFromOnlineToOther(Rule oldRule) {
         log.info("Removing rule {} from groups (transitioning from ONLINE to other status)", oldRule.getId());
         // Get all records from table x associated with this rule (with non-zero group_id)
-        LambdaQueryWrapper<ExecutionArrangementEntity> groupQueryWrapper = new LambdaQueryWrapper<>();
-        groupQueryWrapper.eq(ExecutionArrangementEntity::getRuleId, oldRule.getId())
+        LambdaQueryWrapper<ExecutionArrangementEntity> groupedArrangementWrapper = new LambdaQueryWrapper<>();
+        groupedArrangementWrapper.eq(ExecutionArrangementEntity::getRuleId, oldRule.getId())
                 .ne(ExecutionArrangementEntity::getGroupId, 0);
-        List<ExecutionArrangementEntity> relations = executionArrangementMapper.selectList(groupQueryWrapper);
+        List<ExecutionArrangementEntity> relations = executionArrangementMapper.selectList(groupedArrangementWrapper);
         log.info("Found {} relations with non-zero group_id for rule {}",
                 relations != null ? relations.size() : 0, oldRule.getId());
 
@@ -434,13 +486,13 @@ public class RuleServiceImpl implements RuleService {
             Long groupId = entry.getKey();
             // Update records in table x: set group_id from groupId to 0 (standalone rules)
             for (ExecutionArrangementEntity arrangementEntity : entry.getValue()) {
-                LambdaUpdateWrapper<ExecutionArrangementEntity> updateWrapper = new LambdaUpdateWrapper<>();
-                updateWrapper.eq(ExecutionArrangementEntity::getEventId, arrangementEntity.getEventId())
+                LambdaUpdateWrapper<ExecutionArrangementEntity> arrangementWrapper = new LambdaUpdateWrapper<>();
+                arrangementWrapper.eq(ExecutionArrangementEntity::getEventId, arrangementEntity.getEventId())
                         .eq(ExecutionArrangementEntity::getRuleId, arrangementEntity.getRuleId())
                         .set(ExecutionArrangementEntity::getGroupId, 0L)
                         .set(ExecutionArrangementEntity::getAbRatio, 0)
-                        .set(ExecutionArrangementEntity::getUt, (int) System.currentTimeMillis() / 1000);
-                executionArrangementMapper.update(null, updateWrapper);
+                        .set(ExecutionArrangementEntity::getUt, (int) TimeUtil.getCurrentTime());
+                executionArrangementMapper.update(null, arrangementWrapper);
             }
 
             // Check if group is empty, if so, delete the group
@@ -484,20 +536,20 @@ public class RuleServiceImpl implements RuleService {
         }
 
         // Step 1: Query all records from table x associated with event_id
-        List<ExecutionArrangement> arrangementList = eventService.getExecutionArrangements(eventId);
+        List<ExecutionArrangement> arrangementList = eventService.getExecutionItems(eventId);
         if (arrangementList == null || arrangementList.isEmpty()) {
             log.warn("No execution event relations found for eventId: {}", eventId);
             return Collections.emptyList();
         }
 
         // Step 2: Build ruleIds array using exe_order as array index
-        DraftResult draftResult = draftExecutionItemIds(eventId, arrangementList);
-        Long[] executionQueue = draftResult.getExecutionQueue();
-        Map<Long, List<ExecutionArrangement>> groupRulesMap = draftResult.getGroupRuleMap();
-        Map<Long, Long> ruleGroupMap = draftResult.getRuleGroupMap();
+        DraftResult draftResult = draftExecutionQueue(eventId, arrangementList);
+        Long[] executionQueue = draftResult.getExecutionQueue();  // ruleId list in execution order
+        Map<Long, List<ExecutionArrangement>> groupMap = draftResult.getGroupMap();
+        Map<Long, Long> ruleGroupMap = draftResult.getArrangementGroupMap();
 
         // Step 3: Select rule from each group based on userHashInt
-        selectRuleFromGroupByRatio(eventId, userId, userHashInt, groupRulesMap, executionQueue);
+        selectRuleFromGroupByRatio(eventId, userId, userHashInt, groupMap, executionQueue);
 
         // Step 4: Collect all rule IDs from array (excluding nulls)
         List<Long> finalRuleIds = Arrays.stream(executionQueue)
@@ -530,14 +582,23 @@ public class RuleServiceImpl implements RuleService {
 
     @Data
     static class DraftResult {
+        /**
+         * Execution queue array, index = exe_order, value = rule_id
+         */
         private Long[] executionQueue;
-        private Map<Long, List<ExecutionArrangement>> groupRuleMap;
-        private Map<Long, Long> ruleGroupMap;
+        /**
+         * Map of group_id to list of ExecutionArrangement in that group
+         */
+        private Map<Long, List<ExecutionArrangement>> groupMap;
+        /**
+         * Map of rule_id to group_id
+         */
+        private Map<Long, Long> arrangementGroupMap;
 
         DraftResult(int queueSize) {
             this.executionQueue = new Long[queueSize];
-            this.groupRuleMap = new HashMap<>();
-            this.ruleGroupMap = new HashMap<>();
+            this.groupMap = new HashMap<>();
+            this.arrangementGroupMap = new HashMap<>();
         }
 
         void addArrangementInQueue(ExecutionArrangement arrangement) {
@@ -557,21 +618,22 @@ public class RuleServiceImpl implements RuleService {
             if (groupId == null) {
                 return;
             }
-            groupRuleMap.computeIfAbsent(groupId, k -> new ArrayList<>()).add(arrangement);
+            groupMap.computeIfAbsent(groupId, k -> new ArrayList<>()).add(arrangement);
         }
 
-        void addRuleGroupMapping(ExecutionArrangement arrangement) {
-            ruleGroupMap.put(arrangement.getRuleId(), arrangement.getGroupId());
+        void indexGroupByArrangement(ExecutionArrangement arrangement) {
+            arrangementGroupMap.put(arrangement.getRuleId(), arrangement.getGroupId());
         }
     }
 
-    private DraftResult draftExecutionItemIds(Integer eventId,
-                                              List<ExecutionArrangement> arrangementList) {
+
+    private DraftResult draftExecutionQueue(Integer eventId,
+                                            List<ExecutionArrangement> arrangementList) {
         int maxExeOrder = arrangementList.stream()
                 .mapToInt(entity -> entity.getExeOrder() != null ? entity.getExeOrder() : 0)
                 .max()
                 .orElse(-1);
-        if (maxExeOrder < 0 || maxExeOrder != (arrangementList.size() - 1)) {
+        if (maxExeOrder < (arrangementList.size() - 1)) {
             throw new IllegalStateException("Invalid exe_order values for eventId: " + eventId);
         }
 
@@ -586,17 +648,18 @@ public class RuleServiceImpl implements RuleService {
                 // Rule in group, group by group_id
                 result.addArrangementInGroup(arrangement);
             }
-            result.addRuleGroupMapping(arrangement);
+            result.indexGroupByArrangement(arrangement);
         }
         return result;
     }
 
+
     private void selectRuleFromGroupByRatio(Integer eventId,
                                             Long userId,
                                             Integer userHashInt,
-                                            Map<Long, List<ExecutionArrangement>> groupArrangmentMap,
+                                            Map<Long, List<ExecutionArrangement>> groupMap,
                                             Long[] executionItemIds) {
-        for (Map.Entry<Long, List<ExecutionArrangement>> entry : groupArrangmentMap.entrySet()) {
+        for (Map.Entry<Long, List<ExecutionArrangement>> entry : groupMap.entrySet()) {
             Long groupId = entry.getKey();
             if (groupId == null) {
                 throw new IllegalStateException("Invalid groupId (null) in groupRulesMap");
@@ -620,12 +683,14 @@ public class RuleServiceImpl implements RuleService {
             }
             // Put selected rule_id into array at exe_order position
             try {
-                setExecutionQueue(arrangementListInGroup, selectedRuleId, executionItemIds);
+                Integer exeOrder = arrangementListInGroup.get(0).getExeOrder();
+                executionItemIds[exeOrder] = selectedRuleId;
             } catch (IllegalStateException e) {
                 throw new IllegalStateException(e.getMessage() + ", group=" + groupId);
             }
         }
     }
+
 
     private Long getCachedRuleId(Long userId,
                                  Integer userHashInt,
@@ -661,6 +726,7 @@ public class RuleServiceImpl implements RuleService {
 
         return selectedRuleId;
     }
+
 
     /**
      * Select rule from group based on probability distribution (ab_ratio)
@@ -704,38 +770,6 @@ public class RuleServiceImpl implements RuleService {
         return null;
     }
 
-    /**
-     * Set execution item into execution queue
-     * It is NOT thread safe, should be called in single-threaded context
-     *
-     * @param arrangementListInGroup arrangements in the group
-     * @param selectedItemId         the selected rule ID
-     * @param executionQueue         the execution queue
-     */
-    private void setExecutionQueue(List<ExecutionArrangement> arrangementListInGroup,
-                                   Long selectedItemId,
-                                   Long[] executionQueue) {
-        Integer index = arrangementListInGroup.get(0).getExeOrder();
-        if (index == null || index < 0 || index >= executionQueue.length) {
-            throw new IllegalStateException("[drawRule] invalid exe_order");
-        }
-        for (ExecutionArrangement arrangement : arrangementListInGroup) {
-            if (!arrangement.getRuleId().equals(selectedItemId)) {
-                continue;
-            }
-            Integer exeOrder = arrangement.getExeOrder();
-            if (exeOrder == null || !exeOrder.equals(index)) {
-                throw new IllegalStateException("[drawRule] exe_order mismatch for selected rule");
-            }
-            executionQueue[index] = selectedItemId;
-            break;
-        }
-        // validate that selected rule was placed
-        if (executionQueue[index] == null || !executionQueue[index].equals(selectedItemId)) {
-            throw new IllegalStateException("[drawRule] selected rule not placed in ruleIds array");
-        }
-    }
-
 
     private Map<Long, Rule> batchGetRuleWithContent(Set<Long> ruleIds) {
         // Batch load rule entities
@@ -751,10 +785,54 @@ public class RuleServiceImpl implements RuleService {
                 .filter(Objects::nonNull)
                 .collect(Collectors.toSet());
 
-        // Batch load rule contents
-        Map<Long, String> contentMap = batchGetContentMap(foundRuleIds);
+        // Batch load rule contents with cache support (configurable)
+        Map<Long, String> contentMap = ruleContentCacheEnabled
+                ? batchGetContentMapWithCache(foundRuleIds)
+                : batchGetContentMap(foundRuleIds);
 
         return buildRuleMap(ruleEntities, contentMap);
+    }
+
+
+    private Map<Long, String> batchGetContentMapWithCache(Set<Long> ruleIdSet) {
+        // Check if cache service is available
+        if (ruleContentCacheService == null) {
+            log.warn("RuleContentCacheService is not configured, fetching from database directly");
+            return batchGetContentMap(ruleIdSet);
+        }
+
+        // First, try to get content from cache in batch
+        Map<Long, String> cachedContentMap = ruleContentCacheService.getBatch(ruleIdSet);
+
+        // Find uncached rule IDs
+        Set<Long> uncachedRuleIds = ruleIdSet.stream()
+                .filter(ruleId -> !cachedContentMap.containsKey(ruleId))
+                .collect(Collectors.toSet());
+        if (uncachedRuleIds.isEmpty()) {
+            if (log.isDebugEnabled()) {
+                log.debug("[eval] all rules from cache: {} total", ruleIdSet.size());
+            }
+            return cachedContentMap;
+        }
+        if (log.isDebugEnabled()) {
+            log.debug("[eval] rule content cache: {} hits, {} misses out of {} total",
+                    cachedContentMap.size(), uncachedRuleIds.size(), ruleIdSet.size());
+        }
+
+        Map<Long, String> contentMap = new HashMap<>(cachedContentMap);
+
+        // If there are uncached rule IDs, fetch from database
+        Map<Long, String> dbContentMap = batchGetContentMap(uncachedRuleIds);
+        contentMap.putAll(dbContentMap);
+
+        // Update cache with newly fetched content
+        ruleContentCacheService.putBatch(dbContentMap);
+
+        if (log.isDebugEnabled()) {
+            log.debug("[eval] fetched {} rule contents from database and updated cache", dbContentMap.size());
+        }
+
+        return contentMap;
     }
 
 
@@ -767,6 +845,7 @@ public class RuleServiceImpl implements RuleService {
                 : Collections.emptyMap();
     }
 
+
     private Map<Long, Rule> buildRuleMap(List<RuleEntity> ruleEntities, Map<Long, String> contentMap) {
         Map<Long, Rule> ruleMap = new HashMap<>();
         for (RuleEntity ruleEntity : ruleEntities) {
@@ -774,11 +853,34 @@ public class RuleServiceImpl implements RuleService {
             if (rule == null) {
                 continue;
             }
-            String content = contentMap.getOrDefault(ruleEntity.getId(), "");
+            String content = contentMap.getOrDefault(ruleEntity.getId(), CommonConst.EMPTY_STRING);
             rule.setContent(content);
             ruleMap.put(rule.getId(), rule);
         }
         return ruleMap;
     }
+
+    /**
+     * Calculate content_args string based on content type and content.
+     * This method extracts parameter names from rule content and returns them as comma-separated string.
+     *
+     * @param contentType the content type enum
+     * @param content     the rule content to analyze
+     * @return comma-separated string of parameter names, or empty string if none found
+     */
+    private Set<String> calculateContentArgs(@NotNull ContentTypeEnum contentType, @NotBlank String content) {
+        RuleExecutor executor = findRuleExecutor(contentType);
+        if (executor == null) {
+            throw new IllegalStateException("No executor found for content type: " + contentType);
+        }
+
+        Set<String> argSet = executor.extractArgs(content);
+        if (argSet == null || argSet.isEmpty()) {
+            return Collections.emptySet();
+        }
+
+        return argSet;
+    }
+
 }
 

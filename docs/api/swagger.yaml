@@ -455,7 +455,7 @@ paths:
     post:
       tags:
         - Evaluation
-      summary: Execute rule evaluation
+      summary: Execute rule evaluation (synchronous blocking)
       description: |
         Execute rule calculation based on event ID and user ID, returning calculation results.
         This is a synchronous blocking HTTP interface.
@@ -466,12 +466,68 @@ paths:
            - If it's a rule, execute rule calculation directly
            - If it's a rule group, select a rule based on user hash and rule probability, then execute
         3. Return the result of the last execution item
-        4. Asynchronously send calculation results to message queue (RabbitMQ) for subsequent processing
+        4. Asynchronously send calculation results to message queue (Kafka) for subsequent processing
         
         Note: This interface is synchronous blocking and will wait for rule calculation to complete before returning results.
         If an exception occurs during rule calculation, an error message will be returned, but no HTTP exception will be thrown (always returns 200 status code).
         Message queue send failures will not affect the main flow, only logs will be recorded.
       operationId: eval
+      parameters:
+        - name: X-Request-ID
+          in: header
+          description: Request ID for tracing (optional)
+          required: false
+          schema:
+            type: string
+        - name: traceId
+          in: query
+          description: Business request trace ID (optional, will use X-Request-ID if not provided)
+          required: false
+          schema:
+            type: integer
+            format: int64
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EvalQO'
+      responses:
+        '200':
+          description: Evaluation result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EvalResultDTO'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /eval/reactive:
+    post:
+      tags:
+        - Evaluation
+      summary: Execute rule evaluation (reactive non-blocking)
+      description: |
+        Execute rule calculation based on event ID and user ID, returning calculation results.
+        This is a reactive non-blocking HTTP interface using Spring WebFlux.
+        
+        Execution flow:
+        1. Query execution items (rules and rule groups) associated with the event
+        2. Execute in order:
+           - If it's a rule, execute rule calculation directly
+           - If it's a rule group, select a rule based on user hash and rule probability, then execute
+        3. Return the result of the last execution item
+        4. Asynchronously send calculation results to message queue (Kafka) for subsequent processing
+        
+        Note: This interface is reactive non-blocking and uses Spring WebFlux for better concurrency handling.
+        Blocking operations are executed on a dedicated scheduler to avoid blocking reactive threads.
+        If an exception occurs during rule calculation, an error message will be returned, but no HTTP exception will be thrown (always returns 200 status code).
+        Message queue send failures will not affect the main flow, only logs will be recorded.
+        
+        This endpoint requires Content-Type: application/json header.
+      operationId: evalReactive
       requestBody:
         required: true
         content:
@@ -745,7 +801,7 @@ components:
       properties:
         itemType:
           type: integer
-          description: Item type ID (enumeration ID: 0=RULE, 1=RULE_GROUP)
+          description: "Item type ID (enumeration ID: 0=RULE, 1=RULE_GROUP)"
           enum: [0, 1]
           example: 0
         itemId:
@@ -769,7 +825,7 @@ components:
       properties:
         itemType:
           type: integer
-          description: Item type ID (enumeration ID: 0=RULE, 1=RULE_GROUP)
+          description: "Item type ID (enumeration ID: 0=RULE, 1=RULE_GROUP)"
           enum: [0, 1]
           example: 0
         itemId:
@@ -816,7 +872,7 @@ components:
           example: "检查金额是否大于1000"
         contentType:
           type: integer
-          description: Rule content type ID (enumeration ID: 0=EXPRESSION, 1=API_QUERY, 2=SQL_QUERY, 3=SCRIPT)
+          description: "Rule content type ID (enumeration ID: 0=EXPRESSION, 1=API_QUERY, 2=SQL_QUERY, 3=SCRIPT)"
           enum: [0, 1, 2, 3]
           example: 0
         content:
@@ -825,7 +881,7 @@ components:
           example: "amount > 1000"
         ruleStatus:
           type: integer
-          description: Rule status ID (enumeration ID: 0=OFFLINE, 1=TEST, 2=GRAY, 3=AB_TEST, 4=FULL)
+          description: "Rule status ID (enumeration ID: 0=OFFLINE, 1=TEST, 2=GRAY, 3=AB_TEST, 4=FULL)"
           enum: [0, 1, 2, 3, 4]
           example: 0
         ruleGroupId:
@@ -857,7 +913,7 @@ components:
           example: "检查金额是否大于1000"
         contentType:
           type: integer
-          description: Rule content type ID (required, enumeration ID: 0=EXPRESSION, 1=API_QUERY, 2=SQL_QUERY, 3=SCRIPT)
+          description: "Rule content type ID (required, enumeration ID: 0=EXPRESSION, 1=API_QUERY, 2=SQL_QUERY, 3=SCRIPT)"
           enum: [0, 1, 2, 3]
           example: 0
         content:
@@ -885,12 +941,12 @@ components:
           example: "更新后的描述"
         contentType:
           type: integer
-          description: Rule content type ID (optional, enumeration ID: 0=EXPRESSION, 1=API_QUERY, 2=SQL_QUERY, 3=SCRIPT)
+          description: "Rule content type ID (optional, enumeration ID: 0=EXPRESSION, 1=API_QUERY, 2=SQL_QUERY, 3=SCRIPT)"
           enum: [0, 1, 2, 3]
           example: 0
         ruleStatus:
           type: integer
-          description: Rule status ID (optional, enumeration ID: 0=OFFLINE, 1=TEST, 2=GRAY, 3=AB_TEST, 4=FULL)
+          description: "Rule status ID (optional, enumeration ID: 0=OFFLINE, 1=TEST, 2=GRAY, 3=AB_TEST, 4=FULL)"
           enum: [0, 1, 2, 3, 4]
           example: 4
         content:
@@ -940,7 +996,7 @@ components:
 
     EvalQO:
       type: object
-      description: Rule evaluation request object
+      description: Rule evaluation request object. Note: traceId can be provided via X-Request-ID header or traceId query parameter, and is optional in the request body.
       properties:
         userId:
           type: integer
@@ -957,7 +1013,7 @@ components:
         traceId:
           type: integer
           format: int64
-          description: Business request trace ID (required)
+          description: Business request trace ID (optional, can be provided via X-Request-ID header or traceId query parameter instead)
           example: 999999
         arguments:
           type: object
@@ -977,7 +1033,6 @@ components:
       required:
         - userId
         - eventId
-        - traceId
         - arguments
 
     TypedValue:
@@ -1061,7 +1116,7 @@ components:
       properties:
         itemType:
           type: integer
-          description: Execution item type ID (enumeration ID: 0=RULE, 1=RULE_GROUP)
+          description: "Execution item type ID (enumeration ID: 0=RULE, 1=RULE_GROUP)"
           enum: [0, 1]
           example: 0
         itemId:

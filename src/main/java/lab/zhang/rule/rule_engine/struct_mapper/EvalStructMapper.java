@@ -1,7 +1,7 @@
 package lab.zhang.rule.rule_engine.struct_mapper;
 
-import lab.zhang.rule.rule_engine.pojo.dto.EvalDTO;
-import lab.zhang.rule.rule_engine.pojo.qo.EvalQO;
+import lab.zhang.rule.rule_engine.model.EvalRequest;
+import lab.zhang.rule.rule_engine.pojo.qo.EvalRequestQO;
 import org.mapstruct.Mapper;
 
 /**
@@ -18,6 +18,6 @@ public interface EvalStructMapper {
      * @param qo evaluation query object
      * @return evaluation DTO
      */
-    EvalDTO qoToDto(EvalQO qo);
+    EvalRequest qoToModel(EvalRequestQO qo);
 }
 

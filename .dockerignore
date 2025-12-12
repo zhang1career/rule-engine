@@ -1,18 +1,23 @@
 # Git files
-.git
+.git/
 .gitignore
 .gitattributes
 
 # IDE files
-.idea
+.idea/
+.run/
 .vscode
 *.iml
 *.ipr
 *.iws
+.cursor/
+.cursorrules
 .DS_Store
+
 
 # Maven files
 target/
+!target/rule_engine-*.jar
 .mvn/
 mvnw
 mvnw.cmd
@@ -22,6 +27,7 @@ src/test/
 
 # Documentation
 docs/
+scripts/
 *.md
 !README.md
 

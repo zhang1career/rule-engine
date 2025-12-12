@@ -41,7 +41,7 @@ public interface RuleService {
      * @param currentTimeSeconds current time in seconds
      * @throws IllegalArgumentException if rule with same name already exists
      */
-    void doCreateRule(Rule rule, long currentTimeSeconds);
+    void createRuleAt(Rule rule, long currentTimeSeconds);
 
     /**
      * Update rule
@@ -52,16 +52,6 @@ public interface RuleService {
      */
     void updateRule(Long ruleId, Rule rule);
 
-    /**
-     * Update rule in database without handling status change logic.
-     * This is a pure database update method that does not trigger status change handlers.
-     * Use this method when you need to update a rule without triggering status change callbacks.
-     *
-     * @param existingRule the existing rule
-     * @param newRule the new rule data
-     * @throws IllegalArgumentException if rule not found
-     */
-    void doUpdateRule(Rule existingRule, Rule newRule);
 
     /**
      * Delete rule

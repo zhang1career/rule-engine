@@ -45,3 +45,12 @@ logs/
 *.tar.gz
 *.rar
 
+# Enviroment
+.env*
+
+# Scripts
+scripts/mock/
+!scripts/mock/README.md
+!scripts/mock/example.mock
+scripts/out/
+*__pycache__/

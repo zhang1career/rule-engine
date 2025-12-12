@@ -1,5 +1,8 @@
 package lab.zhang.rule.rule_engine.config;
 
+import com.fasterxml.jackson.databind.DeserializationFeature;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
 import lab.zhang.rule.rule_engine.engine.RuleExecutionEngine;
 import lab.zhang.rule.rule_engine.executor.RuleExecutor;
 import lab.zhang.rule.rule_engine.executor.impl.SqlQueryRuleExecutor;
@@ -11,6 +14,7 @@ import org.springframework.context.ApplicationContext;
 import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Primary;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.web.client.RestTemplate;
 
@@ -101,6 +105,25 @@ public class RuleEngineConfig {
     @Bean
     public RestTemplate restTemplate() {
         return new RestTemplate();
+    }
+
+    /**
+     * Optimized ObjectMapper for JSON serialization/deserialization
+     * Optimized for performance with disabled unnecessary features
+     *
+     * @return optimized ObjectMapper instance
+     */
+    @Bean
+    @Primary
+    public ObjectMapper objectMapper() {
+        ObjectMapper mapper = new ObjectMapper();
+        // Disable features that are not needed for better performance
+        mapper.disable(SerializationFeature.FAIL_ON_EMPTY_BEANS);
+        mapper.disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES);
+        // Enable features that improve performance
+        mapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
+        log.info("[init] optimized ObjectMapper configured");
+        return mapper;
     }
 
     /**

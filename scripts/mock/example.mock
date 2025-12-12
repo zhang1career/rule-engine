@@ -1,0 +1,93 @@
+# Load Test Configuration for Eval API
+# Defines API interface and data generation rules for load testing the /api/eval endpoint
+
+# API Interface Definition
+api:
+  name: "Eval API"
+  method: "POST"
+  path: "/api/eval"
+  base_url: "http://localhost:8080"
+  full_url: "http://localhost:8080/api/eval"
+  description: "Rule evaluation interface (HTTP synchronous blocking)"
+  headers:
+    Content-Type: "application/json"
+  timeout: 30
+
+# Request Data Structure and Generation Rules
+request_schema:
+  # Root level fields
+  fields:
+    # User ID field
+    userId:
+      type: "LONG"
+      required: true
+      description: "User ID (required, must be positive)"
+      generation:
+        method: "increment"
+        start: 1000000
+        step: 1
+
+    # Event ID field
+    eventId:
+      type: "LONG"
+      required: true
+      description: "Event ID (required, unsigned long integer, must be positive)"
+      generation:
+        method: "fixed"
+        value: 1001
+
+    # Trace ID field
+    traceId:
+      type: "LONG"
+      required: true
+      description: "Business request trace ID (required)"
+      generation:
+        method: "increment"
+        start: 1000000
+        step: 1
+
+    # Arguments field (nested object)
+    arguments:
+      type: "OBJECT"
+      required: true
+      description: "Parameter dictionary for rule calculation (required)"
+      # Nested fields within arguments
+      fields:
+        # Amount parameter
+        amount:
+          type: "DECIMAL"
+          required: false
+          description: "Transaction amount"
+          generation:
+            method: "random_float"
+            min: 100.0
+            max: 10000.0
+            precision: 2
+
+        # Age parameter
+        age:
+          type: "INTEGER"
+          required: false
+          description: "User age"
+          generation:
+            method: "random_int"
+            min: 18
+            max: 80
+
+        # VIP status parameter
+        isVip:
+          type: "BOOLEAN"
+          required: false
+          description: "Whether user is VIP"
+          generation:
+            method: "random_choice"
+            values: [true, false]
+
+        # Name parameter
+        name:
+          type: "STRING"
+          required: false
+          description: "User name"
+          generation:
+            method: "template"
+            template: "User_{userId}"

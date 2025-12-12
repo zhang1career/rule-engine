@@ -1,7 +1,6 @@
 package lab.zhang.rule.rule_engine.controller
 
 
-import lab.zhang.rule.rule_engine.entity.ExecutionArrangementEntity
 import lab.zhang.rule.rule_engine.model.ExecutionArrangement
 import lab.zhang.rule.rule_engine.pojo.dto.ExecutionArrangementDTO
 import lab.zhang.rule.rule_engine.pojo.qo.ExecutionArrangementQO
@@ -152,10 +151,10 @@ class EventExecutionItemsControllerSpec extends Specification {
         ]
 
         when: "get execution items"
-        def response = controller.getExecutionArrangements(eventId)
+        def response = controller.getExecutionItems(eventId)
 
         then: "should return execution items with correct order"
-        1 * eventService.getExecutionArrangements(eventId) >> relations
+        1 * eventService.getExecutionItems(eventId) >> relations
         3 * executionArrangementStructMapper.modelToDTO(_ as ExecutionArrangement) >> { ExecutionArrangement model ->
             def dto = new ExecutionArrangementDTO()
             dto.setEventId(model.eventId)
@@ -188,10 +187,10 @@ class EventExecutionItemsControllerSpec extends Specification {
     @Unroll
     def "test getExecutionItems - empty result - eventId: #eventId"() {
         when: "get execution items for event with no items"
-        def response = controller.getExecutionArrangements(eventId)
+        def response = controller.getExecutionItems(eventId)
 
         then: "should return empty list"
-        1 * eventService.getExecutionArrangements(eventId) >> []
+        1 * eventService.getExecutionItems(eventId) >> []
         response.statusCode == HttpStatus.OK
         response.body.code == 0
         response.body.data.size() == 0

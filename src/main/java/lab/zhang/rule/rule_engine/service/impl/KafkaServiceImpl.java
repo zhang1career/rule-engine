@@ -1,8 +1,8 @@
 package lab.zhang.rule.rule_engine.service.impl;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import lab.zhang.rule.rule_engine.common.TypedValue;
-import lab.zhang.rule.rule_engine.pojo.dto.EvalDTO;
+import lab.zhang.rule.rule_engine.model.EvalRequest;
+import lab.zhang.rule.rule_engine.model.EvalResult;
 import lab.zhang.rule.rule_engine.service.KafkaService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -12,6 +12,7 @@ import org.springframework.stereotype.Service;
 
 import java.util.HashMap;
 import java.util.Map;
+
 
 /**
  * Kafka service implementation
@@ -32,31 +33,30 @@ public class KafkaServiceImpl implements KafkaService {
     private String topic;
 
     @Override
-    public void sendEvalResult(EvalDTO request, TypedValue result) {
-//        if (kafkaTemplate == null) {
-//            log.warn("KafkaTemplate not configured, skip sending message");
-//            return;
-//        }
-//
-//        try {
-//            // Build message body
-//            Map<String, Object> message = new HashMap<>();
-//            message.put("userId", request.getUserId());
-//            message.put("eventId", request.getEventId());
-//            message.put("traceId", request.getTraceId());
-//            message.put("arguments", request.getArguments());
-//            message.put("result", result);
-//            message.put("timestamp", System.currentTimeMillis());
-//
-//            // Send message
-//            String messageBody = objectMapper.writeValueAsString(message);
-//            kafkaTemplate.send(topic, messageBody);
-//
-//            log.info("Message sent to Kafka: traceId={}", request.getTraceId());
-//        } catch (Exception e) {
-//            log.error("Failed to send message to Kafka: {}", e.getMessage(), e);
-//            throw new RuntimeException("Failed to send message to Kafka", e);
-//        }
+    public void sendEvalResult(EvalRequest request, EvalResult result) {
+        if (kafkaTemplate == null) {
+            log.warn("[eval] KafkaTemplate not configured, skip sending message");
+            return;
+        }
+
+        try {
+            // Build message body
+            Map<String, Object> message = new HashMap<>();
+            message.put("userId", request.getUserId());
+            message.put("eventId", request.getEventId());
+            message.put("traceId", result.getTrace().getTraceId());
+            message.put("arguments", request.getArguments());
+            message.put("result", result.getValue());
+            message.put("timestamp", System.currentTimeMillis());
+
+            // Send message
+            String messageBody = objectMapper.writeValueAsString(message);
+            kafkaTemplate.send(topic, messageBody);
+
+            log.info("[eval] message sent to kafka, topic={}, messageSize={}", topic, messageBody.length());
+        } catch (Exception e) {
+            log.error("[eval] failed to send message to kafka: {}", e.getMessage(), e);
+            throw new RuntimeException("Failed to send message to Kafka", e);
+        }
     }
 }
-

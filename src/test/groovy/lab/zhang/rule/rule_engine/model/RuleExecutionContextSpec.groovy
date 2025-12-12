@@ -16,7 +16,6 @@ class RuleExecutionContextSpec extends Specification {
         def context = new RuleExecutionContext()
 
         then: "should have default values"
-        context.variables != null
         context.arguments != null
 
         where:
@@ -24,37 +23,35 @@ class RuleExecutionContextSpec extends Specification {
     }
 
     @Unroll
-    def "test create RuleExecutionContext with parameters - userId: #userId, eventId: #eventId, traceId: #traceId, arguments: #arguments"() {
+    def "test create RuleExecutionContext with parameters - userId: #userId, eventId: #eventId, arguments: #arguments"() {
         when: "create execution context"
-        def context = new RuleExecutionContext(userId, eventId, traceId, arguments)
+        def context = new RuleExecutionContext(userId, eventId, arguments)
 
         then: "should correctly set parameters"
         context.userId == userId
         context.eventId == eventId
-        context.traceId == traceId
         context.arguments == (arguments != null ? arguments : [:])
-        context.variables != null
 
         where:
-        userId | eventId | traceId | arguments
-        123L   | 1001    | 999L    | ["amount": new TypedValue(1000.0, ValueTypeEnum.DECIMAL)]
-        456L   | 1002    | 888L    | ["age": new TypedValue(25, ValueTypeEnum.INTEGER), "name": new TypedValue("John", ValueTypeEnum.STRING)]
-        null   | null    | null    | [:]
-        789L   | 1003    | 777L    | null
+        userId | eventId  | arguments
+        123L   | 1001     | ["amount": new TypedValue(1000.0, ValueTypeEnum.DECIMAL)]
+        456L   | 1002     | ["age": new TypedValue(25, ValueTypeEnum.INTEGER), "name": new TypedValue("John", ValueTypeEnum.STRING)]
+        null   | null     | [:]
+        789L   | 1003     | null
     }
 
     @Unroll
-    def "test setVariable and getVariable - key: #key, value: #value, expectedValue: #expectedValue"() {
+    def "test putArgument and getArgument - key: #key, value: #value, expectedValue: #expectedValue"() {
         given: "create execution context"
         def context = new RuleExecutionContext()
 
-        when: "set variable"
+        when: "set argument"
         if (value != null) {
-            context.setVariable(key, value)
+            context.putArgument(key, value)
         }
 
-        then: "can get variable"
-        context.getVariable(key) == expectedValue
+        then: "can get argument"
+        context.getArgument(key) == expectedValue
 
         where:
         key    | value                                               | expectedValue
@@ -62,5 +59,58 @@ class RuleExecutionContextSpec extends Specification {
         "key2" | new TypedValue(100, ValueTypeEnum.INTEGER)   | new TypedValue(100, ValueTypeEnum.INTEGER)
         "key3" | new TypedValue(true, ValueTypeEnum.BOOLEAN)  | new TypedValue(true, ValueTypeEnum.BOOLEAN)
         "key4" | null                                                | null
+    }
+
+    @Unroll
+    def "test getVariable and setVariable for special properties - key: #key, value: #value, expectedValue: #expectedValue"() {
+        given: "create execution context"
+        def context = new RuleExecutionContext()
+
+        when: "set variable for special property"
+        if (value != null) {
+            context.setVariable(key, value)
+        }
+
+        then: "can get variable and verify special property value"
+        context.getVariable(key) == expectedValue
+        verifySpecialProperty(context, key, value)
+
+        where:
+        key       | value                                             | expectedValue
+        "userId"  | new TypedValue(123L, ValueTypeEnum.LONG)      | new TypedValue(123L, ValueTypeEnum.LONG)
+        "eventId" | new TypedValue(456, ValueTypeEnum.INTEGER)    | new TypedValue(456, ValueTypeEnum.INTEGER)
+        "userId"  | null                                             | new TypedValue(null, ValueTypeEnum.LONG)
+        "eventId" | null                                             | new TypedValue(null, ValueTypeEnum.INTEGER)
+    }
+
+    @Unroll
+    def "test getVariable and setVariable for regular arguments - key: #key, value: #value, expectedValue: #expectedValue"() {
+        given: "create execution context"
+        def context = new RuleExecutionContext()
+
+        when: "set variable for regular argument"
+        if (value != null) {
+            context.setVariable(key, value)
+        }
+
+        then: "can get variable from arguments"
+        context.getVariable(key) == expectedValue
+
+        where:
+        key       | value                                             | expectedValue
+        "regular" | new TypedValue("test", ValueTypeEnum.STRING)  | new TypedValue("test", ValueTypeEnum.STRING)
+        "number"  | new TypedValue(100, ValueTypeEnum.INTEGER)    | new TypedValue(100, ValueTypeEnum.INTEGER)
+        "regular" | null                                             | null
+    }
+
+    private void verifySpecialProperty(RuleExecutionContext context, String key, TypedValue value) {
+        switch (key) {
+            case "userId":
+                assert context.userId == (value != null ? value.getValue() : null)
+                break
+            case "eventId":
+                assert context.eventId == (value != null ? value.getValue() : null)
+                break
+        }
     }
 }

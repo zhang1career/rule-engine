@@ -1,0 +1,19 @@
+# Gray environment configuration (pre-production/staging)
+rule:
+  engine:
+    environment: GRAY
+
+# Gray environment logging configuration
+logging:
+  level:
+    root: INFO
+    lab.zhang.rule: INFO
+    # Third-party library logs
+    com.baomidou.mybatisplus: WARN
+    org.springframework.jdbc: WARN
+    org.springframework.data.redis: WARN
+    org.springframework.web: INFO
+  # Gray environment log files
+  file:
+    name: /var/log/rule_engine/app.log
+

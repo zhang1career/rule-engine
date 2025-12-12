@@ -17,11 +17,11 @@ import lombok.EqualsAndHashCode;
 public class EventEntity extends BaseEntity {
     
     /**
-     * Event ID (primary key, unsigned long integer)
+     * Event ID (primary key, unsigned integer)
      * Must be specified when creating, not auto-increment
      */
     @TableId(type = IdType.INPUT)
-    private Long id;
+    private Integer id;
     
     /**
      * Event name

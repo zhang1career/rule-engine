@@ -7,7 +7,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import javax.validation.constraints.NotEmpty;
-import java.util.Map;
+import java.util.List;
 
 /**
  * Request Object for creating a rule group
@@ -24,10 +24,10 @@ import java.util.Map;
 public class RuleGroupQO {
 
     /**
-     * Map of rule ID to A/B test ratio (0-100)
+     * List of rule ratios for A/B test (0-100)
      */
     @NotEmpty(message = "Rules cannot be empty")
     @ValidRuleRatios(message = "Invalid rule ratios")
-    private Map<Long, Integer> ruleRatios;
+    private List<RuleRatioQO> ruleRatios;
 }
 

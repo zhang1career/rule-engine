@@ -2,7 +2,9 @@ package lab.zhang.rule.rule_engine.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
+import lab.zhang.rule.rule_engine.cache.EventRulesCacheService;
 import lab.zhang.rule.rule_engine.config.RuleStatusConfig;
+import lab.zhang.rule.rule_engine.constant.CommonConst;
 import lab.zhang.rule.rule_engine.entity.EventEntity;
 import lab.zhang.rule.rule_engine.entity.ExecutionArrangementEntity;
 import lab.zhang.rule.rule_engine.entity.RuleEntity;
@@ -21,7 +23,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import javax.validation.constraints.NotEmpty;
 import javax.validation.constraints.NotNull;
 import java.util.*;
 import java.util.stream.Collectors;
@@ -53,6 +54,9 @@ public class EventServiceImpl implements EventService {
     @Autowired
     private RuleStatusConfig ruleStatusConfig;
 
+    @Autowired(required = false)
+    private EventRulesCacheService eventRulesCacheService;
+
     @Override
     public List<Event> getAllEvents() {
         List<EventEntity> eventEntities = eventMapper.selectList(null);
@@ -65,7 +69,7 @@ public class EventServiceImpl implements EventService {
     }
 
     @Override
-    public Event getEventById(Long eventId) {
+    public Event getEventById(Integer eventId) {
         EventEntity eventEntity = eventMapper.selectById(eventId);
         if (eventEntity == null) {
             return null;
@@ -73,36 +77,39 @@ public class EventServiceImpl implements EventService {
         return eventStructMapper.entityToModel(eventEntity);
     }
 
+
     @Override
     @Transactional
-    public Event createEvent(Long id, String name, String description) {
+    public Event createEvent(Event event) {
+        if (event == null || event.getId() == null) {
+            throw new IllegalArgumentException("event, and its id cannot be null");
+        }
+
+        Integer id = event.getId();
         // Check if event with same id already exists
         EventEntity existingEvent = eventMapper.selectById(id);
         if (existingEvent != null) {
-            throw new IllegalArgumentException("Event with ID " + id + " already exists");
+            throw new IllegalArgumentException("event with ID " + id + " already exists");
         }
 
-        Event event = Event.builder()
-                .id(id)
-                .name(name != null ? name.trim() : "")
-                .description(description != null ? description.trim() : "")
+        Event eventToCreate = Event.builder()
+                .id(event.getId())
+                .name(event.getName() != null ? event.getName().trim() : CommonConst.EMPTY_STRING)
+                .description(event.getDescription() != null ? event.getDescription().trim() : CommonConst.EMPTY_STRING)
                 .build();
-
-        EventEntity eventEntity = eventStructMapper.modelToEntity(event);
-        // Set time fields (UNIX timestamp in seconds)
-        long currentTime = TimeUtil.getCurrentTime();
-        // New entity, set create time and update time
-        eventEntity.setCt((int) currentTime);
-        eventEntity.setUt((int) currentTime);
+        EventEntity eventEntity = eventStructMapper.modelToEntity(eventToCreate);
+        eventEntity.setTimeOnCreate();
         eventMapper.insert(eventEntity);
 
-        log.info("Event created: eventId={}, name={}", event.getId(), event.getName());
-        return event;
+        log.info("[event] event created: eventId={}, name={}", event.getId(), event.getName());
+
+        return eventToCreate;
     }
+
 
     @Override
     @Transactional
-    public Event updateEvent(Long eventId, String name, String description) {
+    public Event updateEvent(Integer eventId, String name, String description) {
         EventEntity eventEntity = eventMapper.selectById(eventId);
         if (eventEntity == null) {
             throw new IllegalArgumentException("Event not found: " + eventId);
@@ -134,25 +141,41 @@ public class EventServiceImpl implements EventService {
 
     @Override
     @Transactional
-    public void deleteEvent(Long eventId) {
+    public void deleteEvent(Integer eventId) {
         EventEntity event = eventMapper.selectById(eventId);
         if (event == null) {
             throw new IllegalArgumentException("Event not found: " + eventId);
         }
 
         // Delete all execution event relations
-        LambdaQueryWrapper<ExecutionArrangementEntity> deleteWrapper = new LambdaQueryWrapper<>();
-        deleteWrapper.eq(ExecutionArrangementEntity::getEventId, eventId);
-        executionArrangementMapper.delete(deleteWrapper);
+        LambdaQueryWrapper<ExecutionArrangementEntity> arrangementOfEventWrapper = new LambdaQueryWrapper<>();
+        arrangementOfEventWrapper.eq(ExecutionArrangementEntity::getEventId, eventId);
+        executionArrangementMapper.delete(arrangementOfEventWrapper);
 
         // Delete event
         eventMapper.deleteById(eventId);
+
+        // Invalidate cache
+        if (eventRulesCacheService != null) {
+            eventRulesCacheService.invalidate(eventId);
+        }
 
         log.info("Event deleted: eventId={}", eventId);
     }
 
     @Override
-    public List<ExecutionArrangement> getExecutionArrangements(@NotNull Integer eventId) {
+    public List<ExecutionArrangement> getExecutionItems(@NotNull Integer eventId) {
+        // Try to get from cache first
+        if (eventRulesCacheService != null) {
+            List<ExecutionArrangement> cached = eventRulesCacheService.get(eventId);
+            if (cached != null) {
+                if (log.isDebugEnabled()) {
+                    log.debug("[cache_x] cache hit for eventId={}", eventId);
+                }
+                return cached;
+            }
+        }
+
         // Get allowed rule statuses
         Set<RuleStatusEnum> allowedStatusSet = ruleStatusConfig.getEvalAvailableRuleStatuses();
         List<Integer> allowedStatusIdList = allowedStatusSet.stream()
@@ -171,9 +194,19 @@ public class EventServiceImpl implements EventService {
             return Collections.emptyList();
         }
 
-        return entityList.stream()
+        List<ExecutionArrangement> arrangements = entityList.stream()
                 .map(executionArrangementStructMapper::entityToModel)
                 .collect(Collectors.toList());
+
+        // Put into cache
+        if (eventRulesCacheService != null) {
+            eventRulesCacheService.put(eventId, arrangements);
+            if (log.isDebugEnabled()) {
+                log.debug("[cache_x] cache put for eventId={}, size={}", eventId, arrangements.size());
+            }
+        }
+
+        return arrangements;
     }
 
     @Override
@@ -191,42 +224,22 @@ public class EventServiceImpl implements EventService {
         }
 
         // Collect all rule IDs for batch validation
-        Set<Long> ruleIdSet = new HashSet<>(ruleIdList);
-        ruleIdSet.removeIf(Objects::isNull);
-        
-        // If ruleIdList is not empty, validate rule existence
-        if (!ruleIdSet.isEmpty()) {
-            // Validate rule existence
-            List<RuleEntity> ruleEntities = ruleMapper.selectBatchIds(new ArrayList<>(ruleIdSet));
-            Set<Long> foundRuleIds = ruleEntities != null
-                    ? ruleEntities.stream()
-                    .map(RuleEntity::getId)
-                    .filter(Objects::nonNull)
-                    .collect(Collectors.toSet())
-                    : Collections.emptySet();
-            Set<Long> notFoundRuleIds = ruleIdSet.stream()
-                    .filter(ruleId -> !foundRuleIds.contains(ruleId))
-                    .collect(Collectors.toSet());
-            if (!notFoundRuleIds.isEmpty()) {
-                throw new IllegalArgumentException("Rules not found in database: " + notFoundRuleIds);
-            }
+        Set<Long> inputRuleIdSet = new HashSet<>(ruleIdList);
+        inputRuleIdSet.removeIf(Objects::isNull);
+        // Validate rule existence
+        if (!inputRuleIdSet.isEmpty()) {
+            validateRuleIdExistence(inputRuleIdSet);
         }
 
-        // Get existing relations by event_id (query all records for this event)
-        LambdaQueryWrapper<ExecutionArrangementEntity> queryWrapper = new LambdaQueryWrapper<>();
-        queryWrapper.eq(ExecutionArrangementEntity::getEventId, eventId);
-        List<ExecutionArrangementEntity> allExistingRelationList = executionArrangementMapper.selectList(queryWrapper);
-        if (allExistingRelationList == null) {
-            allExistingRelationList = Collections.emptyList();
+        // Get existing arrangements by event_id
+        LambdaQueryWrapper<ExecutionArrangementEntity> arrangementOfEventWrapper = new LambdaQueryWrapper<>();
+        arrangementOfEventWrapper.eq(ExecutionArrangementEntity::getEventId, eventId);
+        List<ExecutionArrangementEntity> allExistingArrangementList = executionArrangementMapper.selectList(arrangementOfEventWrapper);
+        if (allExistingArrangementList == null) {
+            allExistingArrangementList = Collections.emptyList();
         }
-
-        // Build set of rule IDs that exist in database (by event_id and rule_id)
-        Set<Long> existingRuleIdSet = allExistingRelationList.stream()
+        Set<Long> existingRuleIdSet = allExistingArrangementList.stream()
                 .map(ExecutionArrangementEntity::getRuleId)
-                .filter(Objects::nonNull)
-                .collect(Collectors.toSet());
-        // Build set of rule IDs from input list
-        Set<Long> inputRuleIdSet = ruleIdList.stream()
                 .filter(Objects::nonNull)
                 .collect(Collectors.toSet());
 
@@ -240,12 +253,12 @@ public class EventServiceImpl implements EventService {
             }
             if (existingRuleIdSet.contains(ruleId)) {
                 // Update all records matching event_id and rule_id (regardless of group_id)
-                LambdaUpdateWrapper<ExecutionArrangementEntity> updateWrapper = new LambdaUpdateWrapper<>();
-                updateWrapper.eq(ExecutionArrangementEntity::getEventId, eventId)
+                LambdaUpdateWrapper<ExecutionArrangementEntity> arrangementWrapper = new LambdaUpdateWrapper<>();
+                arrangementWrapper.eq(ExecutionArrangementEntity::getEventId, eventId)
                         .eq(ExecutionArrangementEntity::getRuleId, ruleId)
                         .set(ExecutionArrangementEntity::getExeOrder, i)
                         .set(ExecutionArrangementEntity::getUt, (int) currentTime);
-                executionArrangementMapper.update(null, updateWrapper);
+                executionArrangementMapper.update(null, arrangementWrapper);
             } else {
                 // Create new relation
                 ExecutionArrangementEntity relation = new ExecutionArrangementEntity();
@@ -265,14 +278,35 @@ public class EventServiceImpl implements EventService {
             if (inputRuleIdSet.contains(ruleId)) {
                 continue;
             }
-            LambdaQueryWrapper<ExecutionArrangementEntity> deleteWrapper = new LambdaQueryWrapper<>();
-            deleteWrapper.eq(ExecutionArrangementEntity::getEventId, eventId)
+            LambdaQueryWrapper<ExecutionArrangementEntity> arrangementWrapper = new LambdaQueryWrapper<>();
+            arrangementWrapper.eq(ExecutionArrangementEntity::getEventId, eventId)
                     .eq(ExecutionArrangementEntity::getRuleId, ruleId);
-            executionArrangementMapper.delete(deleteWrapper);
+            executionArrangementMapper.delete(arrangementWrapper);
+        }
+
+        // Invalidate cache after updating execution arrangements
+        if (eventRulesCacheService != null) {
+            eventRulesCacheService.invalidate(eventId);
         }
 
         if (log.isDebugEnabled()) {
             log.debug("set execution arrangements: eventId={}, itemCount={}", eventId, ruleIdList.size());
+        }
+    }
+
+    private void validateRuleIdExistence(Set<Long> ruleIdSet) {
+        List<RuleEntity> ruleEntityList = ruleMapper.selectBatchIds(new ArrayList<>(ruleIdSet));
+        Set<Long> foundRuleIdSet = ruleEntityList != null
+                ? ruleEntityList.stream()
+                .map(RuleEntity::getId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet())
+                : Collections.emptySet();
+        Set<Long> notFoundRuleIdSet = ruleIdSet.stream()
+                .filter(ruleId -> !foundRuleIdSet.contains(ruleId))
+                .collect(Collectors.toSet());
+        if (!notFoundRuleIdSet.isEmpty()) {
+            throw new IllegalArgumentException("Rules not found in database: " + notFoundRuleIdSet);
         }
     }
 }

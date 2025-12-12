@@ -1,7 +1,9 @@
 package lab.zhang.rule.rule_engine.service;
 
+import lab.zhang.rule.rule_engine.model.EvalRequest;
 import lab.zhang.rule.rule_engine.model.EvalResult;
-import lab.zhang.rule.rule_engine.pojo.dto.EvalDTO;
+
+import java.math.BigInteger;
 
 /**
  * Rule evaluation service interface
@@ -14,8 +16,9 @@ public interface EvalService {
      * Execute rule evaluation with execution trace
      *
      * @param request evaluation request
+     * @param traceId trace ID
      * @return evaluation result with execution trace
      */
-    EvalResult eval(EvalDTO request);
+    EvalResult eval(EvalRequest request, BigInteger traceId);
 }
 

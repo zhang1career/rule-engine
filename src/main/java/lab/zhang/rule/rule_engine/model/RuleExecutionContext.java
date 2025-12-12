@@ -1,6 +1,7 @@
 package lab.zhang.rule.rule_engine.model;
 
 import lab.zhang.rule.rule_engine.common.TypedValue;
+import lab.zhang.rule.rule_engine.enums.ValueTypeEnum;
 import lombok.Data;
 
 import java.io.Serializable;
@@ -11,14 +12,14 @@ import java.util.Objects;
 
 /**
  * Rule execution context.
- * 
+ *
  * <p>Used to pass and share data during rule execution.
- * Contains user information, event information, input arguments,
- * and execution state (variables).
- * 
+ * Contains user information, event information, and input arguments
+ * (including execution state variables).
+ *
  * <p>This class provides defensive copying for mutable collections
  * to prevent external modification of internal state.
- * 
+ *
  * @author Rongjin Zhang
  */
 @Data
@@ -37,26 +38,16 @@ public class RuleExecutionContext implements Serializable {
     private Integer eventId;
     
     /**
-     * Trace ID for request tracking.
-     */
-    private Long traceId;
-    
-    /**
      * Input parameter dictionary.
      * Defensively copied to prevent external modification.
      */
     private Map<String, TypedValue> arguments;
     
-    /**
-     * Variable storage during execution (for data transfer between rules).
-     */
-    private Map<String, TypedValue> variables;
     
     /**
      * Creates a new execution context with default values.
      */
     public RuleExecutionContext() {
-        this.variables = new HashMap<>();
         this.arguments = new HashMap<>();
     }
     
@@ -65,18 +56,13 @@ public class RuleExecutionContext implements Serializable {
      * 
      * @param userId the user ID, may be null
      * @param eventId the event ID, may be null
-     * @param traceId the trace ID, may be null
      * @param arguments the input arguments, may be null (will create empty map)
      * @throws IllegalArgumentException if arguments map contains null keys
      */
-    public RuleExecutionContext(Long userId, Integer eventId, Long traceId, 
-                               Map<String, TypedValue> arguments) {
+    public RuleExecutionContext(Long userId, Integer eventId, Map<String, TypedValue> arguments) {
         this.userId = userId;
         this.eventId = eventId;
-        this.traceId = traceId;
         this.arguments = arguments != null ? new HashMap<>(arguments) : new HashMap<>();
-        this.variables = new HashMap<>();
-        
         // Validate arguments map
         if (arguments != null) {
             for (String key : arguments.keySet()) {
@@ -115,13 +101,27 @@ public class RuleExecutionContext implements Serializable {
             this.arguments = new HashMap<>(arguments);
         }
     }
-    
+
+    /**
+     * Gets an argument from the arguments map.
+     *
+     * @param key the argument key, must not be null
+     * @return the argument value, or null if not found
+     * @throws IllegalArgumentException if key is null
+     */
+    public TypedValue getArgument(String key) {
+        if (key == null || key.trim().isEmpty()) {
+            throw new IllegalArgumentException("Argument key cannot be null or blank");
+        }
+        return this.arguments != null ? this.arguments.get(key) : TypedValue.nullValue();
+    }
+
     /**
      * Puts an argument into the arguments map.
-     * 
+     *
      * <p>This method provides a safe way to add or update arguments
      * without exposing the internal mutable map.
-     * 
+     *
      * @param key the argument key, must not be null
      * @param value the argument value, may be null
      * @throws IllegalArgumentException if key is null
@@ -133,53 +133,69 @@ public class RuleExecutionContext implements Serializable {
         }
         this.arguments.put(key, value);
     }
-    
+
     /**
-     * Gets an argument from the arguments map.
-     * 
-     * @param key the argument key, must not be null
-     * @return the argument value, or null if not found
-     * @throws IllegalArgumentException if key is null
+     * Gets all variables including special properties.
+     *
+     * @return a map of all variables with special properties included
      */
-    public TypedValue getArgument(String key) {
-        Objects.requireNonNull(key, "Argument key cannot be null");
-        return this.arguments != null ? this.arguments.get(key) : TypedValue.nullValue();
+    public Map<String, TypedValue> getVariables() {
+        Map<String, TypedValue> variableMap = new HashMap<>(getArguments());
+        variableMap.put("userId", new TypedValue(this.userId, ValueTypeEnum.LONG));
+        variableMap.put("eventId", new TypedValue(this.eventId, ValueTypeEnum.INTEGER));
+        return variableMap;
     }
-    
+
     /**
-     * Sets a variable in the execution context.
-     * 
-     * @param key the variable key, must not be null
-     * @param value the variable value, may be null
-     * @throws IllegalArgumentException if key is null
-     */
-    public void setVariable(String key, TypedValue value) {
-        Objects.requireNonNull(key, "Variable key cannot be null");
-        if (this.variables == null) {
-            this.variables = new HashMap<>();
-        }
-        this.variables.put(key, value);
-    }
-    
-    /**
-     * Gets a variable from the execution context.
-     * 
+     * Gets a variable by key.
+     * If the key is one of the special properties (userId, eventId, traceId),
+     * returns the value of that property. Otherwise, looks up in arguments.
+     *
      * @param key the variable key, must not be null
      * @return the variable value, or null if not found
      * @throws IllegalArgumentException if key is null
      */
     public TypedValue getVariable(String key) {
-        Objects.requireNonNull(key, "Variable key cannot be null");
-        return this.variables != null ? this.variables.get(key) : null;
+        if (key == null || key.trim().isEmpty()) {
+            throw new IllegalArgumentException("Argument key cannot be null or blank");
+        }
+
+        switch (key) {
+            case "userId":
+                return new TypedValue(this.userId, ValueTypeEnum.LONG);
+            case "eventId":
+                return new TypedValue(this.eventId, ValueTypeEnum.INTEGER);
+            default:
+                return getArgument(key);
+        }
     }
-    
+
     /**
-     * Gets an unmodifiable view of all variables.
-     * 
-     * @return an unmodifiable map of all variables
+     * Sets a variable by key.
+     * If the key is one of the special properties (userId, eventId, traceId),
+     * sets the value of that property. Otherwise, stores in arguments.
+     *
+     * @param key the variable key, must not be null
+     * @param value the variable value, may be null
+     * @throws IllegalArgumentException if key is null
      */
-    public Map<String, TypedValue> getAllVariables() {
-        return this.variables != null ? Collections.unmodifiableMap(this.variables) : Collections.emptyMap();
+    public void setVariable(String key, TypedValue value) {
+        if (key == null || key.trim().isEmpty()) {
+            throw new IllegalArgumentException("Argument key cannot be null or blank");
+        }
+        if (value == null) {
+            throw new IllegalArgumentException("Argument value cannot be null");
+        }
+
+        switch (key) {
+            case "userId":
+                this.userId = (Long) value.getValue();
+                break;
+            case "eventId":
+                this.eventId = (Integer) value.getValue();
+                break;
+            default:
+                putArgument(key, value);
+        }
     }
 }
-

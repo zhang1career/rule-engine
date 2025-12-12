@@ -1,8 +1,11 @@
 package lab.zhang.rule.rule_engine.validation;
 
+import lab.zhang.rule.rule_engine.pojo.qo.RuleRatioQO;
+
 import javax.validation.ConstraintValidator;
 import javax.validation.ConstraintValidatorContext;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Validator for @ValidRuleRatios annotation
@@ -12,7 +15,7 @@ import java.util.*;
  *
  * @author Rongjin Zhang
  */
-public class ValidRuleRatiosValidator implements ConstraintValidator<ValidRuleRatios, Map<Long, Integer>> {
+public class ValidRuleRatiosValidator implements ConstraintValidator<ValidRuleRatios, List<RuleRatioQO>> {
 
     @Override
     public void initialize(ValidRuleRatios constraintAnnotation) {
@@ -20,7 +23,7 @@ public class ValidRuleRatiosValidator implements ConstraintValidator<ValidRuleRa
     }
 
     @Override
-    public boolean isValid(Map<Long, Integer> value, ConstraintValidatorContext context) {
+    public boolean isValid(List<RuleRatioQO> value, ConstraintValidatorContext context) {
         // Null values are handled by @NotEmpty annotation
         if (value == null || value.isEmpty()) {
             return true;
@@ -29,9 +32,14 @@ public class ValidRuleRatiosValidator implements ConstraintValidator<ValidRuleRa
         int totalRatio = 0;
         List<String> invalidRatios = new ArrayList<>();
 
-        for (Map.Entry<Long, Integer> entry : value.entrySet()) {
-            Long ruleId = entry.getKey();
-            Integer ratio = entry.getValue();
+        for (RuleRatioQO ruleRatio : value) {
+            if (ruleRatio == null) {
+                invalidRatios.add("Rule ratio cannot be null");
+                continue;
+            }
+
+            Long ruleId = ruleRatio.getRuleId();
+            Integer ratio = ruleRatio.getRatio();
 
             // Check if ruleId is null
             if (ruleId == null) {

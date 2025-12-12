@@ -28,10 +28,10 @@ class EventEntitySpec extends Specification {
         entity.getUt() == ut
 
         where:
-        id          | name       | description        | ct          | ut
-        10000001L   | "Event 1"  | "Description 1"   | 1234567890  | 1234567890
-        10000002L   | "Event 2"  | null              | 1234567891  | 1234567891
-        10000003L   | null       | "Description 3"   | 1234567892  | 1234567892
+        id         | name       | description        | ct          | ut
+        10000001   | "Event 1"  | "Description 1"   | 1234567890  | 1234567890
+        10000002   | "Event 2"  | null              | 1234567891  | 1234567891
+        10000003   | null       | "Description 3"   | 1234567892  | 1234567892
     }
 
     @Unroll
@@ -53,9 +53,9 @@ class EventEntitySpec extends Specification {
         result.contains(name)
 
         where:
-        id          | name
-        10000001L   | "Event 1"
-        10000002L   | "Event 2"
+        id         | name
+        10000001   | "Event 1"
+        10000002   | "Event 2"
     }
 
     @Unroll
@@ -87,10 +87,10 @@ class EventEntitySpec extends Specification {
         }
 
         where:
-        id1         | name1      | id2         | name2      | shouldEqual
-        10000001L   | "Event 1"  | 10000001L   | "Event 1"  | true
-        10000001L   | "Event 1"  | 10000002L   | "Event 1"  | false
-        10000001L   | "Event 1"  | 10000001L   | "Event 2"  | false
+        id1        | name1      | id2        | name2      | shouldEqual
+        10000001   | "Event 1"  | 10000001   | "Event 1"  | true
+        10000001   | "Event 1"  | 10000002   | "Event 1"  | false
+        10000001   | "Event 1"  | 10000001   | "Event 2"  | false
     }
 
     @Unroll

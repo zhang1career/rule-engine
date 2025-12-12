@@ -1,6 +1,6 @@
 # Rule Engine System Product Requirements Document
 
-## 1. Project Overview
+## 1 Project Overview
 
 ### 1.1 Project Background
 The rule engine system is a rule calculation service based on SpringBoot, used to execute corresponding rule sequences based on event types and user parameters, and return calculation results.
@@ -11,13 +11,13 @@ The rule engine system is a rule calculation service based on SpringBoot, used t
 - **Build Tool**: Maven 3.6
 - **Script Engine**: Groovy
 
-## 2. Functional Requirements
+## 2 Functional Requirements
 
 ### 2.1 Core Interface
 
 #### 2.1.1 Interface Definition
-- **Interface Path**: `/rule/eval`
-- **Interface Name**: `eval`
+- **Interface Path**: `/rule/evalRequest`
+- **Interface Name**: `evalRequest`
 - **Call Methods**: 
   - HTTP (initial implementation)
   - RPC (future extension)
@@ -106,6 +106,13 @@ FULL → OFFLINE, AB_TEST
 - Only rules in Offline status (OFFLINE) can be deleted
 - Attempting to delete rules in non-offline status will throw `IllegalArgumentException` exception
 
+#### 2.3.4 Event Association Constraints for Status Transitions
+For rules transitioning to Test (TEST), Gray (GRAY), or Online (ONLINE) status, the following constraints must be satisfied:
+- The rule must be associated with at least one event (eventId)
+- The rule must not have formed a rule group (i.e., there must be records in the execution arrangement table where `group_id = 0` and `rule_id = current rule ID`)
+
+If these constraints are not met, the status transition will throw an `IllegalStateException` exception.
+
 #### 2.3.3 A/B Test Rule Group Mechanism
 - **Rule Group Concept**: Rules with A/B test status belong to a rule group, one or more rules in the group are assigned call probability according to `abTestRatio`
 - **Execution Logic**: When executing each rule group, at most one rule in the group is executed. If the sum of execution probabilities of all rules in the rule group is less than 100, it means that other calls beyond the sum of call probabilities will directly skip this rule group
@@ -113,9 +120,8 @@ FULL → OFFLINE, AB_TEST
 - **EventId Relationship Management**:
   - One eventId is associated with a list composed of rules and rule groups (ExecutionItem list)
   - **Business Logic 1**: When a rule transitions from other status to A/B test status, the system automatically creates a rule group and copies the association relationship between the rule and all eventIds (including correspondence and execution order) to the association relationship between the rule group and eventIds
-  - **Business Logic 2**: When a rule joins an existing rule group, the system copies the association relationship between the rule group and all eventIds (including correspondence and execution order) to the association relationship between the rule and eventIds
-  - **Business Logic 3**: When a rule transitions from A/B test status to other status, the system automatically removes the rule from its rule group
-  - **Business Logic 4**: When a rule group contains no rules, the system automatically deletes the rule group and its association relationships with all eventIds
+  - **Business Logic 2**: When a rule transitions from A/B test status to other status, the system automatically removes the rule from its rule group
+  - **Business Logic 3**: When a rule group contains no rules, the system automatically deletes the rule group and its association relationships with all eventIds
 - **User Hash Mechanism**: 
   - Before executing any rule, the system performs murmur-hash calculation on `userId`, stores the hash result (string) in `arguments` of `RuleExecutionContext`, with key as `userHash`
   - This hash value is used for subsequent rule group selection to ensure that the same user can get consistent rule selection results in different requests
@@ -136,10 +142,10 @@ FULL → OFFLINE, AB_TEST
   - If cached rule becomes invalid (rule status changes, rule removed from group, etc.), cache automatically becomes invalid and reselects
 - **Rule Group Management**:
   - When a rule transitions from other status to A/B test status, need to create a rule group
-  - When a rule transitions from other status to A/B test status and comes with an existing rule group ID, need to add the rule to that rule group
   - When a rule transitions from A/B test status to offline, test or full status, need to remove the rule from its rule group
   - When a rule transitions from A/B test status to full status, need to change all other rules in the rule group to offline status
   - If a rule group contains no rules, need to delete the rule group
+  - Rule Group Rule Copy: Within a rule group, can copy existing rules to create new rules with the same event associations and group memberships
 - **Constraints**:
   - Only rules in A/B test status can belong to rule groups
   - One rule can only belong to one rule group
@@ -153,10 +159,10 @@ FULL → OFFLINE, AB_TEST
 #### 2.4.1 Message Sending
 - **Trigger Timing**: After rule calculation completes
 - **Message Content**: Contains input parameters and calculation results
-- **Message Queue**: RabbitMQ (external system, called through interface)
+- **Message Queue**: Kafka (external system, called through interface)
 - **Sending Method**: Asynchronous sending, does not affect main flow
 
-## 3. Non-functional Requirements
+## 3 Non-functional Requirements
 
 ### 3.1 Extensibility Design
 - **Interface Extension**: Reserved RPC interface extension points
@@ -172,7 +178,7 @@ FULL → OFFLINE, AB_TEST
 - Support rule configuration management
 - Comprehensive logging
 
-## 4. Technical Implementation Points
+## 4 Technical Implementation Points
 
 ### 4.1 Architecture Design
 - **Layered Architecture**: Controller layer, Service layer, Rule engine layer, Data access layer
@@ -194,14 +200,14 @@ FULL → OFFLINE, AB_TEST
 - Execution sequence configuration management
 - A/B test rule group configuration and probability allocation
 
-## 5. Development Plan
+## 5 Development Plan
 
 ### 5.1 Phase 1 (MVP)
 - [x] Project basic architecture setup
 - [ ] HTTP synchronous blocking interface implementation
 - [ ] Basic rule execution engine
 - [ ] Rule status control (offline, test, full)
-- [ ] RabbitMQ message sending
+- [ ] Kafka message sending
 
 ### 5.2 Phase 2
 - [x] A/B test rule group functionality implementation
@@ -213,11 +219,11 @@ FULL → OFFLINE, AB_TEST
 - [ ] Synchronous non-blocking call method
 - [ ] Asynchronous non-blocking call method
 
-## 6. Interface Examples
+## 6 Interface Examples
 
 ### 6.1 HTTP Request Example
 ```json
-POST /rule/eval
+POST /rule/evalRequest
 {
   "userId": 123456789,
   "eventId": 1001,

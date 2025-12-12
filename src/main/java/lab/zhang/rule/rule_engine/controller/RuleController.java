@@ -93,6 +93,7 @@ public class RuleController {
             @PathVariable @NotNull @Min(value = 1, message = "Rule ID must be a positive integer") Long ruleId,
             @RequestBody @Validated(RuleQO.Update.class) RuleQO ruleQO) {
         Rule rule = ruleStructMapper.qoToModel(ruleQO);
+        rule.setId(ruleId);
         ruleService.updateRule(ruleId, rule);
         return ResponseEntity.ok(ApiResponseDTO.success(null));
     }

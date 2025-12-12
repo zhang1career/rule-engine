@@ -1,12 +1,16 @@
 # Development environment configuration
-spring:
-  rabbitmq:
-    host: localhost
-    port: 5672
-    username: guest
-    password: guest
-
 rule:
   engine:
     environment: DEV
+
+# Development logging configuration (overrides main application.yml)
+logging:
+  level:
+    root: DEBUG
+    lab.zhang.rule: DEBUG
+    # Third-party library logs
+    com.baomidou.mybatisplus: INFO
+    org.springframework.jdbc: DEBUG
+    org.springframework.data.redis: DEBUG
+    org.springframework.web: DEBUG
 

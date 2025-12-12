@@ -1,18 +1,19 @@
 package lab.zhang.rule.rule_engine.controller;
 
+import lab.zhang.rule.rule_engine.model.EvalRequest;
 import lab.zhang.rule.rule_engine.model.EvalResult;
-import lab.zhang.rule.rule_engine.pojo.dto.EvalDTO;
+import lab.zhang.rule.rule_engine.pojo.dto.ApiResponseDTO;
 import lab.zhang.rule.rule_engine.pojo.dto.EvalResultDTO;
-import lab.zhang.rule.rule_engine.pojo.qo.EvalQO;
+import lab.zhang.rule.rule_engine.pojo.qo.EvalRequestQO;
 import lab.zhang.rule.rule_engine.service.EvalService;
 import lab.zhang.rule.rule_engine.struct_mapper.EvalStructMapper;
+import lab.zhang.rule.rule_engine.util.TraceUtil;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
+
+import java.math.BigInteger;
 
 /**
  * Rule evaluation controller
@@ -27,7 +28,7 @@ public class EvalController {
 
     @Autowired
     private EvalService evalService;
-    
+
     @Autowired
     private EvalStructMapper evalStructMapper;
 
@@ -38,15 +39,20 @@ public class EvalController {
      * @return evaluation result with execution trace
      */
     @PostMapping
-    public ResponseEntity<EvalResultDTO> eval(
-            @RequestBody EvalQO qo) {
-        log.info("Received eval request: userId={}, eventId={}, traceId={}",
-                qo.getUserId(), qo.getEventId(), qo.getTraceId());
+    public ResponseEntity<ApiResponseDTO<EvalResultDTO>> eval(
+            @RequestHeader(value = "X-Request-ID", required = false) String requestIdStr,
+            @RequestParam(value = "traceId", required = false) String traceIdStr,
+            @RequestBody EvalRequestQO qo) {
+        log.info("[eval] eval param: userId={}, eventId={}", qo.getUserId(), qo.getEventId());
 
-        EvalDTO dto = evalStructMapper.qoToDto(qo);
-        EvalResult evalResult = evalService.eval(dto);
+        BigInteger traceId = TraceUtil.getTraceId(requestIdStr, traceIdStr);
+        EvalRequest request = evalStructMapper.qoToModel(qo);
 
-        return ResponseEntity.ok(new EvalResultDTO(evalResult.getResult(), evalResult.getBriefSteps()));
+        EvalResult evalResult = evalService.eval(request, traceId);
+        EvalResultDTO dto = new EvalResultDTO(evalResult.getValue(), evalResult.getBriefSteps());
+
+        return ResponseEntity.ok(ApiResponseDTO.success(dto));
     }
+
 }
 

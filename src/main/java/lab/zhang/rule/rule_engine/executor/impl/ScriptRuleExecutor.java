@@ -11,6 +11,13 @@ import lab.zhang.rule.rule_engine.model.RuleExecutionContext;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
+import javax.validation.constraints.NotBlank;
+import java.util.Arrays;
+import java.util.HashSet;
+import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
 /**
  * Groovy script rule executor
  *
@@ -26,16 +33,9 @@ public class ScriptRuleExecutor implements RuleExecutor {
             // Create Groovy binding
             Binding binding = new Binding();
 
-            // Add input parameters to binding
+            // Add input parameters and variables to binding
             if (context.getArguments() != null) {
                 context.getArguments().forEach((key, typedValue) -> {
-                    binding.setVariable(key, typedValue.getValue());
-                });
-            }
-
-            // Add variables during execution to binding
-            if (context.getVariables() != null) {
-                context.getVariables().forEach((key, typedValue) -> {
                     binding.setVariable(key, typedValue.getValue());
                 });
             }
@@ -43,7 +43,6 @@ public class ScriptRuleExecutor implements RuleExecutor {
             // Add system variables
             binding.setVariable("userId", context.getUserId());
             binding.setVariable("eventId", context.getEventId());
-            binding.setVariable("traceId", context.getTraceId());
             binding.setVariable("context", context);
 
             // Create GroovyShell and execute script
@@ -73,6 +72,55 @@ public class ScriptRuleExecutor implements RuleExecutor {
         } catch (Exception e) {
             throw new IllegalArgumentException("Invalid Groovy script: " + e.getMessage(), e);
         }
+    }
+
+    @Override
+    public Set<String> extractArgs(@NotBlank String content) {
+        Set<String> args = new HashSet<>();
+
+        // Remove string literals to avoid matching words inside strings
+        String contentWithoutStrings = content.replaceAll("'([^']*)'", "''").replaceAll("\"([^\"]*)\"", "\"\"");
+
+        // First, identify variables declared with 'def' to exclude them
+        Set<String> declaredVars = new HashSet<>();
+        Pattern defPattern = Pattern.compile("\\bdef\\s+([a-zA-Z_][a-zA-Z0-9_]*)\\b");
+        Matcher defMatcher = defPattern.matcher(contentWithoutStrings);
+        while (defMatcher.find()) {
+            declaredVars.add(defMatcher.group(1));
+        }
+
+        // Pattern to match all potential identifiers (not containing dots)
+        Pattern variablePattern = Pattern.compile("\\b([a-zA-Z_][a-zA-Z0-9_]*(?:\\.[a-zA-Z_][a-zA-Z0-9_]*)*)\\b");
+        Matcher matcher = variablePattern.matcher(contentWithoutStrings);
+
+        // Groovy keywords and common constructs to exclude
+        Set<String> keywords = new HashSet<>(Arrays.asList(
+            "true", "false", "null", "def", "var", "String", "Integer", "Long", "Double",
+            "Boolean", "List", "Map", "Set", "if", "else", "for", "while", "in", "return",
+            "break", "continue", "switch", "case", "default", "try", "catch", "finally",
+            "throw", "throws", "new", "this", "super", "class", "interface", "enum",
+            "package", "import", "extends", "implements", "public", "private", "protected",
+            "static", "final", "abstract", "synchronized", "volatile", "transient",
+            "void", "int", "long", "double", "float", "boolean", "char", "byte", "short",
+            "println", "print", "printf", "assert", "as", "instanceof"
+        ));
+
+        while (matcher.find()) {
+            String potentialVar = matcher.group(1);
+
+            // Skip keywords and declared variables
+            if (keywords.contains(potentialVar) || declaredVars.contains(potentialVar)) {
+                continue;
+            }
+
+            // For qualified names like obj.prop.method, only include the base object name
+            String baseVar = potentialVar.split("\\.")[0];
+            if (!keywords.contains(baseVar) && !declaredVars.contains(baseVar)) {
+                args.add(baseVar);
+            }
+        }
+
+        return args;
     }
 
     /**

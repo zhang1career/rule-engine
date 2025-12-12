@@ -1,12 +1,19 @@
 # Production environment configuration
-spring:
-  rabbitmq:
-    host: ${RABBITMQ_HOST:localhost}
-    port: ${RABBITMQ_PORT:5672}
-    username: ${RABBITMQ_USERNAME:guest}
-    password: ${RABBITMQ_PASSWORD:guest}
-
 rule:
   engine:
     environment: PRODUCTION
+
+# Production logging configuration (overrides main application.yml)
+logging:
+  level:
+    root: INFO
+    lab.zhang.rule: INFO
+    # Third-party library logs (reduce noise in production)
+    com.baomidou.mybatisplus: WARN
+    org.springframework.jdbc: WARN
+    org.springframework.data.redis: WARN
+    org.springframework.web: INFO
+  # Production log files
+  file:
+    name: /var/log/rule_engine/app.log
 
