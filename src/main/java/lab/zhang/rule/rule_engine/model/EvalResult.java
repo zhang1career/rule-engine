@@ -28,7 +28,7 @@ public class EvalResult implements Serializable {
     /**
      * Evaluation result
      */
-    private TypedValue result;
+    private TypedValue value;
 
     /**
      * Execution trace

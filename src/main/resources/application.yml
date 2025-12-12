@@ -75,14 +75,6 @@ spring:
     exclude:
       - org.springframework.boot.autoconfigure.amqp.RabbitAutoConfiguration
 
-  # Kafka configuration
-#  kafka:
-#    bootstrap-servers: localhost:9092
-#    producer:
-#      key-serializer: org.apache.kafka.common.serialization.StringSerializer
-#      value-serializer: org.apache.kafka.common.serialization.StringSerializer
-# If Kafka is not configured, you can comment out the above configuration, message sending will be skipped
-
   # Redis configuration
   data:
     redis:
@@ -107,6 +99,13 @@ spring:
       idle-timeout: ${DB_POOL_IDLE_TIMEOUT:600000}
       max-lifetime: ${DB_POOL_MAX_LIFETIME:1800000}
       leak-detection-threshold: ${DB_POOL_LEAK_DETECTION_THRESHOLD:60000}
+
+  # Kafka configuration
+  kafka:
+    bootstrap-servers: localhost:9093
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
 
 # MyBatis Plus configuration
 mybatis-plus:

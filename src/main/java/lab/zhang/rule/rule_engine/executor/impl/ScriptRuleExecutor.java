@@ -43,7 +43,6 @@ public class ScriptRuleExecutor implements RuleExecutor {
             // Add system variables
             binding.setVariable("userId", context.getUserId());
             binding.setVariable("eventId", context.getEventId());
-            binding.setVariable("traceId", context.getTraceId());
             binding.setVariable("context", context);
 
             // Create GroovyShell and execute script

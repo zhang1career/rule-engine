@@ -361,6 +361,33 @@ class SwaggerToConfigConverter:
         
         return path_params
     
+    def _get_header_parameters(self, path_info: Dict[str, Any], method: str) -> Dict[str, Dict[str, Any]]:
+        """Get header parameters from Swagger path definition
+        
+        Args:
+            path_info: Swagger path info dictionary
+            method: HTTP method (get, post, put, etc.)
+            
+        Returns:
+            Dictionary mapping header names to their parameter definitions
+        """
+        method_info = path_info.get(method.lower(), {})
+        parameters = method_info.get("parameters", [])
+        
+        # Also check path-level parameters
+        path_parameters = path_info.get("parameters", [])
+        all_parameters = path_parameters + parameters
+        
+        header_params = {}
+        for param in all_parameters:
+            param_in = param.get("in")
+            if param_in == "header":
+                param_name = param.get("name")
+                if param_name:
+                    header_params[param_name] = param
+        
+        return header_params
+    
     def _generate_path_variable_config(self, var_name: str, param_schema: Dict[str, Any]) -> Dict[str, Any]:
         """Generate mock generation config for a path variable
         
@@ -382,6 +409,61 @@ class SwaggerToConfigConverter:
         
         # Generate default generation method based on variable name and type
         field_config["generation"] = self._get_default_generation_method(config_type, var_name, param_schema)
+        
+        return field_config
+    
+    def _generate_header_config(self, header_name: str, header_param: Dict[str, Any]) -> Dict[str, Any]:
+        """Generate mock generation config for a header parameter
+        
+        Args:
+            header_name: Header name (e.g., Authorization)
+            header_param: Swagger header parameter definition
+            
+        Returns:
+            Field config dictionary for header
+        """
+        param_schema = header_param.get("schema", {})
+        param_type = param_schema.get("type", "string")
+        format_type = param_schema.get("format")
+        config_type = self._map_swagger_type_to_config_type(param_type, format_type)
+        
+        required = header_param.get("required", False)
+        
+        field_config = {
+            "type": config_type,
+            "required": required,
+            "description": header_param.get("description", f"Header parameter: {header_name}")
+        }
+        
+        # Generate default generation method based on header name and type
+        # Special handling for common headers
+        header_lower = header_name.lower()
+        
+        if "authorization" in header_lower or "token" in header_lower:
+            # Generate Bearer token
+            field_config["generation"] = {
+                "method": "random_text",
+                "length": 32,
+                "charset": "alphanumeric",
+                "prefix": "Bearer "
+            }
+        elif "api" in header_lower and "key" in header_lower:
+            # Generate API key
+            field_config["generation"] = {
+                "method": "random_text",
+                "length": 32,
+                "charset": "alphanumeric"
+            }
+        elif "request" in header_lower and "id" in header_lower:
+            # Generate request ID (UUID-like or increment)
+            field_config["generation"] = {
+                "method": "increment",
+                "start": 1000000,
+                "step": 1
+            }
+        else:
+            # Default generation based on type
+            field_config["generation"] = self._get_default_generation_method(config_type, header_name, param_schema)
         
         return field_config
     
@@ -491,6 +573,14 @@ class SwaggerToConfigConverter:
                         "generation": self._get_default_generation_method("STRING", var_name, {})
                     }
         
+        # Extract header parameters from Swagger
+        header_parameters = self._get_header_parameters(path_info, method)
+        
+        # Build headers_generation config
+        headers_generation_config = {}
+        for header_name, header_param in header_parameters.items():
+            headers_generation_config[header_name] = self._generate_header_config(header_name, header_param)
+        
         # Build API config
         api_config = {
             "name": f"{summary} API",
@@ -508,6 +598,10 @@ class SwaggerToConfigConverter:
         # Add path_variables if any exist
         if path_variables_config:
             api_config["path_variables"] = path_variables_config
+        
+        # Add headers_generation if any exist
+        if headers_generation_config:
+            api_config["headers_generation"] = headers_generation_config
         
         # Build request schema
         properties = schema.get("properties", {})

@@ -24,11 +24,6 @@ public class EvalRequest {
     private Long eventId;
 
     /**
-     * Business request trace ID
-     */
-    private Long traceId;
-
-    /**
      * Parameter dictionary for rule calculation
      */
     private Map<String, TypedValue> arguments;

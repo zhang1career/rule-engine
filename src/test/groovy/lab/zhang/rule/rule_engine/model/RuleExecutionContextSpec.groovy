@@ -23,22 +23,21 @@ class RuleExecutionContextSpec extends Specification {
     }
 
     @Unroll
-    def "test create RuleExecutionContext with parameters - userId: #userId, eventId: #eventId, traceId: #traceId, arguments: #arguments"() {
+    def "test create RuleExecutionContext with parameters - userId: #userId, eventId: #eventId, arguments: #arguments"() {
         when: "create execution context"
-        def context = new RuleExecutionContext(userId, eventId, traceId, arguments)
+        def context = new RuleExecutionContext(userId, eventId, arguments)
 
         then: "should correctly set parameters"
         context.userId == userId
         context.eventId == eventId
-        context.traceId == traceId
         context.arguments == (arguments != null ? arguments : [:])
 
         where:
-        userId | eventId | traceId | arguments
-        123L   | 1001    | 999L    | ["amount": new TypedValue(1000.0, ValueTypeEnum.DECIMAL)]
-        456L   | 1002    | 888L    | ["age": new TypedValue(25, ValueTypeEnum.INTEGER), "name": new TypedValue("John", ValueTypeEnum.STRING)]
-        null   | null    | null    | [:]
-        789L   | 1003    | 777L    | null
+        userId | eventId  | arguments
+        123L   | 1001     | ["amount": new TypedValue(1000.0, ValueTypeEnum.DECIMAL)]
+        456L   | 1002     | ["age": new TypedValue(25, ValueTypeEnum.INTEGER), "name": new TypedValue("John", ValueTypeEnum.STRING)]
+        null   | null     | [:]
+        789L   | 1003     | null
     }
 
     @Unroll
@@ -80,10 +79,8 @@ class RuleExecutionContextSpec extends Specification {
         key       | value                                             | expectedValue
         "userId"  | new TypedValue(123L, ValueTypeEnum.LONG)      | new TypedValue(123L, ValueTypeEnum.LONG)
         "eventId" | new TypedValue(456, ValueTypeEnum.INTEGER)    | new TypedValue(456, ValueTypeEnum.INTEGER)
-        "traceId" | new TypedValue(789L, ValueTypeEnum.LONG)      | new TypedValue(789L, ValueTypeEnum.LONG)
         "userId"  | null                                             | new TypedValue(null, ValueTypeEnum.LONG)
         "eventId" | null                                             | new TypedValue(null, ValueTypeEnum.INTEGER)
-        "traceId" | null                                             | new TypedValue(null, ValueTypeEnum.LONG)
     }
 
     @Unroll
@@ -113,9 +110,6 @@ class RuleExecutionContextSpec extends Specification {
                 break
             case "eventId":
                 assert context.eventId == (value != null ? value.getValue() : null)
-                break
-            case "traceId":
-                assert context.traceId == (value != null ? value.getValue() : null)
                 break
         }
     }

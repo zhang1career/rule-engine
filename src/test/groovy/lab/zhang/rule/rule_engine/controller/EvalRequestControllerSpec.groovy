@@ -11,6 +11,8 @@ import lab.zhang.rule.rule_engine.struct_mapper.EvalStructMapper
 import org.springframework.http.HttpStatus
 import spock.lang.Specification
 
+import java.math.BigInteger
+
 /**
  * RuleController unit test
  */
@@ -30,7 +32,6 @@ class EvalRequestControllerSpec extends Specification {
         def request = new EvalRequestQO()
         request.userId = 123L
         request.eventId = 1001L
-        request.traceId = 999L
         request.arguments = [
             "amount": new TypedValue(1000.0, ValueTypeEnum.DECIMAL)
         ]
@@ -39,7 +40,6 @@ class EvalRequestControllerSpec extends Specification {
         def request1 = new EvalRequest()
         request1.userId = 123L
         request1.eventId = 1001L
-        request1.traceId = 999L
         request1.arguments = [
             "amount": new TypedValue(1000.0, ValueTypeEnum.DECIMAL)
         ]
@@ -54,7 +54,7 @@ class EvalRequestControllerSpec extends Specification {
 
         then: "should return success response"
         1 * evalStructMapper.qoToModel(request) >> request1
-        1 * evalService.eval(request1) >> evalResult
+        1 * evalService.eval(request1, _ as BigInteger) >> evalResult
         response.statusCode == HttpStatus.OK
         response.body.result == expectedResult
         response.body.briefSteps == evalResult.getBriefSteps()
@@ -65,14 +65,12 @@ class EvalRequestControllerSpec extends Specification {
         def request = new EvalRequestQO()
         request.userId = 123L
         request.eventId = 1001L
-        request.traceId = 999L
         request.arguments = [:]
 
         and: "prepare data for service call"
         def request1 = new EvalRequest()
         request1.userId = 123L
         request1.eventId = 1001L
-        request1.traceId = 999L
         request1.arguments = [:]
 
         when: "call eval interface"
@@ -80,7 +78,7 @@ class EvalRequestControllerSpec extends Specification {
 
         then: "should throw exception"
         1 * evalStructMapper.qoToModel(request) >> request1
-        1 * evalService.eval(request1) >> {
+        1 * evalService.eval(request1, _ as BigInteger) >> {
             throw new RuntimeException("Rule execution failed")
         }
         thrown(RuntimeException)
@@ -91,7 +89,6 @@ class EvalRequestControllerSpec extends Specification {
         def request = new EvalRequestQO()
         request.userId = 123L
         request.eventId = 1001L
-        request.traceId = 999L
         request.arguments = [
             "amount": new TypedValue(2000.0, ValueTypeEnum.DECIMAL),
             "age": new TypedValue(25, ValueTypeEnum.INTEGER)
@@ -101,7 +98,6 @@ class EvalRequestControllerSpec extends Specification {
         def request1 = new EvalRequest()
         request1.userId = 123L
         request1.eventId = 1001L
-        request1.traceId = 999L
         request1.arguments = [
             "amount": new TypedValue(2000.0, ValueTypeEnum.DECIMAL),
             "age": new TypedValue(25, ValueTypeEnum.INTEGER)
@@ -120,9 +116,8 @@ class EvalRequestControllerSpec extends Specification {
         1 * evalService.eval({ EvalRequest req ->
             req.userId == 123L &&
             req.eventId == 1001L &&
-            req.traceId == 999L &&
             req.arguments.size() == 2
-        }) >> evalResult
+        }, _ as BigInteger) >> evalResult
         response.body.result == expectedResult
         response.body.briefSteps == evalResult.getBriefSteps()
     }

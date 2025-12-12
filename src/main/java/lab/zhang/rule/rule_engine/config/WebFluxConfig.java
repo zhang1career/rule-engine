@@ -6,8 +6,8 @@ import org.springframework.context.annotation.Configuration;
 /**
  * WebFlux configuration
  * Note: When both spring-boot-starter-web and spring-boot-starter-webflux are present,
- * RouterFunction beans are automatically detected and registered.
- * No explicit @EnableWebFlux is needed in this hybrid setup.
+ * RouterFunction beans may not work properly in Servlet environment.
+ * Use @RestController with Mono return type instead for reactive endpoints.
  *
  * @author Rongjin Zhang
  */
@@ -16,6 +16,6 @@ import org.springframework.context.annotation.Configuration;
 public class WebFluxConfig {
 
     public WebFluxConfig() {
-        log.info("[init] webflux RouterFunction support enabled for reactive endpoints");
+        log.info("[init] reactive endpoints support enabled using @RestController with Mono return type");
     }
 }

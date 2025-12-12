@@ -110,7 +110,6 @@ public class ExpressionRuleExecutor implements RuleExecutor {
         // Add system variables
         evalContext.put("userId", context.getUserId());
         evalContext.put("eventId", context.getEventId());
-        evalContext.put("traceId", context.getTraceId());
 
         return evalContext;
     }

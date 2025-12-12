@@ -67,7 +67,6 @@ class RuleExecutionEngineSpec extends Specification {
         def context = new RuleExecutionContext()
         context.userId = 123L
         context.eventId = eventId
-        context.traceId = 999L
 
         def executionItems = rules.collect { ExecutionItem.forRule(it as Rule, null) }
 

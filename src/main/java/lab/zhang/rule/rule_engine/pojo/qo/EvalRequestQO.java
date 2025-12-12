@@ -33,12 +33,6 @@ public class EvalRequestQO implements Serializable {
     private Long eventId;
     
     /**
-     * Business request trace ID
-     */
-    @NotNull(message = "Trace ID cannot be null")
-    private Long traceId;
-    
-    /**
      * Parameter dictionary for rule calculation
      */
     @NotNull(message = "Arguments cannot be null")

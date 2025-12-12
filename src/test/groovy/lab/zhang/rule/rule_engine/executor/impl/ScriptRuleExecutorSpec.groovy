@@ -25,7 +25,7 @@ class ScriptRuleExecutorSpec extends Specification {
     }
 
     @Unroll
-    def "test execute Groovy script - scriptContent: #scriptContent, userId: #userId, eventId: #eventId, traceId: #traceId, arguments: #arguments, contextVariables: #contextVariables, expectedValue: #expectedValue"() {
+    def "test execute Groovy script - scriptContent: #scriptContent, userId: #userId, eventId: #eventId, arguments: #arguments, contextVariables: #contextVariables, expectedValue: #expectedValue"() {
         given: "create rule and execution context"
         def rule = new Rule()
         rule.content = scriptContent
@@ -33,7 +33,6 @@ class ScriptRuleExecutorSpec extends Specification {
         def context = new RuleExecutionContext()
         context.userId = userId
         context.eventId = eventId
-        context.traceId = traceId
         context.arguments = arguments ?: [:]
         if (contextVariables != null) {
             contextVariables.each { key, value ->
@@ -48,8 +47,8 @@ class ScriptRuleExecutorSpec extends Specification {
         result.getValue() == expectedValue
 
         where:
-        scriptContent                              | userId | eventId | traceId | arguments                                                          | contextVariables                                                   | expectedValue
-        "return amount > 1000"                     | null   | null    | null    | ["amount": new TypedValue(2000.0, ValueTypeEnum.DECIMAL)]            | null                                                                      | true
+        scriptContent                              | userId | eventId | arguments                                                 | contextVariables                                            | expectedValue
+        "return amount > 1000"                     | null   | null    | ["amount": new TypedValue(2000.0, ValueTypeEnum.DECIMAL)] | null                                                        | true
         """
             def discount = 0.0
             if (amount > 5000) {
@@ -58,10 +57,10 @@ class ScriptRuleExecutorSpec extends Specification {
                 discount = 0.05
             }
             return discount
-        """                                        | null   | null    | null    | ["amount": new TypedValue(3000.0, ValueTypeEnum.DECIMAL)] | null                                                                      | 0.05
-        "return userId == 123L && eventId == 1001" | 123L   | 1001    | 999L    | [:]                                                              | null                                                               | true
-        "return lastResult == true"                | null   | null    | null    | [:]                                                                                | ["lastResult": new TypedValue(true, ValueTypeEnum.BOOLEAN)] | true
-        "return context.userId == 123L"            | 123L   | null    | null    | [:]                                                              | null                                                               | true
+        """                                        | null   | null    | ["amount": new TypedValue(3000.0, ValueTypeEnum.DECIMAL)] | null                                                        | 0.05
+        "return userId == 123L && eventId == 1001" | 123L   | 1001    | [:]                                                       | null                                                        | true
+        "return lastResult == true"                | null   | null    | [:]                                                       | ["lastResult": new TypedValue(true, ValueTypeEnum.BOOLEAN)] | true
+        "return context.userId == 123L"            | 123L   | null    | [:]                                                       | null                                                        | true
     }
 
     @Unroll

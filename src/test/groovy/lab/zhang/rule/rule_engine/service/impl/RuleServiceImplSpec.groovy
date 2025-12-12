@@ -1153,7 +1153,7 @@ class RuleServiceImplSpec extends Specification {
     }
 
     private static RuleExecutionContext createExecutionContext(Long userId, Integer eventId, Integer userHashInt) {
-        def context = new RuleExecutionContext(userId, eventId, null, [:])
+        def context = new RuleExecutionContext(userId, eventId, [:])
         if (userHashInt != null) {
             context.putArgument(EvalArgumentConst.ARG_USER_HASH_INT, new TypedValue(userHashInt, ValueTypeEnum.INTEGER))
         }

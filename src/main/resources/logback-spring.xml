@@ -5,104 +5,107 @@
 
     <!-- Define log directory property -->
     <property name="LOG_DIR" value="logs"/>
-    <property name="LOG_FILE" value="${LOG_DIR}/rule-engine"/>
     <property name="MAX_FILE_SIZE" value="10MB"/>
-    <property name="MAX_HISTORY" value="30"/>
+    <property name="MAX_HISTORY" value="7"/>
+    <property name="TOTAL_SIZE_CAP" value="1GB"/>
+
+    <!-- Log pattern with traceId support -->
+    <property name="LOG_PATTERN" value="%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread{15}] %-5level %logger{15} [%X{traceId:-}] - %msg%n"/>
 
     <!-- Console appender for all environments -->
     <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
         <encoder>
-            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{0} - %msg%n</pattern>
+            <pattern>${LOG_PATTERN}</pattern>
         </encoder>
     </appender>
 
-    <!-- File appender for all logs -->
-    <appender name="FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
-        <file>${LOG_FILE}.log</file>
-        <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
-            <fileNamePattern>${LOG_FILE}.%d{yyyy-MM-dd}.%i.log</fileNamePattern>
-            <maxFileSize>${MAX_FILE_SIZE}</maxFileSize>
+    <!-- Spring startup log (catalina.log) - current day has no date suffix -->
+    <appender name="CATALINA_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>${LOG_DIR}/catalina.log</file>
+        <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+            <fileNamePattern>${LOG_DIR}/catalina.%d{yyyy-MM-dd}.log</fileNamePattern>
             <maxHistory>${MAX_HISTORY}</maxHistory>
-            <totalSizeCap>1GB</totalSizeCap>
+            <totalSizeCap>${TOTAL_SIZE_CAP}</totalSizeCap>
         </rollingPolicy>
         <encoder>
-            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{0} - %msg%n</pattern>
+            <pattern>${LOG_PATTERN}</pattern>
         </encoder>
     </appender>
 
-    <!-- Error log file appender -->
+    <!-- Business application log (app.log) - current day has no date suffix -->
+    <appender name="APP_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>${LOG_DIR}/app.log</file>
+        <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+            <fileNamePattern>${LOG_DIR}/app.%d{yyyy-MM-dd}.log</fileNamePattern>
+            <maxHistory>${MAX_HISTORY}</maxHistory>
+            <totalSizeCap>${TOTAL_SIZE_CAP}</totalSizeCap>
+        </rollingPolicy>
+        <encoder>
+            <pattern>${LOG_PATTERN}</pattern>
+        </encoder>
+    </appender>
+
+    <!-- Error log (error.log) - only ERROR level, current day has no date suffix -->
     <appender name="ERROR_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
-        <file>${LOG_FILE}-error.log</file>
+        <file>${LOG_DIR}/error.log</file>
         <filter class="ch.qos.logback.classic.filter.LevelFilter">
             <level>ERROR</level>
             <onMatch>ACCEPT</onMatch>
             <onMismatch>DENY</onMismatch>
         </filter>
-        <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
-            <fileNamePattern>${LOG_FILE}-error.%d{yyyy-MM-dd}.%i.log</fileNamePattern>
-            <maxFileSize>${MAX_FILE_SIZE}</maxFileSize>
+        <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+            <fileNamePattern>${LOG_DIR}/error.%d{yyyy-MM-dd}.log</fileNamePattern>
             <maxHistory>${MAX_HISTORY}</maxHistory>
             <totalSizeCap>500MB</totalSizeCap>
         </rollingPolicy>
         <encoder>
-            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{0} - %msg%n</pattern>
+            <pattern>${LOG_PATTERN}</pattern>
         </encoder>
     </appender>
 
-    <!-- Rule evaluation specific log -->
-    <appender name="RULE_EVAL_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
-        <file>${LOG_FILE}-evalRequest.log</file>
-        <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
-            <fileNamePattern>${LOG_FILE}-evalRequest.%d{yyyy-MM-dd}.%i.log</fileNamePattern>
-            <maxFileSize>${MAX_FILE_SIZE}</maxFileSize>
-            <maxHistory>${MAX_HISTORY}</maxHistory>
-            <totalSizeCap>500MB</totalSizeCap>
-        </rollingPolicy>
-        <encoder>
-            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{0} - %msg%n</pattern>
-        </encoder>
-    </appender>
+    <!-- Spring framework logs (startup, initialization, warmup) -->
+    <logger name="org.springframework" level="INFO" additivity="false">
+        <appender-ref ref="CATALINA_FILE"/>
+    </logger>
+
+    <logger name="org.springframework.boot" level="INFO" additivity="false">
+        <appender-ref ref="CATALINA_FILE"/>
+    </logger>
+
+    <logger name="org.springframework.context" level="INFO" additivity="false">
+        <appender-ref ref="CATALINA_FILE"/>
+    </logger>
 
     <!-- Development environment configuration -->
     <springProfile name="dev">
         <logger name="lab.zhang.rule" level="DEBUG" additivity="false">
             <appender-ref ref="CONSOLE"/>
-            <appender-ref ref="FILE"/>
+            <appender-ref ref="APP_FILE"/>
         </logger>
-
-        <!-- Rule evaluation detailed logs -->
-        <logger name="lab.zhang.rule.rule_engine.service.impl.EvalServiceImpl" level="DEBUG" additivity="false">
-            <appender-ref ref="CONSOLE"/>
-            <appender-ref ref="RULE_EVAL_FILE"/>
-        </logger>
-
-        <logger name="lab.zhang.rule.rule_engine.engine.RuleExecutionEngine" level="DEBUG" additivity="false">
-            <appender-ref ref="CONSOLE"/>
-            <appender-ref ref="RULE_EVAL_FILE"/>
-        </logger>
-
         <!-- Database operation logs -->
         <logger name="com.baomidou.mybatisplus" level="INFO"/>
         <logger name="org.springframework.jdbc" level="DEBUG"/>
         <logger name="org.springframework.data.redis" level="DEBUG"/>
     </springProfile>
 
-    <!-- Production environment configuration -->
-    <springProfile name="gray">
+    <!-- Test environment configuration -->
+    <springProfile name="test">
         <logger name="lab.zhang.rule" level="INFO" additivity="false">
-            <appender-ref ref="FILE"/>
+            <appender-ref ref="APP_FILE"/>
             <appender-ref ref="ERROR_FILE"/>
         </logger>
+        <!-- Database operation logs -->
+        <logger name="com.baomidou.mybatisplus" level="WARN"/>
+        <logger name="org.springframework.jdbc" level="WARN"/>
+        <logger name="org.springframework.data.redis" level="WARN"/>
+    </springProfile>
 
-        <!-- Rule evaluation logs -->
-        <logger name="lab.zhang.rule.rule_engine.service.impl.EvalServiceImpl" level="INFO" additivity="false">
-            <appender-ref ref="RULE_EVAL_FILE"/>
+    <!-- Gray environment configuration -->
+    <springProfile name="gray">
+        <logger name="lab.zhang.rule" level="INFO" additivity="false">
+            <appender-ref ref="APP_FILE"/>
+            <appender-ref ref="ERROR_FILE"/>
         </logger>
-
-        <logger name="lab.zhang.rule.rule_engine.engine.RuleExecutionEngine" level="INFO" additivity="false">
-            <appender-ref ref="RULE_EVAL_FILE"/>
-        </logger>
-
         <!-- Database operation logs -->
         <logger name="com.baomidou.mybatisplus" level="WARN"/>
         <logger name="org.springframework.jdbc" level="WARN"/>
@@ -112,29 +115,20 @@
     <!-- Production environment configuration -->
     <springProfile name="prod">
         <logger name="lab.zhang.rule" level="INFO" additivity="false">
-            <appender-ref ref="FILE"/>
+            <appender-ref ref="APP_FILE"/>
             <appender-ref ref="ERROR_FILE"/>
         </logger>
-
-        <!-- Rule evaluation logs -->
-        <logger name="lab.zhang.rule.rule_engine.service.impl.EvalServiceImpl" level="INFO" additivity="false">
-            <appender-ref ref="RULE_EVAL_FILE"/>
-        </logger>
-
-        <logger name="lab.zhang.rule.rule_engine.engine.RuleExecutionEngine" level="INFO" additivity="false">
-            <appender-ref ref="RULE_EVAL_FILE"/>
-        </logger>
-
         <!-- Database operation logs -->
         <logger name="com.baomidou.mybatisplus" level="WARN"/>
         <logger name="org.springframework.jdbc" level="WARN"/>
         <logger name="org.springframework.data.redis" level="WARN"/>
     </springProfile>
 
-    <!-- Root logger configuration -->
+    <!-- Root logger configuration - includes all appenders -->
     <root level="INFO">
         <appender-ref ref="CONSOLE"/>
-        <appender-ref ref="FILE"/>
+        <appender-ref ref="CATALINA_FILE"/>
+        <appender-ref ref="APP_FILE"/>
         <appender-ref ref="ERROR_FILE"/>
     </root>
 

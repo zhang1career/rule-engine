@@ -208,7 +208,7 @@ def generate_test_data(user_id: int, event_id: int, trace_id: int, config_path: 
     return generator.generate(user_id, event_id, trace_id)
 
 
-def send_request(session: requests.Session, url: str, data: Dict) -> Tuple[bool, float, str]:
+def send_request(session: requests.Session, url: str, data: Dict, headers: Optional[Dict[str, str]] = None) -> Tuple[bool, float, str]:
     """Send a single request"""
     user_id = data.get("userId", "unknown")
     event_id = data.get("eventId", "unknown")
@@ -218,10 +218,14 @@ def send_request(session: requests.Session, url: str, data: Dict) -> Tuple[bool,
     try:
         print(f"[DEBUG] Sending request: userId={user_id}, eventId={event_id}, traceId={trace_id}")
 
+        # Use provided headers or default
+        if headers is None:
+            headers = {"Content-Type": "application/json"}
+
         response = session.post(
             url,
             json=data,
-            headers={"Content-Type": "application/json"},
+            headers=headers,
             timeout=30
         )
         response_time = (time.time() - start_time) * 1000  # Convert to milliseconds
@@ -391,8 +395,11 @@ def run_load_test(
             # Resolve URL with path variables replaced
             # Path variables are already generated in data, so we can use them for context
             resolved_url = generator.get_resolved_url(context=data) or url
+            
+            # Generate headers (includes both default headers and generated headers)
+            headers = generator._generate_headers(context=data)
 
-            success, response_time, error = send_request(session, resolved_url, data)
+            success, response_time, error = send_request(session, resolved_url, data, headers)
             result.add_result(success, response_time, error)
 
             print(f"[DEBUG] Worker completed for userId={local_user_id}, success={success}")

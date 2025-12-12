@@ -7,6 +7,7 @@ import lab.zhang.rule.rule_engine.engine.ExecutionTrace
 import lab.zhang.rule.rule_engine.enums.ValueTypeEnum
 import lab.zhang.rule.rule_engine.engine.RuleExecutionEngine
 import lab.zhang.rule.rule_engine.model.EvalRequest
+import lab.zhang.rule.rule_engine.model.EvalResult
 import lab.zhang.rule.rule_engine.model.RuleExecutionContext
 import lab.zhang.rule.rule_engine.service.KafkaService
 import spock.lang.Specification
@@ -34,18 +35,19 @@ class EvalRequestServiceImplSpec extends Specification {
         def request = new EvalRequest()
         request.userId = userId
         request.eventId = eventId
-        request.traceId = traceId
         request.arguments = [
             "amount": new TypedValue(1000.0, ValueTypeEnum.DECIMAL),
             "age": new TypedValue(25, ValueTypeEnum.INTEGER)
         ]
 
         and: "prepare execution result"
-        def expectedResult = new TypedValue(true, ValueTypeEnum.BOOLEAN)
+        def expectedValue = new TypedValue(true, ValueTypeEnum.BOOLEAN)
         def trace = new ExecutionTrace()
+        trace.setTraceId(traceId as BigInteger)
+        def expectedResult = new EvalResult(expectedValue, trace)
 
         when: "execute eval method"
-        def evalResult = evalService.eval(request)
+        def evalResult = evalService.eval(request, BigInteger.ONE)
 
         then: "should call rule execution engine and return result with trace"
         1 * ruleExecutionEngine.execute(eventId, _ as RuleExecutionContext, _ as ExecutionTrace) >> { Long eId, RuleExecutionContext ctx, ExecutionTrace t ->
@@ -54,7 +56,7 @@ class EvalRequestServiceImplSpec extends Specification {
         }
         1 * kafkaService.sendEvalResult(request, expectedResult)
         evalResult != null
-        evalResult.result == expectedResult
+        evalResult.value == expectedResult.value
         evalResult.trace != null
 
         where:
@@ -70,14 +72,16 @@ class EvalRequestServiceImplSpec extends Specification {
         def request = new EvalRequest()
         request.userId = 123L
         request.eventId = 1001
-        request.traceId = 999L
         request.arguments = [:]
 
         and: "prepare execution result"
-        def expectedResult = new TypedValue(true, ValueTypeEnum.BOOLEAN)
+        def expectedValue = new TypedValue(true, ValueTypeEnum.BOOLEAN)
+        def trace = new ExecutionTrace()
+        trace.setTraceId(BigInteger.ZERO)
+        def expectedResult = new EvalResult(expectedValue, trace)
 
         when: "execute eval method"
-        def evalResult = evalService.eval(request)
+        def evalResult = evalService.eval(request, BigInteger.ONE)
 
         then: "should return result even if kafka send fails"
         1 * ruleExecutionEngine.execute(1001, _ as RuleExecutionContext, _ as ExecutionTrace) >> expectedResult
@@ -85,7 +89,7 @@ class EvalRequestServiceImplSpec extends Specification {
             throw new RuntimeException(errorMessage)
         }
         evalResult != null
-        evalResult.result == expectedResult
+        evalResult.value == expectedResult.value
         evalResult.trace != null
 
         where:
@@ -102,22 +106,23 @@ class EvalRequestServiceImplSpec extends Specification {
         def request = new EvalRequest()
         request.userId = userId
         request.eventId = eventId
-        request.traceId = traceId
         request.arguments = [
             (argKey): new TypedValue(argValue, ValueTypeEnum.DECIMAL)
         ]
 
         and: "prepare execution result"
-        def expectedResult = new TypedValue(true, ValueTypeEnum.BOOLEAN)
+        def expectedValue = new TypedValue(true, ValueTypeEnum.BOOLEAN)
+        def trace = new ExecutionTrace()
+        trace.setTraceId(traceId as BigInteger)
+        def expectedResult = new EvalResult(expectedValue, trace)
 
         when: "execute eval method"
-        evalService.eval(request)
+        evalService.eval(request, BigInteger.ONE)
 
         then: "verify execution context parameters"
         1 * ruleExecutionEngine.execute(eventId, { RuleExecutionContext context ->
             context.userId == userId &&
             context.eventId == eventId &&
-            context.traceId == traceId &&
             context.arguments.size() == (userId != null ? 3 : 1) && // userId != null adds userHash and userHashInt
             context.arguments[argKey].value == argValue
         }, _ as ExecutionTrace) >> expectedResult
@@ -136,11 +141,10 @@ class EvalRequestServiceImplSpec extends Specification {
         def request = new EvalRequest()
         request.userId = 123L
         request.eventId = eventId
-        request.traceId = 999L
         request.arguments = [:]
 
         when: "execute eval method"
-        evalService.eval(request)
+        evalService.eval(request, BigInteger.ONE)
 
         then: "should throw exception"
         1 * ruleExecutionEngine.execute(eventId, _ as RuleExecutionContext, _ as ExecutionTrace) >> {
@@ -160,29 +164,30 @@ class EvalRequestServiceImplSpec extends Specification {
         def request = new EvalRequest()
         request.userId = null
         request.eventId = 1001L
-        request.traceId = 999L
         request.arguments = [
             "amount": new TypedValue(1000.0, ValueTypeEnum.DECIMAL)
         ]
 
         and: "prepare execution result"
-        def expectedResult = new TypedValue(true, ValueTypeEnum.BOOLEAN)
+        def expectedValue = new TypedValue(true, ValueTypeEnum.BOOLEAN)
+        def trace = new ExecutionTrace()
+        trace.setTraceId(BigInteger.ZERO)
+        def expectedResult = new EvalResult(expectedValue, trace)
 
         when: "execute eval method"
-        def evalResult = evalService.eval(request)
+        def evalResult = evalService.eval(request, BigInteger.ONE)
 
         then: "should not calculate userHash and userHashInt"
         1 * ruleExecutionEngine.execute(1001L, { RuleExecutionContext context ->
             context.userId == null &&
             context.eventId == 1001L &&
-            context.traceId == 999L &&
             context.arguments.size() == 1 && // Only the amount argument, no userHash
             !context.arguments.containsKey(EvalArgumentConst.ARG_USER_HASH) &&
             !context.arguments.containsKey(EvalArgumentConst.ARG_USER_HASH_INT)
         }, _ as ExecutionTrace) >> expectedResult
         1 * kafkaService.sendEvalResult(request, expectedResult)
         evalResult != null
-        evalResult.result == expectedResult
+        evalResult.value == expectedResult.value
         evalResult.trace != null
     }
 
@@ -192,22 +197,23 @@ class EvalRequestServiceImplSpec extends Specification {
         def userId = 12345L
         request.userId = userId
         request.eventId = 1001L
-        request.traceId = 999L
         request.arguments = [
             "amount": new TypedValue(1000.0, ValueTypeEnum.DECIMAL)
         ]
 
         and: "prepare execution result"
-        def expectedResult = new TypedValue(true, ValueTypeEnum.BOOLEAN)
+        def expectedValue = new TypedValue(true, ValueTypeEnum.BOOLEAN)
+        def trace = new ExecutionTrace()
+        trace.setTraceId(BigInteger.ZERO)
+        def expectedResult = new EvalResult(expectedValue, trace)
 
         when: "execute eval method"
-        def evalResult = evalService.eval(request)
+        def evalResult = evalService.eval(request, BigInteger.ONE)
 
         then: "should calculate userHash and userHashInt and add to context"
         1 * ruleExecutionEngine.execute(1001L, { RuleExecutionContext context ->
             context.userId == userId &&
             context.eventId == 1001L &&
-            context.traceId == 999L &&
             context.arguments.size() == 3 && // amount + userHash + userHashInt
             context.arguments.containsKey(EvalArgumentConst.ARG_USER_HASH) &&
             context.arguments.containsKey(EvalArgumentConst.ARG_USER_HASH_INT) &&
@@ -219,7 +225,7 @@ class EvalRequestServiceImplSpec extends Specification {
         }, _ as ExecutionTrace) >> expectedResult
         1 * kafkaService.sendEvalResult(request, expectedResult)
         evalResult != null
-        evalResult.result == expectedResult
+        evalResult.value == expectedResult.value
         evalResult.trace != null
     }
 
@@ -229,14 +235,16 @@ class EvalRequestServiceImplSpec extends Specification {
         def request = new EvalRequest()
         request.userId = userId
         request.eventId = 1001L
-        request.traceId = 999L
         request.arguments = [:]
 
         and: "prepare execution result"
-        def expectedResult = new TypedValue(true, ValueTypeEnum.BOOLEAN)
+        def expectedValue = new TypedValue(true, ValueTypeEnum.BOOLEAN)
+        def trace = new ExecutionTrace()
+        trace.setTraceId(BigInteger.ZERO)
+        def expectedResult = new EvalResult(expectedValue, trace)
 
         when: "execute eval method"
-        evalService.eval(request)
+        evalService.eval(request, BigInteger.ONE)
 
         then: "should calculate consistent userHash for same userId"
         1 * ruleExecutionEngine.execute(1001L, { RuleExecutionContext context ->
@@ -258,18 +266,20 @@ class EvalRequestServiceImplSpec extends Specification {
         def request = new EvalRequest()
         request.userId = 12345L
         request.eventId = 1001L
-        request.traceId = 999L
         request.arguments = [:]
 
         and: "prepare execution result"
-        def expectedResult = new TypedValue(true, ValueTypeEnum.BOOLEAN)
+        def expectedValue = new TypedValue(true, ValueTypeEnum.BOOLEAN)
+        def trace = new ExecutionTrace()
+        trace.setTraceId(BigInteger.ZERO)
+        def expectedResult = new EvalResult(expectedValue, trace)
 
         and: "collect hashInt values"
         def hashIntValues = []
 
         when: "execute eval method multiple times"
         10.times {
-            evalService.eval(request)
+            evalService.eval(request, BigInteger.ONE)
         }
 
         then: "userHashInt should always be in range 1-100"
@@ -291,19 +301,21 @@ class EvalRequestServiceImplSpec extends Specification {
         def userId = 12345L
         request.userId = userId
         request.eventId = 1001L
-        request.traceId = 999L
         request.arguments = [:]
 
         and: "prepare execution result"
-        def expectedResult = new TypedValue(true, ValueTypeEnum.BOOLEAN)
+        def expectedValue = new TypedValue(true, ValueTypeEnum.BOOLEAN)
+        def trace = new ExecutionTrace()
+        trace.setTraceId(BigInteger.ZERO)
+        def expectedResult = new EvalResult(expectedValue, trace)
 
         and: "prepare lists to collect userHash values"
         def userHashList = []
         def userHashIntList = []
 
         when: "execute eval method twice with same userId"
-        evalService.eval(request)
-        evalService.eval(request)
+        evalService.eval(request, BigInteger.ONE)
+        evalService.eval(request, BigInteger.ONE)
 
         then: "userHash should be consistent for same userId"
         2 * ruleExecutionEngine.execute(_ as Long, { RuleExecutionContext context ->
@@ -325,7 +337,6 @@ class EvalRequestServiceImplSpec extends Specification {
         def request = new EvalRequest()
         request.userId = 123L
         request.eventId = 1001L
-        request.traceId = 999L
         request.arguments = [
             "amount": new TypedValue(1000.0, ValueTypeEnum.DECIMAL),
             "age": new TypedValue(25, ValueTypeEnum.INTEGER),
@@ -334,10 +345,13 @@ class EvalRequestServiceImplSpec extends Specification {
         ]
 
         and: "prepare execution result"
-        def expectedResult = new TypedValue(true, ValueTypeEnum.BOOLEAN)
+        def expectedValue = new TypedValue(true, ValueTypeEnum.BOOLEAN)
+        def trace = new ExecutionTrace()
+        trace.setTraceId(BigInteger.ZERO)
+        def expectedResult = new EvalResult(expectedValue, trace)
 
         when: "execute eval method"
-        evalService.eval(request)
+        evalService.eval(request, BigInteger.ONE)
 
         then: "all arguments should be correctly passed to context"
         1 * ruleExecutionEngine.execute(1001L, { RuleExecutionContext context ->

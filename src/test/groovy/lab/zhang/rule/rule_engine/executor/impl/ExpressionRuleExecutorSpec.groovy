@@ -25,7 +25,7 @@ class ExpressionRuleExecutorSpec extends Specification {
     }
 
     @Unroll
-    def "test execute expression - expression: #expression, userId: #userId, eventId: #eventId, traceId: #traceId, arguments: #arguments, expectedValue: #expectedValue, expectedType: #expectedType"() {
+    def "test execute expression - expression: #expression, userId: #userId, eventId: #eventId, arguments: #arguments, expectedValue: #expectedValue, expectedType: #expectedType"() {
         given: "create rule and execution context"
         def rule = new Rule()
         rule.content = expression
@@ -33,7 +33,6 @@ class ExpressionRuleExecutorSpec extends Specification {
         def context = new RuleExecutionContext()
         context.userId = userId
         context.eventId = eventId
-        context.traceId = traceId
         context.arguments = arguments ?: [:]
         
         when: "execute rule"
@@ -45,11 +44,11 @@ class ExpressionRuleExecutorSpec extends Specification {
         result.getValue() == expectedValue
         
         where:
-        expression                          | userId | eventId | traceId | arguments                                                                                                                 | expectedValue | expectedType
-        "amount > 1000 && age >= 18"        | 123L   | 1001    | 999L    | ["amount": new TypedValue(2000.0, ValueTypeEnum.DECIMAL), "age": new TypedValue(25, ValueTypeEnum.INTEGER)] | true  | ValueTypeEnum.BOOLEAN
-        "amount > 1000"                     | null   | null    | null    | ["amount": new TypedValue(500.0, ValueTypeEnum.DECIMAL)]                                                                  | false | ValueTypeEnum.BOOLEAN
-        "amount * 0.1"                      | null   | null    | null    | ["amount": new TypedValue(1000.0, ValueTypeEnum.DECIMAL)]                                                                 | 100.0 | ValueTypeEnum.DECIMAL
-        "userId == 123L && eventId == 1001" | 123L   | 1001    | 999L    | [:]                                                                                                                                     | true  | ValueTypeEnum.BOOLEAN
+        expression                          | userId | eventId | arguments                                                                                                   | expectedValue | expectedType
+        "amount > 1000 && age >= 18"        | 123L   | 1001    | ["amount": new TypedValue(2000.0, ValueTypeEnum.DECIMAL), "age": new TypedValue(25, ValueTypeEnum.INTEGER)] | true          | ValueTypeEnum.BOOLEAN
+        "amount > 1000"                     | null   | null    | ["amount": new TypedValue(500.0, ValueTypeEnum.DECIMAL)]                                                    | false         | ValueTypeEnum.BOOLEAN
+        "amount * 0.1"                      | null   | null    | ["amount": new TypedValue(1000.0, ValueTypeEnum.DECIMAL)]                                                   | 100.0         | ValueTypeEnum.DECIMAL
+        "userId == 123L && eventId == 1001" | 123L   | 1001    | [:]                                                                                                         | true          | ValueTypeEnum.BOOLEAN
     }
 
     @Unroll

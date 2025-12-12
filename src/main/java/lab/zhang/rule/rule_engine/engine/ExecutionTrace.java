@@ -9,6 +9,7 @@ import lombok.NoArgsConstructor;
 
 import javax.validation.constraints.NotNull;
 import java.io.Serializable;
+import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -31,7 +32,7 @@ public class ExecutionTrace implements Serializable {
     /**
      * Business request trace ID
      */
-    private Long traceId;
+    private BigInteger traceId;
 
     /**
      * User ID
@@ -57,8 +58,8 @@ public class ExecutionTrace implements Serializable {
     private List<ExecutionStep> steps = new ArrayList<>();
 
 
-    public ExecutionTrace(@NotNull EvalRequest request) {
-        this.traceId = request.getTraceId();
+    public ExecutionTrace(@NotNull EvalRequest request, BigInteger traceId) {
+        this.traceId = traceId;
         this.userId = request.getUserId();
         this.eventId = request.getEventId();
         this.arguments = request.getArguments();

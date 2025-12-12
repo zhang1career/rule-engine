@@ -103,6 +103,7 @@ class MockDataGeneratorBase:
         elif method == "random_text":
             length = gen_config.get("length", 10)
             charset = gen_config.get("charset", "alphanumeric")
+            prefix = gen_config.get("prefix", "")
             
             if charset == "alphanumeric":
                 chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
@@ -117,7 +118,8 @@ class MockDataGeneratorBase:
             else:
                 chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
             
-            return ''.join(random.choice(chars) for _ in range(length))
+            random_text = ''.join(random.choice(chars) for _ in range(length))
+            return prefix + random_text if prefix else random_text
         
         elif method == "array":
             min_length = gen_config.get("min_length", 1)
@@ -227,6 +229,41 @@ class MockDataGeneratorBase:
                 result[field_name] = value
         
         return result
+    
+    def _generate_headers(self, context: Optional[Dict[str, Any]] = None) -> Dict[str, str]:
+        """Generate headers based on headers_generation configuration
+        
+        Args:
+            context: Optional context dictionary with pre-set field values
+            
+        Returns:
+            Dictionary mapping header names to their generated values
+        """
+        if self.config is None:
+            return {}
+        
+        if context is None:
+            context = {}
+        
+        api_config = self.config.get("api", {})
+        headers_generation_config = api_config.get("headers_generation", {})
+        
+        # Start with default headers (like Content-Type)
+        headers = api_config.get("headers", {}).copy()
+        
+        # Generate headers from headers_generation config
+        for header_name, header_config in headers_generation_config.items():
+            if header_name in context:
+                # Use provided value if available
+                headers[header_name] = str(context[header_name])
+            else:
+                # Generate value based on configuration
+                value = self._generate_field_value(header_config, context)
+                headers[header_name] = str(value)
+                # Add to context for template substitution
+                context[header_name] = value
+        
+        return headers
     
     def _extract_path_variables(self, url: str) -> List[str]:
         """Extract path variable names from URL (e.g., {eventId} -> eventId)

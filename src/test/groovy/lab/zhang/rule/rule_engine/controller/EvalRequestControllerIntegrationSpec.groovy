@@ -17,6 +17,7 @@ import lab.zhang.rule.rule_engine.pojo.qo.EvalRequestQO
 import lab.zhang.rule.rule_engine.service.EventService
 import lab.zhang.rule.rule_engine.service.RuleGroupService
 import lab.zhang.rule.rule_engine.service.RuleService
+import lab.zhang.rule.rule_engine.util.LoggingContextUtil
 import lab.zhang.rule.rule_engine.util.TimeUtil
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
@@ -95,7 +96,6 @@ class EvalRequestControllerIntegrationSpec extends Specification {
         def evalQO = new EvalRequestQO()
         evalQO.userId = 1000L
         evalQO.eventId = EVENT_ID_2
-        evalQO.traceId = 9999L
         evalQO.arguments = [
                 "amount": new TypedValue(300.0, ValueTypeEnum.DECIMAL)
         ]
@@ -143,7 +143,6 @@ class EvalRequestControllerIntegrationSpec extends Specification {
             def evalQO = new EvalRequestQO()
             evalQO.userId = 1000L + index  // Different userId for each request
             evalQO.eventId = EVENT_ID_2
-            evalQO.traceId = 9999L + index
             evalQO.arguments = [
                     "amount": new TypedValue(amount, ValueTypeEnum.DECIMAL)
             ]
@@ -227,7 +226,6 @@ class EvalRequestControllerIntegrationSpec extends Specification {
         def evalQO = new EvalRequestQO()
         evalQO.userId = 1000L
         evalQO.eventId = EVENT_ID_3
-        evalQO.traceId = 9999L
         evalQO.arguments = [
                 "amount": new TypedValue(150.0, ValueTypeEnum.DECIMAL)
         ]
@@ -249,7 +247,6 @@ class EvalRequestControllerIntegrationSpec extends Specification {
         def evalQO = new EvalRequestQO()
         evalQO.userId = 1000L
         evalQO.eventId = EVENT_ID_2
-        evalQO.traceId = 9999L
         evalQO.arguments = [
                 "amount": new TypedValue(150.0, ValueTypeEnum.DECIMAL)
         ]
@@ -294,7 +291,6 @@ class EvalRequestControllerIntegrationSpec extends Specification {
         def evalQO = new EvalRequestQO()
         evalQO.userId = 1000L
         evalQO.eventId = EVENT_ID_2
-        evalQO.traceId = 9999L
         evalQO.arguments = [
                 "amount": new TypedValue(300.0, ValueTypeEnum.DECIMAL)
         ]

@@ -84,7 +84,8 @@ class MockDataGenerator(MockDataGeneratorBase):
             # Fallback to original full_url if path variable resolution fails
             url = api_info.get("full_url")
         method = api_info.get("method", "POST").upper()
-        headers = api_info.get("headers", {})
+        # Use generated headers (includes both default headers and generated headers)
+        headers = self._generate_headers()
         timeout = api_info.get("timeout", 30)
         
         if not url:

@@ -20,6 +20,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
+import java.math.BigInteger;
+
 /**
  * Rule evaluation service implementation
  *
@@ -43,29 +45,25 @@ public class EvalServiceImpl implements EvalService {
 
 
     @Override
-    public EvalResult eval(EvalRequest request) {
-        ExecutionTrace trace = new ExecutionTrace(request);
+    public EvalResult eval(EvalRequest request, BigInteger traceId) {
+        ExecutionTrace trace = new ExecutionTrace(request, traceId);
         RuleExecutionContext context = buildContext(request);
 
         extendArguments(request, context);
         log.info("[eval] extended arguments={}", context.getArguments());
 
-        TypedValue result = ruleExecutionEngine.execute(request.getEventId(), context, trace);
-
+        TypedValue resultValue = ruleExecutionEngine.execute(request.getEventId(), context, trace);
         saveLog(request, trace);
 
+        EvalResult result = new EvalResult(resultValue, trace);
         sendMessage(request, result);
 
-        return new EvalResult(result, trace);
+        return result;
     }
 
     private static RuleExecutionContext buildContext(EvalRequest request) {
         Integer eventId = request.getEventId() != null ? request.getEventId().intValue() : null;
-        return new RuleExecutionContext(
-                request.getUserId(),
-                eventId,
-                request.getTraceId(),
-                request.getArguments()
+        return new RuleExecutionContext(request.getUserId(), eventId, request.getArguments()
         );
     }
 
@@ -94,8 +92,7 @@ public class EvalServiceImpl implements EvalService {
             EvalLogEntity evalLog = buildEvalLogEntity(request, trace);
             evalLogService.addLog(evalLog);
             if (log.isDebugEnabled()) {
-                log.debug("[eval] eval_log added to batch: traceId={}, eventId={}, userId={}",
-                        request.getTraceId(), request.getEventId(), request.getUserId());
+                log.debug("[eval] eval_log added to batch: eventId={}, userId={}", request.getEventId(), request.getUserId());
             }
         } catch (JsonProcessingException e) {
             log.error("[eval] failed to serialize ExecutionTrace to JSON: {}", e.getMessage(), e);
@@ -115,7 +112,7 @@ public class EvalServiceImpl implements EvalService {
      */
     private EvalLogEntity buildEvalLogEntity(EvalRequest request, ExecutionTrace trace) throws JsonProcessingException {
         EvalLogEntity evalLog = new EvalLogEntity();
-        evalLog.setTraceId(request.getTraceId());
+        evalLog.setTraceId(trace.getTraceId());
         evalLog.setEventId(request.getEventId());
         evalLog.setUserId(request.getUserId());
 
@@ -135,13 +132,13 @@ public class EvalServiceImpl implements EvalService {
         return evalLog;
     }
 
-    private void sendMessage(EvalRequest request, TypedValue result) {
+    private void sendMessage(EvalRequest request, EvalResult result) {
         // Send EvalDTO and result to Kafka
         try {
             kafkaService.sendEvalResult(request, result);
         } catch (Exception e) {
             // Message sending failure does not affect main flow, only log
-            log.error("Failed to send message to Kafka: {}", e.getMessage(), e);
+            log.error("[eval] failed to send message to kafka: {}", e.getMessage(), e);
         }
     }
 }

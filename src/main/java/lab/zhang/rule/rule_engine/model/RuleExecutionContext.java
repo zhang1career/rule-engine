@@ -4,7 +4,6 @@ import lab.zhang.rule.rule_engine.common.TypedValue;
 import lab.zhang.rule.rule_engine.enums.ValueTypeEnum;
 import lombok.Data;
 
-import javax.validation.constraints.NotBlank;
 import java.io.Serializable;
 import java.util.Collections;
 import java.util.HashMap;
@@ -39,11 +38,6 @@ public class RuleExecutionContext implements Serializable {
     private Integer eventId;
     
     /**
-     * Trace ID for request tracking.
-     */
-    private Long traceId;
-    
-    /**
      * Input parameter dictionary.
      * Defensively copied to prevent external modification.
      */
@@ -62,15 +56,12 @@ public class RuleExecutionContext implements Serializable {
      * 
      * @param userId the user ID, may be null
      * @param eventId the event ID, may be null
-     * @param traceId the trace ID, may be null
      * @param arguments the input arguments, may be null (will create empty map)
      * @throws IllegalArgumentException if arguments map contains null keys
      */
-    public RuleExecutionContext(Long userId, Integer eventId, Long traceId,
-                               Map<String, TypedValue> arguments) {
+    public RuleExecutionContext(Long userId, Integer eventId, Map<String, TypedValue> arguments) {
         this.userId = userId;
         this.eventId = eventId;
-        this.traceId = traceId;
         this.arguments = arguments != null ? new HashMap<>(arguments) : new HashMap<>();
         // Validate arguments map
         if (arguments != null) {
@@ -152,7 +143,6 @@ public class RuleExecutionContext implements Serializable {
         Map<String, TypedValue> variableMap = new HashMap<>(getArguments());
         variableMap.put("userId", new TypedValue(this.userId, ValueTypeEnum.LONG));
         variableMap.put("eventId", new TypedValue(this.eventId, ValueTypeEnum.INTEGER));
-        variableMap.put("traceId", new TypedValue(this.traceId, ValueTypeEnum.LONG));
         return variableMap;
     }
 
@@ -175,8 +165,6 @@ public class RuleExecutionContext implements Serializable {
                 return new TypedValue(this.userId, ValueTypeEnum.LONG);
             case "eventId":
                 return new TypedValue(this.eventId, ValueTypeEnum.INTEGER);
-            case "traceId":
-                return new TypedValue(this.traceId, ValueTypeEnum.LONG);
             default:
                 return getArgument(key);
         }
@@ -205,9 +193,6 @@ public class RuleExecutionContext implements Serializable {
                 break;
             case "eventId":
                 this.eventId = (Integer) value.getValue();
-                break;
-            case "traceId":
-                this.traceId = (Long) value.getValue();
                 break;
             default:
                 putArgument(key, value);

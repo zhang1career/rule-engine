@@ -67,8 +67,7 @@ public class RuleExecutionEngine {
      */
     public TypedValue execute(Long eventId, RuleExecutionContext context, ExecutionTrace trace) {
         if (log.isDebugEnabled()) {
-            log.debug("[eval] execution param: eventId={}, userId={}, traceId={}",
-                    eventId, context.getUserId(), context.getTraceId());
+            log.debug("[eval] execution param: eventId={}, userId={}", eventId, context.getUserId());
         }
 
         // Get execution items (rules) directly

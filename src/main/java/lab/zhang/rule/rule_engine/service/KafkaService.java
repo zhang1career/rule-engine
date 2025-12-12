@@ -1,7 +1,7 @@
 package lab.zhang.rule.rule_engine.service;
 
-import lab.zhang.rule.rule_engine.common.TypedValue;
 import lab.zhang.rule.rule_engine.model.EvalRequest;
+import lab.zhang.rule.rule_engine.model.EvalResult;
 
 /**
  * Kafka service interface
@@ -16,6 +16,6 @@ public interface KafkaService {
      * @param request evaluation request
      * @param result  evaluation result
      */
-    void sendEvalResult(EvalRequest request, TypedValue result);
+    void sendEvalResult(EvalRequest request, EvalResult result);
 }
 
